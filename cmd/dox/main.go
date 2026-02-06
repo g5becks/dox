@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/g5becks/dox/internal/config"
+	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 )
@@ -58,7 +60,7 @@ func newSyncCommand() *cli.Command {
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
 			&cli.IntFlag{Name: "parallel", Aliases: []string{"p"}, Usage: "Maximum parallel source syncs", Value: defaultParallel},
 		},
-		Action: notImplementedAction("sync"),
+		Action: syncAction,
 	}
 }
 
@@ -116,6 +118,30 @@ func newInitCommand() *cli.Command {
 		Usage:  "Create a starter dox.toml in the current directory",
 		Action: notImplementedAction("init"),
 	}
+}
+
+func syncAction(ctx context.Context, cmd *cli.Command) error {
+	cfg, err := config.Load(cmd.String("config"))
+	if err != nil {
+		return err
+	}
+
+	return doxsync.Run(ctx, cfg, doxsync.SyncOptions{
+		SourceNames: commandArgs(cmd),
+		Force:       cmd.Bool("force"),
+		DryRun:      cmd.Bool("dry-run"),
+		MaxParallel: cmd.Int("parallel"),
+		Clean:       cmd.Bool("clean"),
+	})
+}
+
+func commandArgs(cmd *cli.Command) []string {
+	args := make([]string, 0, cmd.Args().Len())
+	for i := 0; i < cmd.Args().Len(); i++ {
+		args = append(args, cmd.Args().Get(i))
+	}
+
+	return args
 }
 
 func notImplementedAction(commandName string) cli.ActionFunc {
