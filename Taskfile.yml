@@ -3,7 +3,7 @@
 version: '3'
 
 vars:
-  BINARY_NAME: llxt
+  BINARY_NAME: dox
   BUILD_DIR: ./bin
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
@@ -25,12 +25,12 @@ tasks:
   dev:
     desc: Run the application in development mode
     cmds:
-      - go run ./cmd/llxt {{.CLI_ARGS}}
+      - go run ./cmd/dox {{.CLI_ARGS}}
 
   build:
     desc: Build the binary
     cmds:
-      - go build -ldflags "-s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildTime={{.BUILD_TIME}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} ./cmd/llxt
+      - go build -ldflags "-s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildTime={{.BUILD_TIME}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} ./cmd/dox
     sources:
       - ./**/*.go
       - go.mod
@@ -83,7 +83,7 @@ tasks:
   install:
     desc: Install the binary locally
     cmds:
-      - go install -ldflags "-s -w -X main.version={{.VERSION}}" ./cmd/llxt
+      - go install -ldflags "-s -w -X main.version={{.VERSION}}" ./cmd/dox
 
   all:
     desc: Run fmt, lint, test, and build
