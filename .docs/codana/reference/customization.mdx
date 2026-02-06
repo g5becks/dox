@@ -1,0 +1,150 @@
+---
+title: "Customization"
+description: "Settings and configuration"
+---
+
+> Configuration lives in `.codanna/settings.toml`.
+
+## Directory Structure
+
+```
+.codanna/
+├── settings.toml     # Main configuration
+├── index/            # Index storage
+└── .project-id       # Project identifier
+```
+
+## .codannaignore
+
+Codanna respects `.gitignore` and adds its own `.codannaignore`:
+
+```bash
+# Created by codanna init
+.codanna/       # Don't index own data
+target/         # Skip build artifacts
+node_modules/   # Skip dependencies
+```
+
+## Semantic Search Model
+
+```toml
+[semantic_search]
+model = "AllMiniLML6V2"
+```
+
+| Model | Description |
+|:------|:------------|
+| `AllMiniLML6V2` | English-optimized (default) |
+| `MultilingualE5Small` | 94 languages, 384 dimensions |
+| `MultilingualE5Base` | 94 languages, 768 dimensions |
+
+Changing models requires re-indexing:
+
+```bash
+codanna index --force
+```
+
+## Indexed Paths
+
+```toml
+[indexing]
+indexed_paths = [
+    "/path/to/project1",
+    "/path/to/project2"
+]
+```
+
+Manage via CLI:
+
+```bash
+codanna add-dir src
+codanna list-dirs
+codanna remove-dir old-project
+```
+
+## Language Configuration
+
+Project resolution reads build configuration files to determine source roots and module paths. This enables:
+
+- Correct module path generation (e.g., `org.example.service` for Java, `Core` for Swift)
+- Path alias resolution (e.g., `@app/*` in TypeScript)
+- Cross-package relationship tracking
+
+Resolution rules are cached in `.codanna/index/resolvers/`. The cache rebuilds during `codanna index` when config file contents change (SHA-based invalidation).
+
+See [Project Resolvers](/reference/project-resolvers) for configuration details for all 8 supported languages.
+
+### TypeScript
+
+```toml
+[languages.typescript]
+enabled = true
+config_files = [
+    "tsconfig.json",
+    "packages/web/tsconfig.json"
+]
+```
+
+Reads `tsconfig.json` to resolve path aliases like `@app/*` and `baseUrl` settings.
+
+### Java
+
+```toml
+[languages.java]
+enabled = true
+config_files = ["pom.xml"]
+
+# For multi-module projects with custom layouts:
+[[languages.java.projects]]
+config_file = "service/build.gradle"
+source_layout = "jvm"  # jvm | standard-kmp | flat-kmp
+```
+
+Reads Maven `pom.xml` or Gradle `build.gradle` to detect source roots (`src/main/java`, `src/test/java`). Generates module paths like `org.springframework.samples.petclinic.owner`.
+
+### Swift
+
+```toml
+[languages.swift]
+enabled = true
+config_files = [
+    "Package.swift",
+    "modules/networking/Package.swift"
+]
+```
+
+Reads Swift Package Manager `Package.swift` to detect source roots. Uses SPM conventions (`Sources/`, `Tests/`) or custom `path:` specifications. Generates module paths like `Networking`, `Cache`, `General`.
+
+## Logging
+
+```toml
+[logging]
+default = "warn"
+
+[logging.modules]
+cli = "debug"
+indexing = "info"
+```
+
+Or via environment:
+
+```bash
+RUST_LOG=debug codanna index
+```
+
+## View Configuration
+
+```bash
+codanna config
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Project Resolvers" icon="diagram-project" href="/reference/project-resolvers">
+    Configuration for Go, Python, Kotlin, PHP, C#, and more.
+  </Card>
+  <Card title="Debugging" icon="bug" href="/reference/debugging">
+    Troubleshoot indexing and search issues.
+  </Card>
+</CardGroup>

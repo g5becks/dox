@@ -1,0 +1,49 @@
+---
+title: "Codanna"
+description: "Code intelligence for AI assistants"
+---
+
+Code intelligence for AI assistants. Codanna indexes your codebase, understands relationships between symbols, and answers questions about your code through natural language.
+
+## Built for Rapid Exploration
+
+Codanna came from our need for rapid research and exploration with proper context. During R&D, quick POCs, and pair-programming sessions, we needed instant answers about our codebase. LSP servers were too slow for that rapid-fire questioning.
+
+**Speed for iterative exploration:** When you're in research mode or building a POC, you ask dozens of questions rapidly. Codanna's &lt;10ms lookups keep up with your thought process.
+
+**Human+LLM pair programming:** The human stays in control. You can run the same queries the AI runs, pipe results through Unix tools, verify context before the AI acts. The `--watch` flag means the index updates as you code.
+
+**Semantic understanding:** Find code by concept - "where's the retry logic?" - without knowing exact names. Embedding-based search understands what code does from its documentation.
+
+## Why Codanna
+
+<CardGroup cols={3}>
+  <Card title="Find code by meaning" icon="magnifying-glass">
+    Search by concept, not keywords.
+  </Card>
+  <Card title="Trace relationships" icon="diagram-project">
+    Know what breaks before you change it.
+  </Card>
+  <Card title="Works with your AI" icon="plug">
+    MCP integration with your favorite AI stack.
+  </Card>
+</CardGroup>
+
+## Get Started
+
+```bash
+curl -fsSL --proto '=https' --tlsv1.2 https://install.codanna.sh | sh
+```
+
+<Note>
+More install options (Homebrew, Cargo) in the [installation guide](/installation).
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install and index your first project.
+  </Card>
+  <Card title="Semantic Search" icon="magnifying-glass" href="/features/semantic-search">
+    Search code by concept.
+  </Card>
+</CardGroup>

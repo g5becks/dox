@@ -1,0 +1,77 @@
+---
+title: "Language Support"
+description: "13 programming languages supported"
+---
+
+Codanna uses tree-sitter for parsing, the same technology used by GitHub's code navigator.
+
+## Supported Languages
+
+| Language | Filter |
+|----------|--------|
+| Rust | `lang:rust` |
+| Python | `lang:python` |
+| TypeScript | `lang:typescript` |
+| JavaScript | `lang:javascript` |
+| Java | `lang:java` |
+| Kotlin | `lang:kotlin` |
+| Go | `lang:go` |
+| PHP | `lang:php` |
+| C | `lang:c` |
+| C++ | `lang:cpp` |
+| C# | `lang:csharp` |
+| Swift | `lang:swift` |
+| GDScript | `lang:gdscript` |
+
+## What Gets Extracted
+
+From each language:
+
+- Functions and methods
+- Classes, structs, traits
+- Type definitions
+- Imports and includes
+- Call relationships
+- Type relationships
+- Documentation comments
+
+## Language Filtering
+
+Use `lang:` in searches to filter results:
+
+```bash
+codanna mcp semantic_search_docs query:"error handling" lang:typescript
+codanna mcp semantic_search_docs query:"error handling" lang:rust
+```
+
+<Note>
+`lang:` shows only results from that language. Without it, you get the best matches across all languages. Useful in multi-language stacks (frontend/backend) or monorepos.
+</Note>
+
+## Project Resolvers
+
+8 languages support project-aware module path resolution by reading build configuration files:
+
+| Language | Config File |
+|:---------|:------------|
+| Go | `go.mod` |
+| Python | `pyproject.toml` (Poetry, Hatch, Maturin, Setuptools, PDM, Flit) |
+| Kotlin | `build.gradle.kts` |
+| Java | `pom.xml`, `build.gradle` |
+| PHP | `composer.json` (PSR-4) |
+| C# | `.csproj` |
+| TypeScript | `tsconfig.json` |
+| Swift | `Package.swift` |
+
+This enables correct cross-file relationship tracking and import resolution.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Project Resolvers" icon="diagram-project" href="/reference/project-resolvers">
+    Configure module path resolution.
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/reference/cli">
+    Complete command reference.
+  </Card>
+</CardGroup>

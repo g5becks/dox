@@ -1,0 +1,137 @@
+---
+title: "MCP Network"
+description: "HTTP and HTTPS servers"
+---
+
+> Network-accessible MCP server for multiple clients.
+
+## HTTP Server
+
+```bash
+codanna serve --http --watch
+```
+
+Includes OAuth authentication.
+
+## HTTPS Server
+
+```bash
+codanna serve --https --watch
+```
+
+Includes TLS encryption.
+
+<Note>
+Unlike stdio transport, HTTP/HTTPS requires a running server instance. Start the server process before connecting your client.
+</Note>
+
+## Config Path
+
+When running outside your project directory (common in production), specify the full path:
+
+```bash
+codanna --config /path/to/project/.codanna/settings.toml serve --http --watch
+```
+
+<Warning>
+Run one server per project index. Multiple servers with `--watch` on the same `.codanna/` directory will conflict when re-indexing.
+</Warning>
+
+## Client Configuration
+
+The same clients from [MCP Persistent](/reference/mcp-persistent) are supported. The difference is the transport type: use `http` with a URL instead of `command`/`args`.
+
+### Claude Code
+
+Add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+### Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.codanna]
+type = "http"
+url = "http://127.0.0.1:8080/mcp"
+```
+
+### Gemini CLI
+
+Add to your `settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "url": "https://127.0.0.1:8443/mcp"
+    }
+  }
+}
+```
+
+Gemini CLI auto-discovers OAuth endpoints for HTTPS servers.
+
+## HTTPS with Self-Signed Certificates
+
+For secure local development with TLS encryption, see the [HTTPS Setup](/reference/https-setup) guide.
+
+## Options
+
+| Flag | Description |
+|:-----|:------------|
+| `--http` | Enable HTTP server with OAuth |
+| `--https` | Enable HTTPS server with TLS |
+| `--bind <addr>` | Address to bind (default: 127.0.0.1:8080) |
+| `--watch` | Enable auto-reload with 500ms debounce |
+
+## Custom Bind Address
+
+```bash
+# Bind to all interfaces
+codanna serve --http --bind 0.0.0.0:8080
+
+# Custom port
+codanna serve --http --bind 127.0.0.1:3000
+```
+
+## When to Use
+
+| Use Case | Recommendation |
+|:---------|:---------------|
+| Multiple clients | MCP Network |
+| Network access needed | MCP Network |
+| Single AI assistant | [MCP Persistent](/reference/mcp-persistent) |
+| One-off queries | [MCP Quick](/reference/mcp-quick) |
+
+## Security
+
+- Default binds to localhost only (127.0.0.1)
+- HTTP mode includes OAuth authentication
+- HTTPS mode provides TLS encryption
+- Use caution when binding to 0.0.0.0

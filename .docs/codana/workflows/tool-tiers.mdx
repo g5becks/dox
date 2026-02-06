@@ -1,0 +1,126 @@
+---
+title: "Tool Tiers"
+description: "Which MCP tool to use when"
+---
+
+Codanna provides multiple tools. Start with high-context tools and narrow down as needed.
+
+## Tier 1: Start Here
+
+These tools provide the most context per query.
+
+| Tool | Use When |
+|------|----------|
+| `semantic_search_with_context` | Finding code by meaning with relationships included |
+| `analyze_impact` | Mapping what changes when you modify a symbol |
+
+```bash
+codanna mcp semantic_search_with_context query:"authentication logic" limit:3
+codanna mcp analyze_impact UserAuth
+```
+
+## Tier 2: Get Details
+
+Use after finding symbols to explore specific relationships.
+
+| Tool | Use When |
+|------|----------|
+| `find_symbol` | Looking up a known symbol by exact name |
+| `get_calls` | Seeing what a function calls |
+| `find_callers` | Seeing who calls a function |
+
+```bash
+codanna mcp find_symbol parse_config
+codanna mcp get_calls symbol_id:567
+codanna mcp find_callers symbol_id:567
+```
+
+## Tier 3: Browse
+
+For exploration and index status.
+
+| Tool | Use When |
+|------|----------|
+| `search_symbols` | Fuzzy matching by name pattern |
+| `semantic_search_docs` | Semantic search without relationship context |
+| `get_index_info` | Checking index statistics |
+
+```bash
+codanna mcp search_symbols query:parse kind:function limit:10
+codanna mcp semantic_search_docs query:"error handling" limit:5
+codanna mcp get_index_info
+```
+
+## Common Workflows
+
+### Starting a Refactor
+
+<Steps>
+  <Step title="Find relevant code">
+    ```bash
+    codanna mcp semantic_search_with_context query:"authentication logic" limit:3
+    ```
+  </Step>
+  <Step title="Map change radius">
+    ```bash
+    codanna mcp analyze_impact AuthService
+    ```
+  </Step>
+  <Step title="Get specific details">
+    ```bash
+    codanna mcp get_calls symbol_id:567
+    codanna mcp find_callers symbol_id:567
+    ```
+  </Step>
+</Steps>
+
+### Debugging an Issue
+
+<Steps>
+  <Step title="Search with error description">
+    ```bash
+    codanna mcp semantic_search_with_context query:"connection timeout error" limit:3
+    ```
+  </Step>
+  <Step title="Trace how code is reached">
+    ```bash
+    codanna mcp find_callers symbol_id:123
+    ```
+  </Step>
+  <Step title="See dependencies">
+    ```bash
+    codanna mcp get_calls symbol_id:123
+    ```
+  </Step>
+</Steps>
+
+### Before Modifying a Function
+
+<Steps>
+  <Step title="Find what depends on it">
+    ```bash
+    codanna mcp analyze_impact process_payment
+    ```
+  </Step>
+  <Step title="Check all callers">
+    ```bash
+    codanna mcp find_callers symbol_id:890
+    ```
+  </Step>
+  <Step title="Understand the contract">
+    ```bash
+    codanna mcp get_calls symbol_id:890
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agentic Guidance" icon="lightbulb" href="/workflows/agentic-guidance">
+    Follow-up hints for multi-step exploration.
+  </Card>
+  <Card title="Semantic Search" icon="magnifying-glass" href="/features/semantic-search">
+    Write better queries.
+  </Card>
+</CardGroup>

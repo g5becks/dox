@@ -1,0 +1,88 @@
+---
+title: "Collaboration"
+description: "Share workflows with Profiles"
+---
+
+Profiles package reusable configuration, hooks, and commands. Teams distribute profiles via providers (git repositories or local folders) and install them per workspace.
+
+## Quick Start
+
+```bash
+# Register a provider
+codanna profile provider add bartolli/codanna-profiles
+
+# List available profiles
+codanna profile list --verbose
+
+# Install to current workspace
+codanna profile install claude
+
+# Check status
+codanna profile status
+```
+
+## Providers
+
+Sources of profiles:
+
+| Type | Example |
+|------|---------|
+| GitHub shorthand | `bartolli/codanna-profiles` |
+| Git URL | `https://github.com/org/profiles.git` |
+| Local path | `./my-profiles` |
+
+```bash
+# Add provider
+codanna profile provider add bartolli/codanna-profiles
+
+# List providers
+codanna profile provider list --verbose
+
+# Remove provider
+codanna profile provider remove codanna-profiles
+```
+
+## Managing Profiles
+
+```bash
+# Install
+codanna profile install claude
+
+# Update
+codanna profile update claude
+
+# Remove
+codanna profile remove claude
+
+# Verify integrity
+codanna profile verify claude
+```
+
+## Team Sync
+
+Commit `.codanna/profiles.lock.json` to your repository. Teammates run:
+
+```bash
+codanna profile sync
+```
+
+This installs all profiles from the lockfile.
+
+## Storage
+
+| Location | Purpose |
+|----------|---------|
+| `~/.codanna/providers.json` | Global provider registry |
+| `~/.codanna/profiles/` | Cached provider clones |
+| `.codanna/profiles.lock.json` | Installed profiles for workspace |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tool Tiers" icon="layer-group" href="/workflows/tool-tiers">
+    Which tool to use when.
+  </Card>
+  <Card title="MCP Persistent" icon="server" href="/reference/mcp-persistent">
+    Configure AI assistant integration.
+  </Card>
+</CardGroup>

@@ -1,0 +1,160 @@
+---
+title: "Semantic Search"
+description: "Find code and documents by meaning, not just text"
+---
+
+Semantic search finds code and documents by meaning. Instead of matching exact text, it understands what you're looking for and returns relevant results even when terminology differs.
+
+## Code Search
+
+Search documentation comments on symbols using natural language.
+
+<Tabs>
+  <Tab title="JavaScript/TypeScript">
+    ```javascript
+    class AuthService {
+      /**
+       * Authenticate user with email and password.
+       * Returns JWT token on success.
+       */
+      static default(config) { ... }
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    class AuthService:
+        def __call__(self, email: str, password: str) -> str:
+            """
+            Authenticate user with email and password.
+            Returns JWT token on success.
+            """
+            ...
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    impl AuthService {
+        /// Authenticate user with email and password.
+        /// Returns JWT token on success.
+        pub fn new(email: &str, password: &str) -> Self { ... }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Symbol names don't always describe their purpose - `new()`, `Default`, `impl`, or abbreviated names like above. Semantic search finds them through their documentation, not the name.
+
+### Basic Search
+
+```bash
+codanna mcp semantic_search_docs query:"user authentication" limit:3
+```
+
+```text
+Found 3 semantically similar result(s) for 'user authentication':
+
+1. name (Field) - Similarity: 0.356
+   File: src/plugins/marketplace.rs:40
+   Doc: Owner name (user or organization)
+
+2. name (Field) - Similarity: 0.356
+   File: src/profiles/provider.rs:40
+   Doc: Owner name (user or organization)
+
+3. credential_callback (Function) - Similarity: 0.332
+   File: src/profiles/git.rs:80
+   Doc: Credential callback for git2 authentication
+```
+
+### Search with Context
+
+```bash
+codanna mcp semantic_search_with_context query:"error handling" limit:1
+```
+
+```text
+Found 1 results for query: 'error handling'
+
+1. error - Method at src/io/format.rs:149-163 [symbol_id:5240]
+   Similarity Score: 0.642
+   Documentation:
+     Create a generic error response.
+   Signature: pub fn error(code: ExitCode, message: &str, suggestions: Vec<&str>) -> Self
+
+   error calls 2 function(s):
+     -> Module collect at src/indexing/pipeline/stages/mod.rs:10 [symbol_id:3222]
+     -> Method iter at src/storage/memory.rs:105 [symbol_id:4480]
+
+   error uses 1 type(s):
+     -> Enum ExitCode at src/io/exit_code.rs:19-47 [symbol_id:5076]
+```
+
+Returns symbols with line ranges, relationships (calls, callers, types), and `[symbol_id:X]` for follow-up queries.
+
+### Language Filtering
+
+Filter results by programming language:
+
+```bash
+codanna mcp semantic_search_docs query:"configuration parsing" lang:rust
+codanna mcp semantic_search_with_context query:"React components" lang:typescript
+```
+
+## Document Search
+
+Search markdown and text files indexed in collections.
+
+```bash
+# Add and index a collection
+codanna documents add-collection docs docs/
+codanna documents index
+
+# Search
+codanna documents search "authentication flow"
+
+# Or via MCP
+codanna mcp search_documents query:"setup guide" limit:5
+```
+
+## Writing Good Queries
+
+**Be specific:**
+- Bad: "error"
+- Good: "error handling in file operations"
+
+**Use domain terms:**
+- Bad: "make things fast"
+- Good: "performance optimization for indexing"
+
+**Add context:**
+- Bad: "parse"
+- Good: "parse TypeScript import statements"
+
+## Understanding Scores
+
+Similarity scores range from 0 to 1:
+
+| Score | Relevance |
+|-------|-----------|
+| 0.7+  | Strong match |
+| 0.5-0.7 | Relevant |
+| 0.3-0.5 | Weak match |
+| &lt;0.3 | Likely irrelevant |
+
+Use threshold to filter weak results:
+
+```bash
+codanna mcp semantic_search_docs query:"validation" threshold:0.5
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Relationships" icon="diagram-project" href="/features/relationships">
+    Trace calls, callers, and impact.
+  </Card>
+  <Card title="Tool Tiers" icon="layer-group" href="/workflows/tool-tiers">
+    Which tool to use when.
+  </Card>
+</CardGroup>

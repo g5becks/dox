@@ -1,0 +1,80 @@
+---
+title: "Relationships"
+description: "Trace calls, callers, and dependencies"
+---
+
+After finding symbols with search, trace their relationships to understand how code connects.
+
+## Get Calls
+
+See what a function calls:
+
+```bash
+codanna mcp get_calls process_file
+codanna mcp get_calls symbol_id:1883
+```
+
+Returns functions invoked by the target, each with `[symbol_id:X]` for follow-up.
+
+## Find Callers
+
+See what calls a function:
+
+```bash
+codanna mcp find_callers parse_config
+codanna mcp find_callers symbol_id:1883
+```
+
+Returns functions that invoke the target.
+
+## Analyze Impact
+
+Map the full impact radius of a symbol:
+
+```bash
+codanna mcp analyze_impact Parser
+codanna mcp analyze_impact symbol_id:1883 max_depth:5
+```
+
+Returns a dependency graph showing:
+
+| Relationship | Example |
+|--------------|---------|
+| **Calls** | `functionA()` invokes `functionB()` |
+| **Uses as type** | Parameter, return type, or field |
+| **Renders/Composes** | JSX `<Component>`, struct fields |
+
+## Chaining with symbol_id
+
+All relationship tools return `[symbol_id:X]` for each result. Use these IDs to chain queries without ambiguity:
+
+```bash
+# Find a symbol
+codanna mcp semantic_search_with_context query:"config parser" limit:1
+# Returns: parse_config [symbol_id:567]
+
+# Trace its relationships
+codanna mcp get_calls symbol_id:567
+codanna mcp find_callers symbol_id:567
+codanna mcp analyze_impact symbol_id:567
+```
+
+## Language Filtering
+
+Filter relationship results by language:
+
+```bash
+codanna mcp find_callers auth_handler lang:typescript
+codanna mcp analyze_impact Parser lang:rust
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Document Search" icon="file-lines" href="/features/document-search">
+    Search markdown alongside code.
+  </Card>
+  <Card title="Agentic Guidance" icon="lightbulb" href="/workflows/agentic-guidance">
+    Chain relationship tools with hints.
+  </Card>
+</CardGroup>

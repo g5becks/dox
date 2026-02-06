@@ -1,0 +1,188 @@
+---
+title: "MCP Persistent"
+description: "stdio server transport"
+---
+
+> Long-running server for AI assistants using stdio transport.
+
+## Usage
+
+```bash
+codanna serve --watch
+```
+
+The server runs continuously, communicating via stdin/stdout. Use `--watch` to auto-reload when the index changes.
+
+<Note>
+The AI client spawns this server automatically based on your config. Do not start a separate `codanna serve --watch` process—this causes index lock conflicts.
+</Note>
+
+## Config Path
+
+The `--config .codanna/settings.toml` argument uses a relative path. This works when:
+- **Project-scoped configs** (Claude Code, Cursor, OpenCode, Gemini CLI): The client sets the working directory to your project root
+- **Global configs** (Claude Desktop, Goose): You must run the client from your project directory, or use an absolute path
+
+<Warning>
+Run one persistent server per project. Multiple servers with `--watch` on the same `.codanna/` directory will conflict when re-indexing.
+</Warning>
+
+## Claude Code
+
+Add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "command": "codanna",
+      "args": ["--config", ".codanna/settings.toml", "serve", "--watch"]
+    }
+  }
+}
+```
+
+This file is project-scoped and can be checked into version control.
+
+## Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "command": "codanna",
+      "args": ["--config", ".codanna/settings.toml", "serve", "--watch"]
+    }
+  }
+}
+```
+
+<Warning>
+Claude Desktop launches from a system path, not your project directory. The relative config path `.codanna/settings.toml` may not resolve correctly. Use an absolute path or launch Claude Desktop from your project directory via terminal.
+</Warning>
+
+## Cursor
+
+Add to `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "command": "codanna",
+      "args": ["--config", ".codanna/settings.toml", "serve", "--watch"]
+    }
+  }
+}
+```
+
+Cursor sets the working directory to the workspace root, so relative paths resolve correctly.
+
+## Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.codanna]
+command = "codanna"
+args = ["--config", ".codanna/settings.toml", "serve", "--watch"]
+```
+
+<Warning>
+Use `mcp_servers` (snake_case), not `mcpServers`. The camelCase key is silently ignored.
+</Warning>
+
+## OpenCode
+
+Add to `opencode.json` in your project root:
+
+```json
+{
+  "mcp": {
+    "codanna": {
+      "type": "local",
+      "command": ["codanna", "--config", ".codanna/settings.toml", "serve", "--watch"],
+      "enabled": true
+    }
+  }
+}
+```
+
+<Note>
+OpenCode combines command and arguments into a single array under `command`.
+</Note>
+
+## Goose
+
+Via CLI:
+
+```bash
+goose configure
+# Select: Add Extension > Command-line Extension
+# Name: codanna
+# Command: codanna --config .codanna/settings.toml serve --watch
+```
+
+Or add to `~/.config/goose/config.yaml`:
+
+```yaml
+extensions:
+  codanna:
+    name: codanna
+    cmd: codanna
+    args:
+      - "--config"
+      - ".codanna/settings.toml"
+      - "serve"
+      - "--watch"
+    type: stdio
+    enabled: true
+```
+
+## Gemini CLI
+
+Via CLI:
+
+```bash
+gemini mcp add codanna codanna -- --config .codanna/settings.toml serve --watch
+```
+
+Or add to your `settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "codanna": {
+      "command": "codanna",
+      "args": ["--config", ".codanna/settings.toml", "serve", "--watch"]
+    }
+  }
+}
+```
+
+## Options
+
+| Flag | Description |
+|:-----|:------------|
+| `--watch` | Enable auto-reload with 500ms debounce |
+| `--watch-interval <seconds>` | Check interval for index changes (default: 5) |
+
+## Self-Test
+
+Verify Codanna can spawn a server, access the index, and register tools:
+
+```bash
+codanna mcp-test
+```
+
+This tests Codanna's MCP capabilities, not the client configurations above.
+
+## When to Use
+
+| Use Case | Recommendation |
+|:---------|:---------------|
+| Single AI assistant | MCP Persistent (stdio) |
+| Multiple clients | [MCP Network](/reference/mcp-network) |
+| One-off queries | [MCP Quick](/reference/mcp-quick) |

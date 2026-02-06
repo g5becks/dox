@@ -1,0 +1,153 @@
+---
+title: "JSON Schema"
+description: "Output structure reference for CLI commands"
+---
+
+All Codanna CLI commands with `--json` output follow the Envelope schema (version 1.0.0).
+
+## Envelope Structure
+
+```json
+{
+  "type": "result",
+  "status": "success",
+  "code": "OK",
+  "exit_code": 0,
+  "message": "Found 1 symbol(s)",
+  "hint": "Symbol found with full context...",
+  "data": [...],
+  "meta": {
+    "schema_version": "1.0.0",
+    "entity_type": "symbol",
+    "count": 1,
+    "query": "Parser"
+  }
+}
+```
+
+## Envelope Fields
+
+| Field | Type | Required | Description |
+|:------|:-----|:---------|:------------|
+| `type` | string | yes | `result`, `error` |
+| `status` | string | yes | `success`, `not_found`, `partial_success`, `error` |
+| `code` | string | yes | `OK`, `NOT_FOUND`, `PARSE_ERROR`, `INDEX_ERROR`, `INVALID_QUERY`, `INTERNAL_ERROR` |
+| `exit_code` | integer | yes | Unix exit code: 0=success, 1=not_found, 2=error |
+| `message` | string | yes | Human-readable description |
+| `hint` | string | no | Suggested next action |
+| `data` | varies | yes | Payload (null on error) |
+| `error` | object | no | Error details with `suggestions` array |
+| `meta` | object | yes | Metadata |
+
+## Meta Fields
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `schema_version` | string | Always `1.0.0` |
+| `entity_type` | string | `symbol`, `search_result`, `callers`, `calls`, `document` |
+| `count` | integer | Number of items |
+| `query` | string | Original query |
+| `lang` | string | Language filter applied |
+
+## Data Shapes
+
+The `data` field structure depends on the command. Check `meta.entity_type` to determine the shape.
+
+### symbol (find_symbol, describe)
+
+```json
+{
+  "data": {
+    "symbol": {
+      "id": 5156,
+      "name": "Parser",
+      "kind": "Struct",
+      "file_path": "src/parser.rs",
+      "range": {
+        "start_line": 88,
+        "end_line": 118
+      },
+      "signature": "pub struct Parser",
+      "visibility": "Public",
+      "language_id": "rust"
+    },
+    "file_path": "src/parser.rs",
+    "relationships": {
+      "defines": [...],
+      "calls": [...],
+      "called_by": [...]
+    }
+  }
+}
+```
+
+### search_result (search_symbols)
+
+```json
+{
+  "data": [{
+    "symbol": {
+      "id": 123,
+      "name": "parse",
+      "kind": "Function",
+      "file_path": "src/parser.rs",
+      "line": 42
+    },
+    "score": 0.95,
+    "highlights": ["parse"]
+  }]
+}
+```
+
+### callers/calls (get_calls, find_callers)
+
+```json
+{
+  "data": [{
+    "id": 123,
+    "name": "process",
+    "kind": "Function",
+    "file_path": "src/lib.rs",
+    "range": {"start_line": 50, "end_line": 75}
+  }]
+}
+```
+
+### document (search_documents)
+
+```json
+{
+  "data": [{
+    "chunk_id": 150,
+    "collection": "docs",
+    "source_path": "/path/to/doc.md",
+    "content_preview": "Matched content...",
+    "similarity": 0.398
+  }]
+}
+```
+
+## Error Response
+
+```json
+{
+  "type": "error",
+  "status": "error",
+  "code": "INVALID_QUERY",
+  "exit_code": 2,
+  "message": "Ambiguous: found 100 symbol(s) named 'parse'",
+  "hint": "Use: codanna retrieve callers symbol_id:<id>",
+  "data": null,
+  "error": {
+    "suggestions": ["symbol_id:587", "symbol_id:3702"]
+  }
+}
+```
+
+## Machine-Readable Schema
+
+For code generation or tooling integration, the formal JSON Schema is available at:
+
+```
+https://docs.codanna.sh/schema/envelope.schema.json
+```

@@ -1,0 +1,13 @@
+# lefthook.yml
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      run: go tool github.com/go-task/task/v3/cmd/task lint
+    test:
+      run: go tool github.com/go-task/task/v3/cmd/task test
+
+commit-msg:
+  commands:
+    commit-lint:
+      run: ./scripts/commit-msg-lint.sh {1}

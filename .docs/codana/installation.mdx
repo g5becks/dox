@@ -1,0 +1,69 @@
+---
+title: "Installation"
+description: "Install Codanna and index your first project"
+---
+
+## Install
+
+<Tabs>
+  <Tab title="Native">
+    ```bash
+    curl -fsSL --proto '=https' --tlsv1.2 https://install.codanna.sh | sh
+    ```
+    Works on macOS, Linux, and WSL. Downloads pre-built binary.
+  </Tab>
+  <Tab title="Homebrew">
+    ```bash
+    brew install codanna
+    ```
+    Works on macOS and Linux.
+  </Tab>
+  <Tab title="Cargo">
+    ```bash
+    # From crates.io
+    cargo install codanna --locked
+
+    # Prebuilt binaries (faster)
+    cargo binstall codanna
+    ```
+    Requires [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) for prebuilt binaries.
+  </Tab>
+</Tabs>
+
+## Quick Start
+
+<Steps>
+  <Step title="Initialize">
+    Navigate to your project and run:
+    ```bash
+    codanna init
+    ```
+  </Step>
+  <Step title="Index your code">
+    ```bash
+    codanna index .
+    ```
+  </Step>
+  <Step title="Search">
+    ```bash
+    codanna mcp semantic_search_with_context query:"where do we handle errors" limit:3
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+**Connecting AI assistants:** Configure your MCP client to spawn the server automatically.
+
+See [MCP Persistent](/reference/mcp-persistent) for stdio setup (Claude Code, Cursor, etc.) or [MCP Network](/reference/mcp-network) for HTTP/HTTPS.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Semantic Search" icon="magnifying-glass" href="/features/semantic-search">
+    Search code by concept.
+  </Card>
+  <Card title="Tool Tiers" icon="layer-group" href="/workflows/tool-tiers">
+    Which tool to use when.
+  </Card>
+</CardGroup>

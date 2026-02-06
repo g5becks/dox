@@ -1,0 +1,81 @@
+---
+title: "Document Search"
+description: "Index markdown files for RAG"
+---
+
+Index markdown and text files for semantic search. Useful for searching project documentation alongside code or building RAG pipelines.
+
+## Collections
+
+Organize documents into searchable groups:
+
+```bash
+# Add a collection
+codanna documents add-collection docs docs/
+
+# List collections
+codanna documents list
+
+# Remove a collection
+codanna documents remove-collection docs
+```
+
+## Indexing
+
+Index all configured collections:
+
+```bash
+codanna documents index
+```
+
+With progress display:
+
+```bash
+codanna documents index --progress
+```
+
+Index a specific collection:
+
+```bash
+codanna documents index --collection docs
+```
+
+## Searching
+
+### CLI
+
+```bash
+codanna documents search "authentication flow"
+codanna documents search "error handling" --collection docs --limit 5
+```
+
+### MCP
+
+```bash
+codanna mcp search_documents query:"setup guide" limit:5
+codanna mcp search_documents query:"configuration" collection:docs
+```
+
+## Configuration
+
+Document settings in `.codanna/settings.toml`:
+
+```toml
+[documents]
+enabled = true
+
+[documents.collections.docs]
+paths = ["docs/"]
+patterns = ["**/*.md"]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Languages" icon="code" href="/features/languages">
+    Supported programming languages.
+  </Card>
+  <Card title="Customization" icon="sliders" href="/reference/customization">
+    Configure document collections.
+  </Card>
+</CardGroup>

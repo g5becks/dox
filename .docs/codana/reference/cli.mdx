@@ -1,0 +1,110 @@
+---
+title: "CLI Reference"
+description: "Commands, flags, and options"
+---
+
+> Complete reference for Codanna command-line interface, including commands and flags.
+
+## CLI Commands
+
+| Command | Description | Example |
+|:--------|:------------|:--------|
+| `codanna init` | Set up `.codanna` directory with configuration | `codanna init` |
+| `codanna index <paths>` | Build searchable index from codebase | `codanna index src lib` |
+| `codanna index` | Index using configured paths | `codanna index` |
+| `codanna add-dir <path>` | Add folder to indexed paths | `codanna add-dir src` |
+| `codanna remove-dir <path>` | Remove folder from indexed paths | `codanna remove-dir old-project` |
+| `codanna list-dirs` | List configured indexed directories | `codanna list-dirs` |
+| `codanna retrieve <subcommand>` | Query symbols and relationships | `codanna retrieve symbol Parser` |
+| `codanna mcp <tool>` | Execute MCP tools directly | `codanna mcp find_symbol main` |
+| `codanna serve` | Start MCP server | `codanna serve --watch` |
+| `codanna documents <subcommand>` | Manage document collections | `codanna documents search "auth flow"` |
+| `codanna profile <subcommand>` | Manage workspace profiles | `codanna profile install claude` |
+| `codanna config` | Display active settings | `codanna config` |
+| `codanna parse <file>` | Output AST as JSONL | `codanna parse src/main.rs` |
+
+## CLI Flags
+
+| Flag | Description | Example |
+|:-----|:------------|:--------|
+| `-c, --config <path>` | Path to custom settings.toml | `codanna --config ./custom.toml index` |
+| `-h, --help` | Print help | `codanna --help` |
+| `-V, --version` | Print version | `codanna --version` |
+| `--json` | Output in JSON format (retrieve, mcp, documents) | `codanna retrieve symbol Parser --json` |
+| `--fields` | Filter JSON output to specific data fields (requires --json) | `codanna mcp find_symbol name:Parser --json --fields name,file_path` |
+| `--dry-run` | Preview without making changes (index) | `codanna index src --dry-run` |
+| `-f, --force` | Force operation (init, index) | `codanna index --force` |
+
+## Retrieve Subcommands
+
+| Subcommand | Description | Example |
+|:-----------|:------------|:--------|
+| `symbol <name>` | Find symbol by name or `symbol_id:ID` | `codanna retrieve symbol Parser` |
+| `calls <name>` | Functions called by a function | `codanna retrieve calls symbol_id:1883` |
+| `callers <name>` | Functions that call a function | `codanna retrieve callers process_file` |
+| `describe <name>` | Full details: signature, docs, relationships | `codanna retrieve describe SimpleIndexer` |
+| `search <query>` | Full-text search | `codanna retrieve search "config"` |
+
+All retrieve subcommands support `--json` and `lang:<language>` filter.
+
+## MCP Tools
+
+| Tool | Description | Example |
+|:-----|:------------|:--------|
+| `find_symbol` | Find symbol by exact name | `codanna mcp find_symbol main` |
+| `search_symbols` | Full-text search with fuzzy matching | `codanna mcp search_symbols query:parse limit:10` |
+| `semantic_search_docs` | Natural language search | `codanna mcp semantic_search_docs query:"error handling" limit:5` |
+| `semantic_search_with_context` | Natural language search with relationships | `codanna mcp semantic_search_with_context query:"auth logic" limit:3` |
+| `get_calls` | Functions called by a function | `codanna mcp get_calls symbol_id:567` |
+| `find_callers` | Functions that call a function | `codanna mcp find_callers process_file` |
+| `analyze_impact` | Impact radius of symbol changes | `codanna mcp analyze_impact Parser` |
+| `search_documents` | Search indexed documents | `codanna mcp search_documents query:"setup guide" limit:5` |
+| `get_index_info` | Index statistics | `codanna mcp get_index_info` |
+
+See [Tool Tiers](/workflows/tool-tiers) for recommended usage patterns.
+
+## Serve Options
+
+| Flag | Description | Example |
+|:-----|:------------|:--------|
+| `--watch` | Enable auto-reload with 500ms debounce | `codanna serve --watch` |
+| `--http` | Enable HTTP server with OAuth | `codanna serve --http` |
+| `--https` | Enable HTTPS server with TLS | `codanna serve --https` |
+| `--bind <addr>` | Address to bind (default: 127.0.0.1:8080) | `codanna serve --http --bind 0.0.0.0:8080` |
+
+## Documents Subcommands
+
+| Subcommand | Description | Example |
+|:-----------|:------------|:--------|
+| `add-collection <name> <path>` | Add document collection | `codanna documents add-collection docs docs/` |
+| `remove-collection <name>` | Remove document collection | `codanna documents remove-collection docs` |
+| `index` | Index all collections | `codanna documents index` |
+| `search <query>` | Search indexed documents | `codanna documents search "auth flow"` |
+| `list` | List all collections | `codanna documents list` |
+| `stats <name>` | Show collection statistics | `codanna documents stats docs` |
+
+See [Document Search](/features/document-search) for details.
+
+## Profile Subcommands
+
+| Subcommand | Description | Example |
+|:-----------|:------------|:--------|
+| `provider add <source>` | Register provider | `codanna profile provider add bartolli/codanna-profiles` |
+| `list` | List available profiles | `codanna profile list --verbose` |
+| `install <name>` | Install profile to workspace | `codanna profile install claude` |
+| `status` | Show installed profiles | `codanna profile status` |
+| `sync` | Install from lockfile | `codanna profile sync` |
+| `update <name>` | Update installed profile | `codanna profile update claude` |
+| `remove <name>` | Remove profile | `codanna profile remove claude` |
+
+See [Collaboration](/features/collaboration) for details.
+
+## Exit Codes
+
+| Code | Meaning |
+|:-----|:--------|
+| `0` | Success with results |
+| `1` | Not found (no results) |
+| `2` | Error (invalid query, parse error, etc.) |
+
+See [Unix Piping](/workflows/piping) for JSON envelope schema details.

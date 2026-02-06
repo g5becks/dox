@@ -1,0 +1,154 @@
+---
+title: "Agentic Guidance"
+description: "Context-aware hints that guide AI assistants through multi-step exploration"
+---
+
+> Codanna provides follow-up hints with each tool result, suggesting the next logical action for systematic codebase exploration.
+
+## How It Works
+
+Every tool result includes a guidance message based on:
+- **Result count** - different suggestions for 0, 1, or many results
+- **Custom thresholds** - specific advice when results exceed certain counts
+
+**Text output:**
+```
+💡 Found 3 matches. Consider using 'find_symbol' on the most relevant result...
+```
+
+**JSON output:**
+```json
+{
+  "system_message": "Found 3 matches. Consider using 'find_symbol'...",
+  "data": [...]
+}
+```
+
+## Workflow Example
+
+Understanding code before modifying it:
+
+<Steps>
+  <Step title="Search for the concept">
+    ```bash
+    codanna mcp semantic_search_docs query:"commit batch write index" limit:3
+    ```
+
+    ```
+    1. new (Method) - Similarity: 0.700
+       File: src/indexing/pipeline/stages/index.rs:47
+       Doc: Create a new index stage. `batches_per_commit` controls how often we commit...
+
+    2. with_batches_per_commit (Method) - Similarity: 0.696
+       ...
+
+    💡 Found 3 matches. Consider using 'find_symbol' on the most relevant
+       result for detailed analysis, or refine your search query.
+    ```
+  </Step>
+  <Step title="Get symbol details">
+    ```bash
+    codanna mcp find_symbol commit_batch
+    ```
+
+    ```
+    Method commit_batch at src/storage/tantivy.rs:985-1046 [symbol_id:6405]
+    Signature: pub fn commit_batch(&self) -> StorageResult<()>
+    Documentation: Commit the current batch and reload the reader
+    Called by: 30 function(s)
+
+    💡 Symbol found with full context. Explore 'get_calls' to see what it calls,
+       'find_callers' to see usage, or 'analyze_impact' to understand change implications.
+    ```
+  </Step>
+  <Step title="Check who uses it">
+    ```bash
+    codanna mcp find_callers symbol_id:6405
+    ```
+
+    ```
+    <- Method commit_internal at src/indexing/pipeline/stages/write.rs:158
+    <- Method save_final_counters at src/indexing/pipeline/mod.rs:137
+    <- Method index_file_single at src/indexing/pipeline/mod.rs:857
+    ...
+
+    💡 Found 30 callers. Consider 'analyze_impact' for complete dependency graph
+       or investigate specific callers with 'find_symbol'.
+    ```
+  </Step>
+  <Step title="Understand full impact">
+    ```bash
+    codanna mcp analyze_impact commit_batch
+    ```
+
+    ```
+    Method (16): commit_internal, flush, cleanup_files, index_full...
+    Function (6): test_pipeline_end_to_end_proof...
+
+    💡 Significant impact with 76 affected symbols. Consider breaking
+       this change into smaller parts.
+    ```
+  </Step>
+</Steps>
+
+Each step's guidance naturally leads to the next action.
+
+## Customizing Templates
+
+Edit `.codanna/settings.toml` to customize guidance messages:
+
+```toml
+[guidance]
+enabled = true
+
+[guidance.templates.find_callers]
+no_results = "No callers found. This might be an entry point or unused code."
+single_result = "Found 1 caller. Use 'find_symbol' to explore where this function is used."
+multiple_results = "Found {result_count} callers. Consider 'analyze_impact' for complete dependency graph."
+
+# Custom thresholds
+[[guidance.templates.analyze_impact.custom]]
+min = 20
+template = "Significant impact with {result_count} affected symbols. Consider breaking this change into smaller parts."
+```
+
+**Template variables:**
+- `{result_count}` - number of results returned
+- `{project}` - project name from `[guidance.variables]`
+
+## For AI Developers
+
+When building AI agents that use Codanna via MCP, the `system_message` field provides actionable next-step suggestions:
+
+```json
+{
+  "status": "success",
+  "system_message": "Found 12 callers. Consider 'analyze_impact' for complete dependency graph.",
+  "data": [...]
+}
+```
+
+Use this to:
+- Chain tool calls automatically
+- Provide context for follow-up decisions
+- Guide users through systematic exploration
+
+## Disabling Guidance
+
+To disable guidance messages:
+
+```toml
+[guidance]
+enabled = false
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Piping" icon="terminal" href="/workflows/piping">
+    Chain tools with Unix pipes.
+  </Card>
+  <Card title="Customization" icon="sliders" href="/reference/customization">
+    Configure guidance templates.
+  </Card>
+</CardGroup>

@@ -1,0 +1,283 @@
+---
+title: "Project Resolvers"
+description: "Configure module path resolution from project files"
+---
+
+Project resolvers read build configuration files to determine module paths and source roots. This enables cross-file relationship tracking and import resolution.
+
+## How It Works
+
+1. **Config Discovery**: Codanna reads project files (go.mod, pyproject.toml, composer.json, etc.)
+2. **Rule Extraction**: Module prefixes, source roots, and namespace mappings are extracted
+3. **Path Resolution**: File paths are mapped to module paths during indexing
+4. **Cache Management**: Rules are cached in `.codanna/index/resolvers/` with SHA-based invalidation
+
+Resolution rules rebuild during `codanna index` when config file contents change.
+
+## Configuration
+
+Add config files to `settings.toml`:
+
+```toml
+[languages.go]
+config_files = ["/path/to/project/go.mod"]
+
+[languages.python]
+config_files = ["/path/to/project/pyproject.toml"]
+```
+
+After configuration changes, re-index:
+
+```bash
+codanna index --force
+```
+
+---
+
+## Go
+
+Reads `go.mod` to extract the module name and resolve import paths.
+
+```toml
+[languages.go]
+enabled = true
+config_files = ["go.mod"]
+```
+
+**Resolution example:**
+- File: `internal/handlers/user.go`
+- Module: `github.com/user/repo`
+- Result: `github.com/user/repo/internal/handlers`
+
+---
+
+## Python
+
+Multi-backend support for Python's build ecosystem. Codanna detects the backend from `[build-system].build-backend` in pyproject.toml.
+
+```toml
+[languages.python]
+enabled = true
+config_files = ["pyproject.toml"]
+```
+
+### Supported Backends
+
+| Backend | Detection | Package Discovery |
+|:--------|:----------|:------------------|
+| Poetry | `poetry.core.masonry.api` | `packages[].include`, `packages[].from` |
+| Hatch | `hatchling.build` | `sources`, `only-include` |
+| Maturin | `maturin` | `python-packages`, `src/` auto-detect |
+| Setuptools | `setuptools.build_meta` | `packages.find`, `package-dir` |
+| PDM | `pdm.backend` | `packages` |
+| Flit | `flit_core.buildapi` | `module` |
+
+If no backend-specific config is found, Codanna auto-discovers packages by scanning for `__init__.py` files.
+
+---
+
+## Kotlin
+
+Reads `build.gradle.kts` to detect source roots based on project layout.
+
+```toml
+[languages.kotlin]
+enabled = true
+config_files = ["build.gradle.kts"]
+
+# For projects with non-standard layouts:
+[[languages.kotlin.projects]]
+config_file = "build.gradle.kts"
+source_layout = "jvm"  # jvm | standard-kmp | flat-kmp
+```
+
+<Note>
+Kotlin Multiplatform projects use different source layouts. Specify `source_layout` explicitly when auto-detection produces incorrect paths.
+</Note>
+
+### Source Layouts
+
+| Layout | Structure | Use Case |
+|:-------|:----------|:---------|
+| `jvm` | `src/main/kotlin`, `src/test/kotlin` | Standard JVM projects |
+| `standard-kmp` | `src/commonMain/kotlin`, `src/jvmMain/kotlin` | KMP with platform directories |
+| `flat-kmp` | `common/src`, `jvm/src` | KMP with flat structure (e.g., Ktor) |
+
+### Multi-Project Configuration
+
+```toml
+[[languages.kotlin.projects]]
+config_file = "app/build.gradle.kts"
+source_layout = "jvm"
+
+[[languages.kotlin.projects]]
+config_file = "shared/build.gradle.kts"
+source_layout = "flat-kmp"
+```
+
+---
+
+## Java
+
+Reads Maven `pom.xml` or Gradle `build.gradle` to detect source roots.
+
+```toml
+[languages.java]
+enabled = true
+config_files = ["pom.xml"]
+
+# For Gradle projects with custom layouts:
+[[languages.java.projects]]
+config_file = "build.gradle"
+source_layout = "jvm"  # jvm | standard-kmp | flat-kmp
+```
+
+<Note>
+Java projects use the same layout system as Kotlin. Specify `source_layout` when the project uses non-standard source directories.
+</Note>
+
+### Multi-Project Configuration
+
+```toml
+[[languages.java.projects]]
+config_file = "api/pom.xml"
+source_layout = "jvm"
+
+[[languages.java.projects]]
+config_file = "service/build.gradle"
+source_layout = "jvm"
+```
+
+**Resolution example:**
+- File: `src/main/java/org/example/service/UserService.java`
+- Result: `org.example.service.UserService`
+
+---
+
+## PHP
+
+Reads PSR-4 autoload configuration from `composer.json`.
+
+```toml
+[languages.php]
+enabled = true
+config_files = ["composer.json"]
+```
+
+**composer.json example:**
+```json
+{
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/",
+      "App\\Http\\": "src/Http/"
+    }
+  }
+}
+```
+
+**Resolution example:**
+- File: `src/Http/Controllers/UserController.php`
+- Namespace: `App\Http\Controllers\UserController`
+
+Codanna sorts namespace mappings by path length (longest match first) for correct resolution.
+
+---
+
+## C#
+
+Reads SDK-style `.csproj` files to extract namespace configuration.
+
+```toml
+[languages.csharp]
+enabled = true
+config_files = ["MyProject.csproj"]
+```
+
+**Extracted fields:**
+- `RootNamespace` - default namespace for the project
+- `AssemblyName` - output assembly name
+
+**.csproj example:**
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MyCompany.MyProject</RootNamespace>
+    <AssemblyName>MyProject</AssemblyName>
+  </PropertyGroup>
+</Project>
+```
+
+---
+
+## TypeScript
+
+Reads `tsconfig.json` to resolve path aliases and baseUrl settings.
+
+```toml
+[languages.typescript]
+enabled = true
+config_files = [
+    "tsconfig.json",
+    "packages/web/tsconfig.json"
+]
+```
+
+**Resolution features:**
+- Path aliases (`@app/*`, `@components/*`)
+- baseUrl resolution
+- Project references
+
+**tsconfig.json example:**
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["src/app/*"],
+      "@components/*": ["src/components/*"]
+    }
+  }
+}
+```
+
+---
+
+## Swift
+
+Reads Swift Package Manager `Package.swift` to detect source roots.
+
+```toml
+[languages.swift]
+enabled = true
+config_files = ["Package.swift"]
+```
+
+Uses SPM conventions (`Sources/`, `Tests/`) or custom `path:` specifications from target definitions.
+
+**Resolution example:**
+- File: `Sources/Networking/Client.swift`
+- Module: `Networking`
+
+---
+
+## Verifying Resolution
+
+After indexing, verify resolution with:
+
+```bash
+codanna mcp analyze_impact symbol_name:"your_function"
+```
+
+Cross-file relationships should resolve based on project configuration. Check the callers and calls sections to confirm relationships are detected.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Relationships" icon="diagram-project" href="/features/relationships">
+    Track callers, calls, and type dependencies.
+  </Card>
+  <Card title="Language Support" icon="code" href="/features/languages">
+    Supported languages and filters.
+  </Card>
+</CardGroup>

@@ -1,0 +1,204 @@
+---
+title: "Unix Piping"
+description: "Scripting and automation patterns"
+---
+
+All Codanna commands support `--json` for structured output using a unified envelope schema.
+
+## JSON Envelope Schema
+
+All `--json` output follows a consistent envelope structure (schema version 1.0.0):
+
+```json
+{
+  "type": "result",
+  "status": "success",
+  "code": "OK",
+  "exit_code": 0,
+  "message": "Found 1 symbol(s)",
+  "hint": "Symbol found with full context...",
+  "data": [...],
+  "meta": {
+    "schema_version": "1.0.0",
+    "entity_type": "symbol",
+    "count": 1,
+    "query": "Envelope"
+  }
+}
+```
+
+### Envelope Fields
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `type` | `"result"` \| `"error"` | Message type for stream discrimination |
+| `status` | `"success"` \| `"not_found"` \| `"partial_success"` \| `"error"` | Operation outcome |
+| `code` | string | Machine-readable code: `OK`, `NOT_FOUND`, `PARSE_ERROR`, `INDEX_ERROR`, `INVALID_QUERY`, `INTERNAL_ERROR` |
+| `exit_code` | integer | Unix exit code (0-255) |
+| `message` | string | Human-readable description |
+| `hint` | string? | AI assistant guidance for next steps |
+| `data` | any? | Payload on success (null on error) |
+| `error` | object? | Error details with `suggestions[]` and `context` |
+| `meta` | object | Metadata: `schema_version`, `entity_type`, `count`, `query`, `lang`, `duration_ms`, `truncated`, `depth` |
+
+### Exit Codes
+
+| Code | Status | Meaning |
+|:-----|:-------|:--------|
+| `0` | `success` | Operation completed with results |
+| `1` | `not_found` | No results found |
+| `2` | `error` | Operation failed |
+
+## Field Filtering
+
+Use `--fields` to select specific fields from data items, reducing output size for piping:
+
+```bash
+codanna mcp find_symbol name:Envelope --json --fields name,file_path,line
+```
+
+Output:
+```json
+{
+  "type": "result",
+  "status": "success",
+  "code": "OK",
+  "exit_code": 0,
+  "message": "Found 1 symbol(s)",
+  "hint": "Symbol found with full context...",
+  "data": [
+    {
+      "file_path": "src/io/envelope.rs"
+    }
+  ],
+  "meta": {
+    "schema_version": "1.0.0",
+    "entity_type": "symbol",
+    "count": 1,
+    "query": "Envelope"
+  }
+}
+```
+
+The envelope structure (type, status, code, meta) is always included. Only `data` items are filtered.
+
+Available with: `codanna mcp <tool> --json --fields` and `codanna retrieve <subcommand> --json --fields`
+
+## Error Response
+
+Errors include suggestions and context for recovery:
+
+```bash
+codanna retrieve callers parse --json
+```
+
+```json
+{
+  "type": "error",
+  "status": "error",
+  "code": "INVALID_QUERY",
+  "exit_code": 2,
+  "message": "Ambiguous: found 100 symbol(s) named 'parse'",
+  "hint": "Use: codanna retrieve callers symbol_id:<id>",
+  "data": null,
+  "error": {
+    "suggestions": [
+      "symbol_id:587",
+      "symbol_id:3702"
+    ],
+    "context": [
+      {
+        "file_path": "src/parsing/c/parser.rs",
+        "kind": "Method",
+        "line": 43,
+        "symbol_id": 587
+      }
+    ]
+  },
+  "meta": {
+    "schema_version": "1.0.0"
+  }
+}
+```
+
+## Not Found Response
+
+```bash
+codanna mcp find_symbol name:NonExistent --json
+```
+
+```json
+{
+  "type": "result",
+  "status": "not_found",
+  "code": "NOT_FOUND",
+  "exit_code": 1,
+  "message": "Symbol 'NonExistent' not found",
+  "hint": "Use 'search_symbols' with fuzzy matching or 'semantic_search_docs' for broader search.",
+  "data": null,
+  "meta": {
+    "schema_version": "1.0.0",
+    "entity_type": "symbol",
+    "query": "NonExistent"
+  }
+}
+```
+
+## Piping Examples
+
+### Extract Data with jq
+
+```bash
+# Get symbol names from search results
+codanna mcp semantic_search_with_context query:"authentication" limit:2 --json | \
+  jq -r '.data[].symbol.name'
+
+# Get file paths only
+codanna mcp find_symbol name:Parser --json | \
+  jq -r '.data[].file_path'
+
+# Check status before processing
+codanna mcp find_symbol name:Parser --json | \
+  jq -e '.status == "success"' && echo "Found"
+```
+
+### Chain Commands
+
+```bash
+# Find symbol, then trace its callers
+codanna mcp semantic_search_with_context query:"config parser" limit:1 --json | \
+  jq -r '.data[0].symbol.id' | \
+  xargs -I {} codanna mcp find_callers symbol_id:{} --json | \
+  jq -r '.data[] | "\(.name) - \(.file_path)"'
+```
+
+### Debug with Error Messages
+
+```bash
+# Pipe error output from any tool to find relevant code
+./my_app 2>&1 | grep -i "error\|exception" | head -1 | \
+  xargs -I {} codanna mcp semantic_search_with_context query:"{}" limit:3
+
+# From test runner
+cargo test 2>&1 | grep "panicked" | \
+  xargs -I {} codanna mcp semantic_search_with_context query:"{}" limit:3
+```
+
+### Filter Large Results
+
+```bash
+# Get only file paths and names for many symbols
+codanna mcp search_symbols query:parse limit:20 --json --fields name,file_path | \
+  jq -r '.data[] | "\(.name): \(.file_path)"'
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Reference" icon="terminal" href="/reference/cli">
+    Complete command reference.
+  </Card>
+  <Card title="Debugging" icon="bug" href="/reference/debugging">
+    Troubleshooting and logs.
+  </Card>
+</CardGroup>

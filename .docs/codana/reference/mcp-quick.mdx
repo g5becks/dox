@@ -1,0 +1,48 @@
+---
+title: "MCP Quick"
+description: "One-shot CLI command"
+---
+
+> Execute MCP tools directly without starting a server.
+
+## Usage
+
+```bash
+codanna mcp <tool> [arguments]
+```
+
+No server process needed. Each command spawns, executes, and exits.
+
+## Examples
+
+```bash
+# Find a symbol
+codanna mcp find_symbol main
+
+# Semantic search
+codanna mcp semantic_search_docs query:"error handling" limit:5
+
+# Search with context
+codanna mcp semantic_search_with_context query:"authentication" limit:3
+
+# Trace relationships
+codanna mcp get_calls symbol_id:567
+codanna mcp find_callers process_file
+codanna mcp analyze_impact Parser
+
+# JSON output for piping
+codanna mcp search_symbols query:parse --json | jq '.data[].name'
+```
+
+## When to Use
+
+| Use Case | Recommendation |
+|:---------|:---------------|
+| One-off queries | MCP Quick |
+| Scripting and automation | MCP Quick with `--json` |
+| Continuous AI assistant use | [MCP Persistent](/reference/mcp-persistent) |
+| Multiple clients | [MCP Network](/reference/mcp-network) |
+
+## Available Tools
+
+See [CLI Reference](/reference/cli#mcp-tools) for the complete tool list.

@@ -1,0 +1,168 @@
+---
+title: "HTTPS Setup"
+description: "Self-signed certificates for secure local development"
+---
+
+> Configure TLS/SSL encryption with self-signed certificates. Examples use Claude Code, but the method applies to other Node.js-based MCP clients.
+
+## Overview
+
+The HTTPS MCP server provides:
+- TLS/SSL encryption for secure communication
+- OAuth2 authentication flow
+- Self-signed certificate generation with X.509 attributes
+- Bearer token validation
+
+## The Certificate Trust Challenge
+
+Claude Code uses Node.js internally, which maintains its own certificate store separate from your system's certificate store. Even if you trust a certificate in macOS Keychain or Windows Certificate Store, Node.js won't recognize it.
+
+When connecting to an HTTPS server with a self-signed certificate:
+- `fetch failed` errors in Claude Code
+- `unable to verify the first certificate` errors
+- Connection failures despite browser access working
+
+## Solution: NODE_EXTRA_CA_CERTS
+
+Tell Node.js about your certificate using the `NODE_EXTRA_CA_CERTS` environment variable.
+
+## Setup
+
+<Steps>
+  <Step title="Start the HTTPS Server">
+    ```bash
+    codanna serve --https --watch
+    ```
+
+    On first run, this will:
+    - Generate a self-signed certificate
+    - Save it to `~/Library/Application Support/codanna/certs/server.pem` (macOS)
+    - Display certificate details and fingerprint
+  </Step>
+  <Step title="Copy certificate to standard location">
+    ```bash
+    mkdir -p ~/.ssl
+    cp ~/Library/Application\ Support/codanna/certs/server.pem ~/.ssl/codanna-ca.pem
+    ```
+  </Step>
+  <Step title="Configure MCP client">
+    Add to `.mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "codanna": {
+          "type": "http",
+          "url": "https://127.0.0.1:8443/mcp"
+        }
+      }
+    }
+    ```
+  </Step>
+  <Step title="Launch Claude Code with certificate trust">
+    ```bash
+    NODE_EXTRA_CA_CERTS=~/.ssl/codanna-ca.pem claude
+    ```
+  </Step>
+  <Step title="Verify connection">
+    In Claude Code, use `/mcp` to check status:
+
+    ```
+    codanna  connected
+    ```
+  </Step>
+</Steps>
+
+## Shell Alias
+
+Add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+alias claude-secure='NODE_EXTRA_CA_CERTS=~/.ssl/codanna-ca.pem claude'
+```
+
+Then use:
+
+```bash
+claude-secure
+```
+
+## System-wide Trust (macOS)
+
+For system-wide trust (Node.js still requires `NODE_EXTRA_CA_CERTS`):
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain \
+  ~/Library/Application\ Support/codanna/certs/server.pem
+```
+
+## OAuth Authentication Flow
+
+The HTTPS server includes OAuth2:
+
+1. **Discovery**: `/.well-known/oauth-authorization-server`
+2. **Registration**: `/oauth/register`
+3. **Authorization**: `/oauth/authorize`
+4. **Token Exchange**: `/oauth/token`
+
+Claude Code handles this flow automatically.
+
+## Troubleshooting
+
+### "fetch failed" Error
+
+Ensure you're running Claude Code with `NODE_EXTRA_CA_CERTS`:
+
+```bash
+NODE_EXTRA_CA_CERTS=~/.ssl/codanna-ca.pem claude
+```
+
+### Certificate Already Exists
+
+Delete existing certificates to regenerate:
+
+```bash
+rm -rf ~/Library/Application\ Support/codanna/certs/
+```
+
+Restart the server to generate new ones.
+
+### 401 Unauthorized
+
+The OAuth flow handles authentication automatically. If you see 401 errors:
+1. Check server logs for Bearer token validation messages
+2. Ensure you're using `"type": "http"` in `.mcp.json`
+3. Reconnect with `/mcp` in Claude Code
+
+### Browser Works But Claude Code Doesn't
+
+Browsers use the system certificate store, but Node.js doesn't. Use `NODE_EXTRA_CA_CERTS`.
+
+## Certificate Locations
+
+| Platform | Path |
+|:---------|:-----|
+| macOS | `~/Library/Application Support/codanna/certs/` |
+| Linux | `~/.config/codanna/certs/` |
+| Windows | `%APPDATA%\codanna\certs\` |
+
+On Windows, use forward slashes:
+
+```cmd
+set NODE_EXTRA_CA_CERTS=C:/Users/username/.ssl/codanna-ca.pem
+claude
+```
+
+## Production Alternatives
+
+Self-signed certificates are for local development. For production:
+
+- **Let's Encrypt**: Use certbot for free, valid certificates
+- **Reverse Proxy**: Place nginx/caddy with valid certs in front
+- **Cloud Provider**: Use managed certificates from AWS, GCP, Azure
+- **Corporate CA**: Use your organization's internal certificate authority
+
+<Warning>
+Never use `NODE_TLS_REJECT_UNAUTHORIZED=0` in production. This disables ALL certificate validation.
+</Warning>

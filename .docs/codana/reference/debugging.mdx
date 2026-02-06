@@ -1,0 +1,119 @@
+---
+title: "Debugging"
+description: "Troubleshooting and pipeline debugging"
+---
+
+> Common issues and how to resolve them.
+
+## Semantic Search Not Working
+
+**Check index exists:**
+
+```bash
+codanna mcp get_index_info
+```
+
+**Check documentation comments exist:**
+
+Semantic search requires doc comments on symbols. Functions without documentation won't appear in results.
+
+**Re-index after configuration changes:**
+
+```bash
+codanna index --force
+```
+
+## No Results Found
+
+**Try broader terms:**
+
+```bash
+# Too specific
+codanna mcp semantic_search_docs query:"TypeScriptParserConfigLoader" limit:5
+
+# Better
+codanna mcp semantic_search_docs query:"config loading" limit:5
+```
+
+**Check language filter:**
+
+```bash
+# Remove lang filter to search all languages
+codanna mcp semantic_search_docs query:"error handling" limit:5
+```
+
+## Index Not Updating
+
+**Check watch is enabled:**
+
+```bash
+codanna serve --watch
+```
+
+**Force re-index:**
+
+```bash
+codanna index --force
+```
+
+## MCP Connection Issues
+
+**Test connection:**
+
+```bash
+codanna mcp-test
+```
+
+**Check Codanna is in PATH:**
+
+```bash
+which codanna
+```
+
+**Check .codanna directory exists:**
+
+```bash
+ls -la .codanna/
+```
+
+## Enable Debug Logging
+
+Configure per-module logging in `.codanna/settings.toml`:
+
+```toml
+[logging]
+default = "warn"
+
+[logging.modules]
+# Internal modules
+pipeline = "info"    # Indexing stages and progress
+semantic = "info"    # Embedding pool and search
+indexing = "debug"   # Detailed indexing info
+mcp = "debug"        # MCP server operations
+watcher = "debug"    # File watcher events
+
+# External targets
+rag = "info"         # Document collections
+tantivy = "warn"     # Search engine
+```
+
+Levels: `error`, `warn`, `info`, `debug`, `trace`
+
+## View Index Stats
+
+```bash
+codanna mcp get_index_info
+```
+
+Shows:
+- Total symbols indexed
+- Languages detected
+- Symbol counts by kind
+
+## Common Exit Codes
+
+| Code | Meaning |
+|:-----|:--------|
+| `0` | Success |
+| `1` | General error |
+| `3` | Not found (retrieve commands) |

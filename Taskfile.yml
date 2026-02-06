@@ -1,0 +1,94 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  BINARY_NAME: llxt
+  BUILD_DIR: ./bin
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_TIME:
+    sh: date -u '+%Y-%m-%dT%H:%M:%SZ'
+  GOLANGCI_LINT: github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
+env:
+  CGO_ENABLED: '0'
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  dev:
+    desc: Run the application in development mode
+    cmds:
+      - go run ./cmd/llxt {{.CLI_ARGS}}
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -ldflags "-s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.buildTime={{.BUILD_TIME}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} ./cmd/llxt
+    sources:
+      - ./**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BUILD_DIR}}/{{.BINARY_NAME}}"
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v -race -cover ./...
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  lint:
+    desc: Run linters
+    cmds:
+      - go tool {{.GOLANGCI_LINT}} run
+
+  lint:fix:
+    desc: Run linters and fix issues
+    cmds:
+      - go tool {{.GOLANGCI_LINT}} run --fix
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+
+  deps:
+    desc: Download dependencies
+    cmds:
+      - go mod download
+
+  deps:tidy:
+    desc: Tidy go.mod
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -f coverage.out coverage.html
+
+  install:
+    desc: Install the binary locally
+    cmds:
+      - go install -ldflags "-s -w -X main.version={{.VERSION}}" ./cmd/llxt
+
+  all:
+    desc: Run fmt, lint, test, and build
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: test
+      - task: build
