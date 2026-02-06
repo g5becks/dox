@@ -31,3 +31,4 @@ bin/
 # Added by goreleaser init:
 dist/
 .dox/
+.docs/
