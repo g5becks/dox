@@ -30,3 +30,4 @@ bin/
 .task/
 # Added by goreleaser init:
 dist/
+.dox/
