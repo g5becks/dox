@@ -52,26 +52,18 @@ func New(name string, cfg config.Source, token string) (Source, error) {
 
 // NewGitHub is a temporary placeholder until GitHub source sync is implemented.
 func NewGitHub(name string, cfg config.Source, token string) (Source, error) {
+	_ = cfg
+	_ = token
+
 	return &notImplementedSource{
 		name: name,
 		kind: "github",
-		cfg:  cfg,
-	}, nil
-}
-
-// NewURL is a temporary placeholder until URL source sync is implemented.
-func NewURL(name string, cfg config.Source) (Source, error) {
-	return &notImplementedSource{
-		name: name,
-		kind: "url",
-		cfg:  cfg,
 	}, nil
 }
 
 type notImplementedSource struct {
 	name string
 	kind string
-	cfg  config.Source
 }
 
 func (s *notImplementedSource) Sync(
