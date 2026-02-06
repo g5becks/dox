@@ -100,7 +100,11 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) OutputDir(sourceName string, sourceCfg Source) string {
-	baseOutputDir := filepath.Join(c.ConfigDir, c.Output)
+	baseOutputDir := c.Output
+	if !filepath.IsAbs(baseOutputDir) {
+		baseOutputDir = filepath.Join(c.ConfigDir, c.Output)
+	}
+
 	if sourceCfg.Out != "" {
 		return filepath.Join(baseOutputDir, sourceCfg.Out)
 	}
