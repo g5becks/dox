@@ -17,6 +17,34 @@ import (
 
 const defaultParallel = 3
 
+const initTemplate = `# dox.toml - Documentation source configuration
+# Docs: https://github.com/g5becks/dox
+
+# Directory where docs will be downloaded (relative to this file)
+# Default: ".dox"
+# output = ".dox"
+
+# GitHub token for higher API rate limits (5000/hr vs 60/hr unauthenticated)
+# Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
+# github_token = ""
+
+# --- Example: Download docs from a GitHub repo directory ---
+# [sources.my-library]
+# type = "github"
+# repo = "owner/repo"
+# path = "docs"
+# ref = "main"                                       # optional (default: repo default branch)
+# patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]     # optional (these are the defaults)
+# exclude = ["**/changelog.md"]                       # optional
+# out = "custom-dir-name"                             # optional (default: source key name)
+
+# --- Example: Download a single file from a URL ---
+# [sources.my-framework]
+# type = "url"
+# url = "https://example.com/llms-full.txt"
+# filename = "my-framework.txt"                       # optional (default: basename from URL)
+`
+
 var (
 	//nolint:gochecknoglobals // Build metadata is injected at build time with ldflags.
 	version = "dev"
@@ -120,7 +148,7 @@ func newInitCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "init",
 		Usage:  "Create a starter dox.toml in the current directory",
-		Action: notImplementedAction("init"),
+		Action: initAction,
 	}
 }
 
@@ -244,6 +272,32 @@ func resolveOutputRoot(cfg *config.Config) string {
 	}
 
 	return filepath.Join(cfg.ConfigDir, cfg.Output)
+}
+
+func initAction(_ context.Context, _ *cli.Command) error {
+	for _, configName := range []string{"dox.toml", ".dox.toml"} {
+		if _, err := os.Stat(configName); err == nil {
+			return oops.
+				Code("CONFIG_WRITE_ERROR").
+				With("path", configName).
+				Hint("Remove the existing file or edit it directly").
+				Errorf("config file already exists at %q", configName)
+		} else if !os.IsNotExist(err) {
+			return oops.
+				Code("CONFIG_WRITE_ERROR").
+				With("path", configName).
+				Wrapf(err, "checking config path")
+		}
+	}
+
+	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o644); err != nil {
+		return oops.
+			Code("CONFIG_WRITE_ERROR").
+			With("path", "dox.toml").
+			Wrapf(err, "writing starter config")
+	}
+
+	return nil
 }
 
 func cleanAction(_ context.Context, cmd *cli.Command) error {
