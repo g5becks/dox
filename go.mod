@@ -1,4 +1,4 @@
-modul:qe github.com/g5becks/dox
+module github.com/g5becks/dox
 
 go 1.25.7
 
@@ -98,7 +98,7 @@ require (
 	github.com/blakesmith/ar v0.0.0-20190502131153-809d4375e1fb // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/bluesky-social/indigo v0.0.0-20240813042137-4006c0eca043 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/briandowns/spinner v1.23.2 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/caarlos0/env/v11 v11.3.1 // indirect
@@ -251,6 +251,7 @@ require (
 	github.com/ipfs/go-metrics-interface v0.0.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
+	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/jedisct1/go-minisign v0.0.0-20241212093149-d2f9f49435c7 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kaptinlin/go-i18n v0.2.2 // indirect
@@ -263,11 +264,12 @@ require (
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/knadh/koanf/parsers/json v1.0.0 // indirect
-	github.com/knadh/koanf/parsers/toml/v2 v2.2.0 // indirect
+	github.com/knadh/koanf/parsers/toml/v2 v2.2.0
 	github.com/knadh/koanf/parsers/yaml v1.1.0 // indirect
+	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/fs v1.0.0 // indirect
 	github.com/knadh/koanf/providers/rawbytes v1.0.0 // indirect
-	github.com/knadh/koanf/v2 v2.3.0 // indirect
+	github.com/knadh/koanf/v2 v2.3.0
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
@@ -316,6 +318,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/sajari/fuzzy v1.0.0 // indirect
+	github.com/samber/oops v1.21.0
 	github.com/sassoftware/relic v7.2.1+incompatible // indirect
 	github.com/schollz/progressbar/v3 v3.19.0 // indirect
 	github.com/scylladb/go-set v1.0.3-0.20200225121959-cc7b2070d91e // indirect
@@ -352,7 +355,7 @@ require (
 	github.com/u-root/u-root v0.15.1-0.20251208185023-2f8c7e763cf8 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/urfave/cli/v3 v3.6.2 // indirect
+	github.com/urfave/cli/v3 v3.6.2
 	github.com/vbatts/tar-split v0.12.2 // indirect
 	github.com/wagoodman/go-progress v0.0.0-20230925121702-07e42b3cdba0 // indirect
 	github.com/whyrusleeping/cbor-gen v0.1.3-0.20240731173018-74d74643234c // indirect
@@ -383,7 +386,7 @@ require (
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260109210033-bd525da824e2 // indirect
 	golang.org/x/term v0.39.0 // indirect
@@ -404,6 +407,7 @@ require (
 	lukechampine.com/blake3 v1.2.1 // indirect
 	mvdan.cc/sh/moreinterp v0.0.0-20260120230322-19def062a997 // indirect
 	mvdan.cc/sh/v3 v3.12.1-0.20260124232039-e74afc18e65b // indirect
+	resty.dev/v3 v3.0.0-beta.6
 	sigs.k8s.io/kind v0.30.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 	software.sslmate.com/src/go-pkcs12 v0.6.0 // indirect
