@@ -112,7 +112,7 @@ func newCleanCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
 		},
-		Action: notImplementedAction("clean"),
+		Action: cleanAction,
 	}
 }
 
@@ -244,6 +244,54 @@ func resolveOutputRoot(cfg *config.Config) string {
 	}
 
 	return filepath.Join(cfg.ConfigDir, cfg.Output)
+}
+
+func cleanAction(_ context.Context, cmd *cli.Command) error {
+	cfg, err := config.Load(cmd.String("config"))
+	if err != nil {
+		return err
+	}
+
+	selectedSources := commandArgs(cmd)
+	outputDir := resolveOutputRoot(cfg)
+	if len(selectedSources) == 0 {
+		if err := os.RemoveAll(outputDir); err != nil {
+			return oops.
+				Code("WRITE_FAILED").
+				With("path", outputDir).
+				Wrapf(err, "removing output directory")
+		}
+
+		return nil
+	}
+
+	lock, err := lockfile.Load(outputDir)
+	if err != nil {
+		return err
+	}
+
+	for _, sourceName := range selectedSources {
+		sourceCfg, ok := cfg.Sources[sourceName]
+		if !ok {
+			return oops.
+				Code("SOURCE_NOT_FOUND").
+				With("source", sourceName).
+				Hint("Run 'dox list' to view configured sources").
+				Errorf("source %q not found in config", sourceName)
+		}
+
+		if err := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); err != nil {
+			return oops.
+				Code("WRITE_FAILED").
+				With("path", cfg.OutputDir(sourceName, sourceCfg)).
+				With("source", sourceName).
+				Wrapf(err, "removing source output directory")
+		}
+
+		lock.RemoveEntry(sourceName)
+	}
+
+	return lock.Save(outputDir)
 }
 
 func notImplementedAction(commandName string) cli.ActionFunc {
