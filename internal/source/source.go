@@ -50,33 +50,6 @@ func New(name string, cfg config.Source, token string) (Source, error) {
 	}
 }
 
-// NewGitHub is a temporary placeholder until GitHub source sync is implemented.
 func NewGitHub(name string, cfg config.Source, token string) (Source, error) {
-	_ = cfg
-	_ = token
-
-	return &notImplementedSource{
-		name: name,
-		kind: "github",
-	}, nil
-}
-
-type notImplementedSource struct {
-	name string
-	kind string
-}
-
-func (s *notImplementedSource) Sync(
-	_ context.Context,
-	_ string,
-	_ *lockfile.LockEntry,
-	_ SyncOptions,
-	_ *progress.Tracker,
-) (*SyncResult, error) {
-	return nil, oops.
-		Code("NOT_IMPLEMENTED").
-		With("source", s.name).
-		With("type", s.kind).
-		Hint("Continue implementation in the source package tasks").
-		Errorf("%s source sync is not implemented for %q", s.kind, s.name)
+	return newGitHubSource(name, cfg, token)
 }
