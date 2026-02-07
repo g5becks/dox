@@ -241,10 +241,26 @@ func printSummary(
 
 	for _, sourceName := range sourceNames {
 		state := results[sourceName]
-		if state.err == nil {
+		if state.err != nil {
+			fmt.Printf("%s: failed (%v)\n", sourceName, state.err)
 			continue
 		}
 
-		fmt.Printf("%s: error: %v\n", sourceName, state.err)
+		if state.result == nil {
+			fmt.Printf("%s: no result\n", sourceName)
+			continue
+		}
+
+		switch {
+		case state.result.Skipped:
+			fmt.Printf("%s: skipped\n", sourceName)
+		default:
+			fmt.Printf(
+				"%s: synced (downloaded=%d deleted=%d)\n",
+				sourceName,
+				state.result.Downloaded,
+				state.result.Deleted,
+			)
+		}
 	}
 }
