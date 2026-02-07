@@ -82,6 +82,22 @@ nfpms:
       - src: ./CONTRIBUTING.md
         dst: /usr/share/doc/dox/CONTRIBUTING.md
 
+brews:
+  - repository:
+      owner: g5becks
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/g5becks/dox
+    description: Fetch library documentation files for AI agents and indexing tools
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    install: |-
+      bin.install "dox"
+    test: |-
+      system "#{bin}/dox", "--version"
+
 dockers:
   - image_templates:
       - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"

@@ -8,6 +8,12 @@ Keep documentation config in your repo, keep downloaded docs out of git, and rep
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install g5becks/tap/dox
+```
+
 ### Download Binary
 
 Download pre-built binaries from the [releases page](https://github.com/g5becks/dox/releases).
