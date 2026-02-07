@@ -8,12 +8,6 @@ Keep documentation config in your repo, keep downloaded docs out of git, and rep
 
 ## Installation
 
-### Homebrew (macOS/Linux)
-
-```bash
-brew install g5becks/tap/dox
-```
-
 ### Download Binary
 
 Download pre-built binaries from the [releases page](https://github.com/g5becks/dox/releases).
@@ -28,27 +22,37 @@ sudo mv dox /usr/local/bin/
 **Windows:**
 Download the `.zip` from releases, extract, and add to PATH.
 
-### Package Managers
+### Linux Packages
 
 **Debian/Ubuntu:**
 ```bash
-# Download .deb from releases page
-wget https://github.com/g5becks/dox/releases/latest/download/dox_amd64.deb
-sudo dpkg -i dox_amd64.deb
+wget https://github.com/g5becks/dox/releases/latest/download/dox_0.1.0_linux_amd64.deb
+sudo dpkg -i dox_0.1.0_linux_amd64.deb
 ```
 
 **RedHat/Fedora/CentOS:**
 ```bash
-# Download .rpm from releases page
-wget https://github.com/g5becks/dox/releases/latest/download/dox_amd64.rpm
-sudo rpm -i dox_amd64.rpm
+wget https://github.com/g5becks/dox/releases/latest/download/dox_0.1.0_linux_amd64.rpm
+sudo rpm -i dox_0.1.0_linux_amd64.rpm
 ```
 
-**Arch Linux (AUR):**
+**Alpine Linux:**
 ```bash
-yay -S dox-bin
-# or
-paru -S dox-bin
+wget https://github.com/g5becks/dox/releases/latest/download/dox_0.1.0_linux_amd64.apk
+sudo apk add --allow-untrusted dox_0.1.0_linux_amd64.apk
+```
+
+**Arch Linux:**
+```bash
+wget https://github.com/g5becks/dox/releases/latest/download/dox_0.1.0_linux_amd64.pkg.tar.zst
+sudo pacman -U dox_0.1.0_linux_amd64.pkg.tar.zst
+```
+
+### Docker
+
+```bash
+docker pull ghcr.io/g5becks/dox:latest
+docker run --rm ghcr.io/g5becks/dox:latest --version
 ```
 
 ### Go Install
