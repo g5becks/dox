@@ -22,6 +22,7 @@ func DefaultPatterns() []string {
 type Config struct {
 	Output      string            `koanf:"output"       validate:"omitempty,dirpath"`
 	GitHubToken string            `koanf:"github_token"`
+	MaxParallel int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
 	Sources     map[string]Source `koanf:"sources"      validate:"required,dive"`
 	ConfigDir   string            `koanf:"-"`
 }

@@ -99,6 +99,10 @@ dox sync
 # dox.toml
 output = ".dox"
 
+# Optional: Set default parallelism for syncing (default: 4x CPU cores, min 10)
+# Override per-command with: dox sync --parallel N
+max_parallel = 20
+
 [sources.goreleaser]
 type = "github"
 repo = "goreleaser/goreleaser"
@@ -270,6 +274,7 @@ python embed_docs.py .dox/
   1. `github_token` in config
   2. `GITHUB_TOKEN`
   3. `GH_TOKEN`
+- **Parallelism**: Default is 4x CPU cores (minimum 10) since syncing is I/O-bound. Set `max_parallel` in config or use `--parallel` flag to override.
 
 ## Contributing
 

@@ -31,6 +31,10 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
 # github_token = ""
 
+# Max parallel source syncs (default: 4x CPU cores, min 10)
+# Override per-command with: dox sync --parallel N
+# max_parallel = 20
+
 # --- Example: Download docs from a GitHub repo directory ---
 # [sources.my-library]
 # type = "github"

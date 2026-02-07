@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	stdsync "sync"
 
@@ -15,7 +16,17 @@ import (
 	"github.com/g5becks/dox/internal/source"
 )
 
-const defaultMaxParallel = 3
+const (
+	cpuMultiplier         = 4  // Multiply CPU count for I/O-bound parallelism
+	minDefaultParallelism = 10 // Minimum parallelism even on low-core machines
+)
+
+// getDefaultMaxParallel returns a smart default for I/O-bound operations.
+// Since syncing is network I/O (not CPU-bound), we can be aggressive.
+func getDefaultMaxParallel() int {
+	cpus := runtime.NumCPU()
+	return max(cpus*cpuMultiplier, minDefaultParallelism)
+}
 
 // EventKind identifies the type of sync progress event.
 type EventKind int
@@ -85,7 +96,12 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 
 	maxParallel := opts.MaxParallel
 	if maxParallel <= 0 {
-		maxParallel = defaultMaxParallel
+		// Check if config specifies a default, otherwise use smart default
+		if cfg.MaxParallel > 0 {
+			maxParallel = cfg.MaxParallel
+		} else {
+			maxParallel = getDefaultMaxParallel()
+		}
 	}
 
 	emit := opts.OnEvent
