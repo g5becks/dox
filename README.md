@@ -79,6 +79,8 @@ task build
 dox init
 ```
 
+This generates `dox.toml` with sensible defaults, including global exclude patterns for common files (images, `node_modules`, build artifacts, etc.).
+
 2. Edit `dox.toml` and add sources.
 
 3. Sync docs:
@@ -103,16 +105,25 @@ output = ".dox"
 # Override per-command with: dox sync --parallel N
 max_parallel = 20
 
+# Global exclude patterns applied to all git sources
+# Per-source excludes add to (not replace) these global patterns
+excludes = [
+    "**/*.png",
+    "**/*.jpg",
+    "node_modules/**",
+    ".github/**",
+]
+
+# GitHub source - type inferred from 'repo'
 [sources.goreleaser]
-type = "github"
 repo = "goreleaser/goreleaser"
 path = "www/docs"
-patterns = ["**/*.md"]
+patterns = ["**/*.md"]  # Override default patterns
+exclude = ["**/changelog.md"]  # Adds to global excludes
 
+# URL source - type inferred from 'url'
 [sources.hono]
-type = "url"
 url = "https://hono.dev/llms-full.txt"
-filename = "hono.txt"
 ```
 
 ## Commands
@@ -142,9 +153,17 @@ dox list --files
 ### Add
 
 ```bash
-dox add goreleaser --type github --repo goreleaser/goreleaser --path www/docs
-dox add hono --type url --url https://hono.dev/llms-full.txt --filename hono.txt
-dox add goreleaser --type github --repo goreleaser/goreleaser --path www/docs --force
+# Add GitHub source (type inferred from --repo)
+dox add goreleaser --repo goreleaser/goreleaser --path www/docs
+
+# Add URL source (type inferred from --url)
+dox add hono --url https://hono.dev/llms-full.txt
+
+# Add GitLab source (specify host)
+dox add myproject --repo owner/repo --path docs --host gitlab.com
+
+# Overwrite existing source
+dox add goreleaser --repo goreleaser/goreleaser --path www/docs --force
 ```
 
 Use `--force` to overwrite an existing source with the same name.
@@ -162,28 +181,204 @@ dox clean goreleaser
 dox init
 ```
 
-## Source Types
+## Global Excludes
 
-### `github`
+Use the top-level `excludes` key to define patterns that apply to all git sources (GitHub, GitLab, Codeberg, etc.):
 
-Required:
-- `repo`
-- `path`
+```toml
+excludes = [
+    "**/*.png",
+    "**/*.jpg",
+    "node_modules/**",
+    ".vitepress/**",
+]
+```
 
-Optional:
-- `ref`
-- `patterns`
-- `exclude`
-- `out`
+**Key behaviors:**
+- Global excludes apply to all git sources (GitHub, GitLab, Codeberg, self-hosted)
+- Global excludes do NOT apply to URL sources
+- Per-source `exclude` patterns add to (not replace) global excludes
+- Duplicate patterns are automatically removed
+- `dox init` generates a config with comprehensive defaults
 
-### `url`
+**Example:**
+```toml
+excludes = ["**/*.png", "node_modules/**"]
 
-Required:
-- `url`
+[sources.docs]
+repo = "owner/repo"
+path = "docs"
+exclude = ["**/*.jpg", "**/*.png"]  # Final excludes: *.png, *.jpg, node_modules/**
+```
 
-Optional:
-- `filename`
-- `out`
+## Configuration Reference
+
+### Minimal Configuration
+
+`dox` infers source types automatically and applies sensible defaults to minimize config verbosity:
+
+```toml
+# Minimal GitHub source - type inferred from 'repo' presence
+[sources.goreleaser]
+repo = "goreleaser/goreleaser"
+path = "www/docs"
+
+# Minimal URL source - type inferred from 'url' presence
+[sources.hono]
+url = "https://hono.dev/llms-full.txt"
+```
+
+**What's inferred:**
+- `type = "github"` when `repo` is present
+- `type = "url"` when `url` is present
+- `host = "github.com"` for git sources (GitHub default)
+- `patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]` for git sources
+- `ref = <default branch>` for git sources (fetched from remote)
+- `filename = <basename from URL>` for URL sources
+
+### Git Hosting Sources
+
+#### GitHub (default)
+
+```toml
+[sources.docs]
+repo = "owner/repo"
+path = "docs"
+# type inferred as "github", host defaults to "github.com"
+```
+
+#### GitLab
+
+```toml
+[sources.docs]
+repo = "owner/repo"
+path = "docs"
+host = "gitlab.com"  # Explicit host triggers gitlab type inference
+```
+
+Or explicitly set type:
+
+```toml
+[sources.docs]
+type = "gitlab"
+repo = "owner/repo"
+path = "docs"
+# host defaults to "github.com" but gitlab client handles gitlab.com URLs
+```
+
+#### Codeberg
+
+```toml
+[sources.docs]
+repo = "owner/repo"
+path = "docs"
+host = "codeberg.org"
+```
+
+#### Self-Hosted Git (GitHub Enterprise, GitLab CE/EE, Gitea, etc.)
+
+```toml
+[sources.internal-docs]
+repo = "company/documentation"
+path = "guides"
+host = "git.company.com"
+```
+
+#### Advanced Git Source Options
+
+```toml
+[sources.advanced]
+type = "github"              # Optional: github|gitlab|codeberg|git (inferred if omitted)
+repo = "owner/repo"          # Required: owner/repo format
+host = "github.com"          # Optional: git host (default: github.com)
+path = "docs/content"        # Required: path to directory or file in repo
+ref = "v2.0.0"               # Optional: branch, tag, or commit SHA (default: repo default branch)
+patterns = ["**/*.md"]       # Optional: glob patterns (default: ["**/*.md", "**/*.mdx", "**/*.txt"])
+exclude = ["**/draft/**"]    # Optional: exclude patterns (merges with global excludes)
+out = "custom-dir"           # Optional: output subdirectory (default: source name)
+```
+
+### URL Sources
+
+For direct file downloads from any HTTP/HTTPS URL:
+
+```toml
+# Minimal
+[sources.hono]
+url = "https://hono.dev/llms-full.txt"
+
+# With options
+[sources.spec]
+url = "https://example.com/api/spec.yaml"
+filename = "openapi.yaml"   # Optional: custom filename (default: spec.yaml from URL)
+out = "specs"               # Optional: output subdirectory (default: source name)
+```
+
+### Complete Field Reference
+
+#### Global Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `output` | string | `.dox` | Output directory root (relative to config file or absolute) |
+| `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | GitHub API token for private repos and higher rate limits |
+| `max_parallel` | int | `4 × CPU cores` (min 10) | Max concurrent source syncs (I/O-bound operations) |
+| `excludes` | []string | `[]` | Global exclude patterns applied to all git sources |
+
+#### Source Fields (Git Hosting)
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `type` | No | Inferred | Source type: `github`, `gitlab`, `codeberg`, `git`, `url` |
+| `repo` | Yes* | — | Repository in `owner/repo` format |
+| `host` | No | `github.com` | Git hosting domain (e.g., `gitlab.com`, `git.company.com`) |
+| `path` | Yes | — | Path to directory or file in repository |
+| `ref` | No | Default branch | Branch, tag, or commit SHA to sync |
+| `patterns` | No | `["**/*.md", "**/*.mdx", "**/*.txt"]` | Glob patterns for files to include |
+| `exclude` | No | `[]` | Glob patterns to exclude (merged with global `excludes`) |
+| `out` | No | Source name | Custom output subdirectory name |
+
+*Required for git sources. Must have either `repo` OR `url`, not both.
+
+#### Source Fields (URL)
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `type` | No | `url` (inferred) | Automatically set to `url` when `url` field is present |
+| `url` | Yes* | — | Direct HTTP/HTTPS URL to a file |
+| `filename` | No | Basename from URL | Custom filename for downloaded file |
+| `out` | No | Source name | Custom output subdirectory name |
+
+*Required for URL sources. Must have either `repo` OR `url`, not both.
+
+### Configuration Comparison: Before vs. After
+
+**Before** (verbose, redundant):
+```toml
+[sources.goreleaser]
+type = "github"              # Redundant - obvious from 'repo'
+repo = "goreleaser/goreleaser"
+ref = "main"                 # Redundant - same as default branch
+path = "www/docs"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]  # Redundant - same as default
+
+[sources.hono]
+type = "url"                 # Redundant - obvious from 'url'
+url = "https://hono.dev/llms-full.txt"
+filename = "llms-full.txt"   # Redundant - same as URL basename
+```
+
+**After** (slim, clear):
+```toml
+[sources.goreleaser]
+repo = "goreleaser/goreleaser"
+path = "www/docs"
+
+[sources.hono]
+url = "https://hono.dev/llms-full.txt"
+```
+
+Both configs produce identical behavior. The slimmer version relies on type inference and sensible defaults.
 
 ## Output Layout
 

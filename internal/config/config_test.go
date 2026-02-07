@@ -3,6 +3,8 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -192,6 +194,30 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "valid gitlab source",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {
+						Type: "gitlab",
+						Repo: "owner/repo",
+						Path: "docs",
+					},
+				},
+			},
+		},
+		{
+			name: "valid codeberg source",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {
+						Type: "codeberg",
+						Repo: "owner/repo",
+						Path: "docs",
+					},
+				},
+			},
+		},
+		{
 			name: "valid url source",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
@@ -203,7 +229,7 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "missing github repo",
+			name: "neither repo nor url",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"bad": {
@@ -212,7 +238,21 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
-			wantErrContains: "missing repo",
+			wantErrContains: "has neither 'repo' nor 'url'",
+		},
+		{
+			name: "both repo and url",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"bad": {
+						Type: "github",
+						Repo: "owner/repo",
+						URL:  "https://example.com/file.txt",
+						Path: "docs",
+					},
+				},
+			},
+			wantErrContains: "has both 'repo' and 'url'",
 		},
 		{
 			name: "invalid github repo format",
@@ -237,25 +277,16 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
-			wantErrContains: "missing path",
-		},
-		{
-			name: "missing url",
-			cfg: &config.Config{
-				Sources: map[string]config.Source{
-					"bad": {
-						Type: "url",
-					},
-				},
-			},
-			wantErrContains: "missing url",
+			wantErrContains: "missing 'path'",
 		},
 		{
 			name: "unknown source type",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"bad": {
-						Type: "gitlab",
+						Type: "bitbucket",
+						Repo: "owner/repo",
+						Path: "docs",
 					},
 				},
 			},
@@ -281,6 +312,55 @@ func TestConfigValidate(t *testing.T) {
 				t.Fatalf("Validate() error = %q, expected %q", err.Error(), tc.wantErrContains)
 			}
 		})
+	}
+}
+
+func TestLoadConfigWithGlobalExcludes(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "dox.toml")
+
+	configContent := `
+output = ".dox"
+
+excludes = [
+    "*.png",
+    "node_modules/**",
+]
+
+[sources.test]
+type = "github"
+repo = "owner/repo"
+path = "docs"
+exclude = ["*.jpg"]
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Check global excludes loaded
+	expectedGlobal := []string{"*.png", "node_modules/**"}
+	sort.Strings(cfg.Excludes)
+	sort.Strings(expectedGlobal)
+
+	if !reflect.DeepEqual(cfg.Excludes, expectedGlobal) {
+		t.Errorf("Config.Excludes = %v, want %v", cfg.Excludes, expectedGlobal)
+	}
+
+	// Check merged excludes on GitHub source
+	sourceExcludes := cfg.Sources["test"].Exclude
+	sort.Strings(sourceExcludes)
+	expectedMerged := []string{"*.jpg", "*.png", "node_modules/**"}
+	sort.Strings(expectedMerged)
+
+	if !reflect.DeepEqual(sourceExcludes, expectedMerged) {
+		t.Errorf("Source excludes = %v, want %v", sourceExcludes, expectedMerged)
 	}
 }
 

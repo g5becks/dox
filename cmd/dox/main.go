@@ -23,6 +23,10 @@ const defaultParallel = 3
 const initTemplate = `# dox.toml - Documentation source configuration
 # Docs: https://github.com/g5becks/dox
 
+# ============================================================================
+# GLOBAL SETTINGS
+# ============================================================================
+
 # Directory where docs will be downloaded (relative to this file)
 # Default: ".dox"
 # output = ".dox"
@@ -35,21 +39,102 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
 
-# --- Example: Download docs from a GitHub repo directory ---
+# ============================================================================
+# GLOBAL EXCLUDES (applied to all git hosting sources)
+# ============================================================================
+# These patterns are merged with per-source excludes (duplicates removed)
+excludes = [
+    # Hidden/config directories
+    ".vitepress/**",
+    ".github/**",
+    ".git/**",
+    ".idea/**",
+    ".vscode/**",
+
+    # Dependencies
+    "node_modules/**",
+    "vendor/**",
+
+    # Images (common formats)
+    "**/*.png",
+    "**/*.jpg",
+    "**/*.jpeg",
+    "**/*.gif",
+    "**/*.svg",
+    "**/*.ico",
+    "**/*.webp",
+
+    # Build artifacts
+    "dist/**",
+    "build/**",
+    ".next/**",
+    ".nuxt/**",
+    "out/**",
+
+    # Compiled/binary files
+    "**/*.wasm",
+    "**/*.so",
+    "**/*.dylib",
+    "**/*.dll",
+    "**/*.exe",
+
+    # Archives
+    "**/*.zip",
+    "**/*.tar",
+    "**/*.gz",
+    "**/*.tgz",
+
+    # Media
+    "**/*.mp4",
+    "**/*.mov",
+    "**/*.avi",
+    "**/*.mp3",
+    "**/*.wav",
+
+    # Fonts
+    "**/*.woff",
+    "**/*.woff2",
+    "**/*.ttf",
+    "**/*.eot",
+    "**/*.otf",
+]
+
+# ============================================================================
+# SOURCES - Type is inferred from 'repo' or 'url' presence
+# ============================================================================
+
+# --- GitHub (default) - type inferred from 'repo', host defaults to github.com ---
 # [sources.my-library]
-# type = "github"
 # repo = "owner/repo"
 # path = "docs"
 # ref = "main"                                       # optional (default: repo default branch)
 # patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]     # optional (these are the defaults)
-# exclude = ["**/changelog.md"]                       # optional
+# exclude = ["custom-pattern/**"]                    # optional (adds to global excludes, no duplicates)
 # out = "custom-dir-name"                             # optional (default: source key name)
 
-# --- Example: Download a single file from a URL ---
+# --- GitLab - specify host to use gitlab.com ---
+# [sources.gitlab-project]
+# repo = "owner/repo"
+# path = "docs"
+# host = "gitlab.com"                                # triggers gitlab type inference
+
+# --- Codeberg - specify host to use codeberg.org ---
+# [sources.codeberg-project]
+# repo = "owner/repo"
+# path = "documentation"
+# host = "codeberg.org"
+
+# --- Self-Hosted Git (GitHub Enterprise, GitLab CE/EE, Gitea, etc.) ---
+# [sources.internal-docs]
+# repo = "company/documentation"
+# path = "guides"
+# host = "git.company.com"
+
+# --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]
-# type = "url"
 # url = "https://example.com/llms-full.txt"
 # filename = "my-framework.txt"                       # optional (default: basename from URL)
+# out = "custom-dir"                                  # optional (default: source key name)
 `
 
 //nolint:gochecknoglobals // Build metadata is injected at build time with ldflags.
