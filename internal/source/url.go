@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"io"
+	"maps"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -187,9 +188,7 @@ func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {
 	cloned := *entry
 	if entry.Files != nil {
 		cloned.Files = make(map[string]string, len(entry.Files))
-		for key, value := range entry.Files {
-			cloned.Files[key] = value
-		}
+		maps.Copy(cloned.Files, entry.Files)
 	}
 
 	return &cloned
