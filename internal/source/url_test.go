@@ -61,7 +61,7 @@ func TestURLSyncDownloadsFileAndUpdatesLock(t *testing.T) {
 
 	destDir := t.TempDir()
 
-	result, err := src.Sync(context.Background(), destDir, nil, source.SyncOptions{}, nil)
+	result, err := src.Sync(context.Background(), destDir, nil, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -112,7 +112,7 @@ func TestURLSyncSendsConditionalHeadersAndSkips304(t *testing.T) {
 		SyncedAt: time.Now().UTC(),
 	}
 
-	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{}, nil)
+	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -143,7 +143,7 @@ func TestURLSyncDryRunDoesNotWriteFile(t *testing.T) {
 
 	destDir := t.TempDir()
 
-	result, err := src.Sync(context.Background(), destDir, nil, source.SyncOptions{DryRun: true}, nil)
+	result, err := src.Sync(context.Background(), destDir, nil, source.SyncOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -168,7 +168,7 @@ func TestURLSyncReturnsErrorOnFailureStatus(t *testing.T) {
 		return source.NewHTTPResponse(req, http.StatusBadGateway, "gateway error", nil)
 	}))
 
-	_, err := src.Sync(context.Background(), t.TempDir(), nil, source.SyncOptions{}, nil)
+	_, err := src.Sync(context.Background(), t.TempDir(), nil, source.SyncOptions{})
 	if err == nil {
 		t.Fatalf("Sync() error = nil, want non-nil")
 	}

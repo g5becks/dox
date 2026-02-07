@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/samber/oops"
 	"resty.dev/v3"
 
@@ -88,7 +87,6 @@ func (s *githubSource) Sync(
 	destDir string,
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
-	_ *progress.Tracker,
 ) (*SyncResult, error) {
 	if isSingleFilePath(s.source.Path) {
 		return s.syncSingleFile(ctx, destDir, prevLock, opts)

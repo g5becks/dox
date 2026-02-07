@@ -3,7 +3,6 @@ package source
 import (
 	"context"
 
-	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/samber/oops"
 
 	"github.com/g5becks/dox/internal/config"
@@ -31,7 +30,6 @@ type Source interface {
 		destDir string,
 		prevLock *lockfile.LockEntry,
 		opts SyncOptions,
-		tracker *progress.Tracker,
 	) (*SyncResult, error)
 }
 

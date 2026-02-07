@@ -89,7 +89,6 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 						Force:  opts.Force,
 						DryRun: opts.DryRun,
 					},
-					nil,
 				)
 			}
 

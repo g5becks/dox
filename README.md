@@ -73,7 +73,10 @@ dox sync goreleaser hono
 dox sync --force
 dox sync --clean
 dox sync --dry-run
+dox sync --parallel 5
 ```
+
+All commands accept `--config path/to/dox.toml` (`-c`) to override config discovery.
 
 ### List
 
@@ -89,7 +92,10 @@ dox list --files
 ```bash
 dox add goreleaser --type github --repo goreleaser/goreleaser --path www/docs
 dox add hono --type url --url https://hono.dev/llms-full.txt --filename hono.txt
+dox add goreleaser --type github --repo goreleaser/goreleaser --path www/docs --force
 ```
+
+Use `--force` to overwrite an existing source with the same name.
 
 ### Clean
 

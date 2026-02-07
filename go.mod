@@ -11,6 +11,7 @@ tool (
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1
+	github.com/go-playground/validator/v10 v10.30.1
 	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.0
 	github.com/knadh/koanf/providers/file v1.2.1
@@ -207,7 +208,6 @@ require (
 	github.com/go-openapi/validate v0.25.1 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/go-restruct/restruct v1.2.0-alpha // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-task/task/v3 v3.48.0 // indirect

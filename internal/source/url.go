@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/samber/oops"
 	"resty.dev/v3"
 
@@ -47,7 +46,6 @@ func (s *urlSource) Sync(
 	destDir string,
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
-	_ *progress.Tracker,
 ) (*SyncResult, error) {
 	request := s.client.R().SetContext(ctx)
 	if !opts.Force && prevLock != nil {
