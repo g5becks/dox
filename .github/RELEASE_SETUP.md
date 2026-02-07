@@ -9,7 +9,6 @@ This guide explains how to set up automated releases for dox using goreleaser an
 2. **External Accounts** (optional, for package distribution):
    - Homebrew tap repository
    - AUR (Arch User Repository) account
-   - Chocolatey account
    - GitHub Container Registry (GHCR) access
 
 ## GitHub Secrets Configuration
@@ -64,23 +63,6 @@ Navigate to your repository settings → Secrets and variables → Actions → R
    - Name: `AUR_KEY`
    - Value: The entire private key (including `-----BEGIN` and `-----END` lines)
 
-#### `CHOCOLATEY_API_KEY` (Optional)
-**Purpose**: Publishes to Chocolatey (Windows package manager).
-
-**Setup:**
-1. Create account at https://community.chocolatey.org/
-
-2. Get your API key:
-   - Login to Chocolatey
-   - Go to your account settings
-   - Copy the API key
-
-3. Add the secret:
-   - Name: `CHOCOLATEY_API_KEY`
-   - Value: Your Chocolatey API key
-
-**Note**: First package submission requires manual moderation. Subsequent releases are automatic.
-
 ### Automatic Secrets
 
 - **`GITHUB_TOKEN`**: Automatically provided by GitHub Actions, no setup needed.
@@ -113,12 +95,7 @@ When you push a new tag (e.g., `v1.0.0`), goreleaser will:
    - Package pushed to https://aur.archlinux.org/packages/dox-bin
    - Users install with: `yay -S dox-bin` or `paru -S dox-bin`
 
-5. **Chocolatey** (with `CHOCOLATEY_API_KEY`):
-   - Package pushed to Chocolatey Community Repository
-   - Users install with: `choco install dox`
-   - **First release requires manual approval** (24-48 hours)
-
-6. **Docker** (automatic):
+5. **Docker** (automatic):
    - Multi-arch images (amd64, arm64)
    - Published to `ghcr.io/g5becks/dox`
    - Tags: `latest`, `v1.0.0`
@@ -185,17 +162,6 @@ git push origin v1.0.0
 - Ensure AUR account is active
 - Check that `dox-bin` package doesn't conflict with existing package
 
-### Chocolatey Issues
-
-**Problem**: First release stuck in moderation
-- **This is normal** — first submission requires manual review (24-48 hours)
-- Check email for moderator feedback
-- Subsequent releases are automatic
-
-**Problem**: API key rejected
-- Regenerate key in Chocolatey account settings
-- Update `CHOCOLATEY_API_KEY` secret
-
 ### Docker Issues
 
 **Problem**: Image push fails
@@ -225,7 +191,6 @@ If you only want GitHub releases and binaries:
 1. Remove or comment out these sections in `.goreleaser.yaml`:
    - `brews` (Homebrew)
    - `aurs` (AUR)
-   - `chocolateys` (Chocolatey)
    - `dockers` (Docker)
 
 2. Only `GITHUB_TOKEN` will be used (automatic)
@@ -239,6 +204,6 @@ If you only want GitHub releases and binaries:
 
 **Minimum viable setup**: Just push a tag — GitHub releases will work automatically.
 
-**Full setup**: Configure all secrets → get Homebrew, AUR, Chocolatey, and Docker distribution.
+**Full setup**: Configure all secrets → get Homebrew, AUR, and Docker distribution.
 
 **Recommendation**: Start with GitHub releases only, add package managers as needed.

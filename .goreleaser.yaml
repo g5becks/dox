@@ -118,28 +118,6 @@ brews:
     test: |-
       system "#{bin}/dox", "--version"
 
-chocolateys:
-  - name: dox
-    owners: g5becks
-    title: dox
-    authors: g5becks
-    project_url: https://github.com/g5becks/dox
-    url_template: "https://github.com/g5becks/dox/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    icon_url: https://raw.githubusercontent.com/g5becks/dox/main/.github/icon.png
-    copyright: 2024 g5becks
-    license_url: https://github.com/g5becks/dox/blob/main/LICENSE
-    require_license_acceptance: false
-    project_source_url: https://github.com/g5becks/dox
-    docs_url: https://github.com/g5becks/dox/blob/main/README.md
-    bug_tracker_url: https://github.com/g5becks/dox/issues
-    tags: "documentation cli github sync docs"
-    summary: Fetch library documentation files for AI agents and indexing tools
-    description: |
-      dox is a CLI tool that syncs library and framework documentation from GitHub repos or URLs into a local directory. Perfect for use with AI code assistants, RAG systems, and documentation indexers.
-    release_notes: "https://github.com/g5becks/dox/releases/tag/v{{ .Version }}"
-    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
-    source_repo: "https://push.chocolatey.org/"
-
 dockers:
   - image_templates:
       - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"

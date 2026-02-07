@@ -51,11 +51,6 @@ yay -S dox-bin
 paru -S dox-bin
 ```
 
-**Chocolatey (Windows):**
-```powershell
-choco install dox
-```
-
 ### Go Install
 
 ```bash
