@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/lockfile"
@@ -128,7 +130,7 @@ func newAddCommand() *cli.Command {
 			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
 			&cli.BoolFlag{Name: "force", Usage: "Overwrite an existing source with the same name"},
 		},
-		Action: notImplementedAction("add"),
+		Action: addAction,
 	}
 }
 
@@ -298,6 +300,194 @@ func initAction(_ context.Context, _ *cli.Command) error {
 	}
 
 	return nil
+}
+
+func addAction(_ context.Context, cmd *cli.Command) error {
+	sourceName := strings.TrimSpace(cmd.Args().First())
+	if sourceName == "" {
+		return oops.
+			Code("CONFIG_INVALID").
+			Hint("Usage: dox add <name> --type <github|url> ...").
+			Errorf("source name is required")
+	}
+
+	configPath, err := resolveConfigPath(cmd.String("config"))
+	if err != nil {
+		return err
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+
+	_, exists := cfg.Sources[sourceName]
+	if exists && !cmd.Bool("force") {
+		return oops.
+			Code("SOURCE_EXISTS").
+			With("source", sourceName).
+			Hint("Use --force to overwrite the existing source definition").
+			Errorf("source %q already exists", sourceName)
+	}
+
+	newSource := config.Source{
+		Type:     cmd.String("type"),
+		Repo:     cmd.String("repo"),
+		Path:     cmd.String("path"),
+		Ref:      cmd.String("ref"),
+		Patterns: cmd.StringSlice("patterns"),
+		Exclude:  cmd.StringSlice("exclude"),
+		URL:      cmd.String("url"),
+		Filename: cmd.String("filename"),
+		Out:      cmd.String("out"),
+	}
+
+	validationConfig := &config.Config{
+		Sources: map[string]config.Source{
+			sourceName: newSource,
+		},
+	}
+	validationConfig.ApplyDefaults()
+	if err := validationConfig.Validate(); err != nil {
+		return err
+	}
+
+	section := renderSourceSection(sourceName, newSource)
+	fileData, err := os.ReadFile(configPath)
+	if err != nil {
+		return oops.
+			Code("CONFIG_WRITE_ERROR").
+			With("path", configPath).
+			Wrapf(err, "reading config file")
+	}
+
+	fileContent := string(fileData)
+	var updatedContent string
+	if exists {
+		updatedContent, err = replaceSourceSection(fileContent, sourceName, section)
+		if err != nil {
+			return err
+		}
+	} else {
+		updatedContent = appendSourceSection(fileContent, section)
+	}
+
+	if err := os.WriteFile(configPath, []byte(updatedContent), 0o644); err != nil {
+		return oops.
+			Code("CONFIG_WRITE_ERROR").
+			With("path", configPath).
+			Wrapf(err, "writing config file")
+	}
+
+	return nil
+}
+
+func resolveConfigPath(configPath string) (string, error) {
+	if configPath != "" {
+		if _, err := os.Stat(configPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return "", oops.
+					Code("CONFIG_NOT_FOUND").
+					With("path", configPath).
+					Hint("Create the file first or pass a valid --config path").
+					Errorf("config file %q does not exist", configPath)
+			}
+
+			return "", oops.Wrapf(err, "checking config file %q", configPath)
+		}
+
+		return configPath, nil
+	}
+
+	return config.FindConfigFile()
+}
+
+func renderSourceSection(sourceName string, sourceCfg config.Source) string {
+	lines := []string{
+		fmt.Sprintf("[sources.%s]", sourceName),
+		fmt.Sprintf("type = %q", sourceCfg.Type),
+	}
+
+	if sourceCfg.Type == "github" {
+		lines = append(lines, fmt.Sprintf("repo = %q", sourceCfg.Repo))
+		lines = append(lines, fmt.Sprintf("path = %q", sourceCfg.Path))
+
+		if sourceCfg.Ref != "" {
+			lines = append(lines, fmt.Sprintf("ref = %q", sourceCfg.Ref))
+		}
+		if len(sourceCfg.Patterns) > 0 {
+			lines = append(lines, fmt.Sprintf("patterns = %s", formatTOMLStringArray(sourceCfg.Patterns)))
+		}
+		if len(sourceCfg.Exclude) > 0 {
+			lines = append(lines, fmt.Sprintf("exclude = %s", formatTOMLStringArray(sourceCfg.Exclude)))
+		}
+	}
+
+	if sourceCfg.Type == "url" {
+		lines = append(lines, fmt.Sprintf("url = %q", sourceCfg.URL))
+		if sourceCfg.Filename != "" {
+			lines = append(lines, fmt.Sprintf("filename = %q", sourceCfg.Filename))
+		}
+	}
+
+	if sourceCfg.Out != "" {
+		lines = append(lines, fmt.Sprintf("out = %q", sourceCfg.Out))
+	}
+
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func formatTOMLStringArray(values []string) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, fmt.Sprintf("%q", value))
+	}
+
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+func appendSourceSection(fileContent string, section string) string {
+	trimmed := strings.TrimRight(fileContent, "\n")
+	if trimmed == "" {
+		return section
+	}
+
+	return trimmed + "\n\n" + section
+}
+
+func replaceSourceSection(fileContent string, sourceName string, section string) (string, error) {
+	lines := strings.Split(fileContent, "\n")
+	header := fmt.Sprintf("[sources.%s]", sourceName)
+
+	start := -1
+	for idx, line := range lines {
+		if strings.TrimSpace(line) == header {
+			start = idx
+			break
+		}
+	}
+
+	if start == -1 {
+		return "", oops.
+			Code("SOURCE_NOT_FOUND").
+			With("source", sourceName).
+			Errorf("source %q section not found in config", sourceName)
+	}
+
+	end := len(lines)
+	for idx := start + 1; idx < len(lines); idx++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[idx]), "[sources.") {
+			end = idx
+			break
+		}
+	}
+
+	newLines := make([]string, 0, len(lines))
+	newLines = append(newLines, lines[:start]...)
+	newLines = append(newLines, strings.Split(strings.TrimRight(section, "\n"), "\n")...)
+	newLines = append(newLines, lines[end:]...)
+
+	return strings.TrimRight(strings.Join(newLines, "\n"), "\n") + "\n", nil
 }
 
 func cleanAction(_ context.Context, cmd *cli.Command) error {
