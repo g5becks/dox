@@ -235,6 +235,9 @@ func printSummary(
 		deletedCount,
 		skippedCount,
 	)
+	if dryRun {
+		fmt.Println("dry-run: no files were written or removed")
+	}
 
 	for _, sourceName := range sourceNames {
 		state := results[sourceName]
