@@ -11,11 +11,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/g5becks/dox/internal/config"
-	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/samber/oops"
 	"resty.dev/v3"
+
+	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/lockfile"
 )
 
 type urlSource struct {
@@ -104,16 +105,16 @@ func (s *urlSource) Sync(
 	}
 
 	if !opts.DryRun {
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
+		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
 			return nil, oops.
 				Code("WRITE_FAILED").
 				With("source", s.name).
 				With("path", destDir).
-				Wrapf(err, "creating destination directory")
+				Wrapf(mkdirErr, "creating destination directory")
 		}
 
-		if err := writeFileAtomic(filePath, content); err != nil {
-			return nil, err
+		if writeErr := writeFileAtomic(filePath, content); writeErr != nil {
+			return nil, writeErr
 		}
 	}
 
@@ -155,26 +156,26 @@ func writeFileAtomic(path string, content []byte) error {
 		_ = os.Remove(tempPath)
 	}()
 
-	if _, err := tempFile.Write(content); err != nil {
+	if _, writeErr := tempFile.Write(content); writeErr != nil {
 		_ = tempFile.Close()
 		return oops.
 			Code("WRITE_FAILED").
 			With("path", path).
-			Wrapf(err, "writing temporary file")
+			Wrapf(writeErr, "writing temporary file")
 	}
 
-	if err := tempFile.Close(); err != nil {
+	if closeErr := tempFile.Close(); closeErr != nil {
 		return oops.
 			Code("WRITE_FAILED").
 			With("path", path).
-			Wrapf(err, "closing temporary file")
+			Wrapf(closeErr, "closing temporary file")
 	}
 
-	if err := os.Rename(tempPath, path); err != nil {
+	if renameErr := os.Rename(tempPath, path); renameErr != nil {
 		return oops.
 			Code("WRITE_FAILED").
 			With("path", path).
-			Wrapf(err, "replacing destination file")
+			Wrapf(renameErr, "replacing destination file")
 	}
 
 	return nil

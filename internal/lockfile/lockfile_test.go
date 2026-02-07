@@ -113,8 +113,8 @@ func TestSaveWritesAtomicallyWithoutTempFilesLeft(t *testing.T) {
 	}
 
 	lockPath := filepath.Join(outputDir, ".dox.lock")
-	if _, err := os.Stat(lockPath); err != nil {
-		t.Fatalf("expected lock file at %q: %v", lockPath, err)
+	if _, statErr := os.Stat(lockPath); statErr != nil {
+		t.Fatalf("expected lock file at %q: %v", lockPath, statErr)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	neturl "net/url"
 	"os"
 	"path"
@@ -14,16 +15,21 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/g5becks/dox/internal/config"
-	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/samber/oops"
 	"resty.dev/v3"
+
+	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/lockfile"
 )
 
 const (
-	githubAPIBaseURL = "https://api.github.com"
-	userAgent        = "dox"
+	sourceTypeGitHub    = "github"
+	githubAPIBaseURL    = "https://api.github.com"
+	userAgent           = "dox"
+	httpRetryCount      = 3
+	httpRetryMaxWaitSec = 5
+	rateLimitWarnThresh = 10
 )
 
 type githubSource struct {
@@ -117,10 +123,10 @@ func (s *githubSource) syncSingleFile(
 	if !opts.Force && oldSHA != "" && oldSHA == sha {
 		lockEntry := cloneLockEntry(prevLock)
 		if lockEntry == nil {
-			lockEntry = &lockfile.LockEntry{Type: "github"}
+			lockEntry = &lockfile.LockEntry{Type: sourceTypeGitHub}
 		}
 
-		lockEntry.Type = "github"
+		lockEntry.Type = sourceTypeGitHub
 		lockEntry.RefResolved = ref
 		lockEntry.SyncedAt = time.Now().UTC()
 
@@ -131,29 +137,29 @@ func (s *githubSource) syncSingleFile(
 	}
 
 	if !opts.DryRun {
-		content, err := s.fetchBlobContent(ctx, sha)
-		if err != nil {
-			return nil, err
+		content, fetchErr := s.fetchBlobContent(ctx, sha)
+		if fetchErr != nil {
+			return nil, fetchErr
 		}
 
 		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
 			return nil, oops.
 				Code("WRITE_FAILED").
 				With("source", s.name).
 				With("path", filepath.Dir(localPath)).
-				Wrapf(err, "creating destination directory")
+				Wrapf(mkdirErr, "creating destination directory")
 		}
 
-		if err := writeFileAtomic(localPath, content); err != nil {
-			return nil, err
+		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
+			return nil, writeErr
 		}
 	}
 
 	return &SyncResult{
 		Downloaded: 1,
 		LockEntry: &lockfile.LockEntry{
-			Type:        "github",
+			Type:        sourceTypeGitHub,
 			RefResolved: ref,
 			SyncedAt:    time.Now().UTC(),
 			Files: map[string]string{
@@ -182,10 +188,10 @@ func (s *githubSource) syncDirectory(
 	if !opts.Force && prevLock != nil && prevLock.TreeSHA == tree.SHA {
 		lockEntry := cloneLockEntry(prevLock)
 		if lockEntry == nil {
-			lockEntry = &lockfile.LockEntry{Type: "github"}
+			lockEntry = &lockfile.LockEntry{Type: sourceTypeGitHub}
 		}
 
-		lockEntry.Type = "github"
+		lockEntry.Type = sourceTypeGitHub
 		lockEntry.RefResolved = ref
 		lockEntry.SyncedAt = time.Now().UTC()
 
@@ -209,46 +215,20 @@ func (s *githubSource) syncDirectory(
 	toDelete := diffDeletes(oldFiles, newFiles)
 
 	if !opts.DryRun {
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
+		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
 			return nil, oops.
 				Code("WRITE_FAILED").
 				With("source", s.name).
 				With("path", destDir).
-				Wrapf(err, "creating destination directory")
+				Wrapf(mkdirErr, "creating destination directory")
 		}
 
-		for _, relativePath := range sortedKeys(toDownload) {
-			sha := toDownload[relativePath]
-			content, err := s.fetchBlobContent(ctx, sha)
-			if err != nil {
-				return nil, err
-			}
-
-			localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-			if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
-				return nil, oops.
-					Code("WRITE_FAILED").
-					With("source", s.name).
-					With("path", filepath.Dir(localPath)).
-					Wrapf(err, "creating destination directory")
-			}
-
-			if err := writeFileAtomic(localPath, content); err != nil {
-				return nil, err
-			}
+		if downloadErr := s.downloadFiles(ctx, destDir, toDownload); downloadErr != nil {
+			return nil, downloadErr
 		}
 
-		for _, relativePath := range sortedKeys(toDelete) {
-			localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-			if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
-				return nil, oops.
-					Code("WRITE_FAILED").
-					With("source", s.name).
-					With("path", localPath).
-					Wrapf(err, "deleting stale file")
-			}
-
-			cleanupEmptyDirs(filepath.Dir(localPath), destDir)
+		if deleteErr := s.deleteStaleFiles(destDir, toDelete); deleteErr != nil {
+			return nil, deleteErr
 		}
 	}
 
@@ -256,13 +236,55 @@ func (s *githubSource) syncDirectory(
 		Downloaded: len(toDownload),
 		Deleted:    len(toDelete),
 		LockEntry: &lockfile.LockEntry{
-			Type:        "github",
+			Type:        sourceTypeGitHub,
 			TreeSHA:     tree.SHA,
 			RefResolved: ref,
 			SyncedAt:    time.Now().UTC(),
 			Files:       newFiles,
 		},
 	}, nil
+}
+
+func (s *githubSource) downloadFiles(ctx context.Context, destDir string, toDownload map[string]string) error {
+	for _, relativePath := range sortedKeys(toDownload) {
+		sha := toDownload[relativePath]
+		content, fetchErr := s.fetchBlobContent(ctx, sha)
+		if fetchErr != nil {
+			return fetchErr
+		}
+
+		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
+		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
+			return oops.
+				Code("WRITE_FAILED").
+				With("source", s.name).
+				With("path", filepath.Dir(localPath)).
+				Wrapf(mkdirErr, "creating destination directory")
+		}
+
+		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
+			return writeErr
+		}
+	}
+
+	return nil
+}
+
+func (s *githubSource) deleteStaleFiles(destDir string, toDelete map[string]struct{}) error {
+	for _, relativePath := range sortedKeys(toDelete) {
+		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
+		if removeErr := os.Remove(localPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			return oops.
+				Code("WRITE_FAILED").
+				With("source", s.name).
+				With("path", localPath).
+				Wrapf(removeErr, "deleting stale file")
+		}
+
+		cleanupEmptyDirs(filepath.Dir(localPath), destDir)
+	}
+
+	return nil
 }
 
 func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
@@ -298,8 +320,8 @@ func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
 			Errorf("github API returned status %d for repository metadata", response.StatusCode())
 	}
 
-	if err := s.checkRateLimit(response); err != nil {
-		return "", err
+	if rlErr := s.checkRateLimit(response); rlErr != nil {
+		return "", rlErr
 	}
 
 	if result.DefaultBranch == "" {
@@ -340,8 +362,8 @@ func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeRe
 			Errorf("github API returned status %d for tree", response.StatusCode())
 	}
 
-	if err := s.checkRateLimit(response); err != nil {
-		return nil, err
+	if rlErr := s.checkRateLimit(response); rlErr != nil {
+		return nil, rlErr
 	}
 
 	if result.Truncated {
@@ -383,8 +405,8 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 			Errorf("github API returned status %d for content metadata", response.StatusCode())
 	}
 
-	if err := s.checkRateLimit(response); err != nil {
-		return "", err
+	if rlErr := s.checkRateLimit(response); rlErr != nil {
+		return "", rlErr
 	}
 
 	if result.Type != "file" || result.SHA == "" {
@@ -423,8 +445,8 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 			Errorf("github API returned status %d for blob", response.StatusCode())
 	}
 
-	if err := s.checkRateLimit(response); err != nil {
-		return nil, err
+	if rlErr := s.checkRateLimit(response); rlErr != nil {
+		return nil, rlErr
 	}
 
 	if result.Encoding != "base64" {
@@ -452,7 +474,7 @@ func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]s
 	basePath := normalizeRepoPath(s.source.Path)
 	patterns := s.source.Patterns
 	if len(patterns) == 0 {
-		patterns = config.DefaultPatterns
+		patterns = config.DefaultPatterns()
 	}
 
 	files := make(map[string]string)
@@ -580,7 +602,7 @@ func cleanupEmptyDirs(startDir string, stopDir string) {
 			return
 		}
 
-		if err := os.Remove(current); err != nil {
+		if removeErr := os.Remove(current); removeErr != nil {
 			return
 		}
 
@@ -650,9 +672,9 @@ func newGitHubClient(token string) *resty.Client {
 	client.SetBaseURL(githubAPIBaseURL)
 	client.SetHeader("Accept", "application/vnd.github.v3+json")
 	client.SetHeader("User-Agent", userAgent)
-	client.SetRetryCount(3)
+	client.SetRetryCount(httpRetryCount)
 	client.SetRetryWaitTime(1 * time.Second)
-	client.SetRetryMaxWaitTime(5 * time.Second)
+	client.SetRetryMaxWaitTime(httpRetryMaxWaitSec * time.Second)
 
 	if token != "" {
 		client.SetAuthToken(token)
@@ -662,18 +684,18 @@ func newGitHubClient(token string) *resty.Client {
 }
 
 func (s *githubSource) checkRateLimit(response *resty.Response) error {
-	remainingRaw := response.Header().Get("X-RateLimit-Remaining")
+	remainingRaw := response.Header().Get("X-Ratelimit-Remaining")
 	if remainingRaw == "" {
 		return nil
 	}
 
 	remaining, err := strconv.Atoi(remainingRaw)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // Non-critical header parsing; malformed value is safely ignored.
 	}
 
 	if remaining == 0 {
-		reset := response.Header().Get("X-RateLimit-Reset")
+		reset := response.Header().Get("X-Ratelimit-Reset")
 		return oops.
 			Code("GITHUB_RATE_LIMIT").
 			With("repo", s.source.Repo).
@@ -682,13 +704,12 @@ func (s *githubSource) checkRateLimit(response *resty.Response) error {
 			Errorf("github API rate limit exhausted")
 	}
 
-	if remaining <= 10 && !s.warnedLowRL {
+	if remaining <= rateLimitWarnThresh && !s.warnedLowRL {
 		s.warnedLowRL = true
-		fmt.Fprintf(
-			os.Stderr,
-			"warning: github rate limit low for %s (%d requests remaining)\n",
-			s.source.Repo,
-			remaining,
+		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+		logger.Warn("github rate limit low",
+			"repo", s.source.Repo,
+			"remaining", remaining,
 		)
 	}
 

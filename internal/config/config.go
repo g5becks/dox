@@ -11,7 +11,9 @@ import (
 	"github.com/samber/oops"
 )
 
-var configFilenames = []string{"dox.toml", ".dox.toml"}
+func configFilenames() []string {
+	return []string{"dox.toml", ".dox.toml"}
+}
 
 func Load(configPath string) (*Config, error) {
 	resolvedPath, err := resolveConfigPath(configPath)
@@ -27,27 +29,27 @@ func Load(configPath string) (*Config, error) {
 	cfg := &Config{}
 	k := koanf.New(".")
 
-	if err := k.Load(file.Provider(absConfigPath), toml.Parser()); err != nil {
+	if loadErr := k.Load(file.Provider(absConfigPath), toml.Parser()); loadErr != nil {
 		return nil, oops.
 			Code("CONFIG_INVALID").
 			With("path", absConfigPath).
 			Hint("Fix TOML syntax and required fields in your config").
-			Wrapf(err, "loading config from %q", absConfigPath)
+			Wrapf(loadErr, "loading config from %q", absConfigPath)
 	}
 
-	if err := k.Unmarshal("", cfg); err != nil {
+	if unmarshalErr := k.Unmarshal("", cfg); unmarshalErr != nil {
 		return nil, oops.
 			Code("CONFIG_INVALID").
 			With("path", absConfigPath).
 			Hint("Fix config structure to match dox schema").
-			Wrapf(err, "decoding config from %q", absConfigPath)
+			Wrapf(unmarshalErr, "decoding config from %q", absConfigPath)
 	}
 
 	cfg.ConfigDir = filepath.Dir(absConfigPath)
 	cfg.ApplyDefaults()
 
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+	if valErr := cfg.Validate(); valErr != nil {
+		return nil, valErr
 	}
 
 	if !filepath.IsAbs(cfg.Output) {
@@ -106,7 +108,7 @@ func resolveConfigPath(configPath string) (string, error) {
 }
 
 func findConfigInDirectory(dir string) (string, bool, error) {
-	for _, name := range configFilenames {
+	for _, name := range configFilenames() {
 		path := filepath.Join(dir, name)
 		if _, err := os.Stat(path); err == nil {
 			return path, true, nil

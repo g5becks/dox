@@ -21,7 +21,7 @@ type SourceStatus struct {
 	OutputDir string    `json:"output_dir"`
 	Status    string    `json:"status"`
 	FileCount int       `json:"file_count,omitempty"`
-	SyncedAt  time.Time `json:"synced_at,omitempty"`
+	SyncedAt  time.Time `json:"synced_at,omitzero"`
 }
 
 type ListOptions struct {

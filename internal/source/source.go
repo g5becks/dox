@@ -3,10 +3,11 @@ package source
 import (
 	"context"
 
-	"github.com/g5becks/dox/internal/config"
-	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/samber/oops"
+
+	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/lockfile"
 )
 
 // SyncResult reports what happened during a sync.

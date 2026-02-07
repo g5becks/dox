@@ -62,17 +62,7 @@ url = "https://hono.dev/llms-full.txt"
 `)
 
 	workDir := t.TempDir()
-	originalWD := mustGetwd(t)
-
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-
-	t.Cleanup(func() {
-		if err := os.Chdir(originalWD); err != nil {
-			t.Fatalf("restore Chdir() error = %v", err)
-		}
-	})
+	t.Chdir(workDir)
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -128,16 +118,7 @@ url = "https://effect.website/llms-full.txt"
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 
-	originalWD := mustGetwd(t)
-	if err := os.Chdir(nestedDir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-
-	t.Cleanup(func() {
-		if err := os.Chdir(originalWD); err != nil {
-			t.Fatalf("restore Chdir() error = %v", err)
-		}
-	})
+	t.Chdir(nestedDir)
 
 	foundPath, err := config.FindConfigFile()
 	if err != nil {
@@ -161,16 +142,7 @@ url = "https://effect.website/llms-full.txt"
 
 func TestFindConfigFileReturnsErrorWhenMissing(t *testing.T) {
 	emptyDir := t.TempDir()
-	originalWD := mustGetwd(t)
-	if err := os.Chdir(emptyDir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-
-	t.Cleanup(func() {
-		if err := os.Chdir(originalWD); err != nil {
-			t.Fatalf("restore Chdir() error = %v", err)
-		}
-	})
+	t.Chdir(emptyDir)
 
 	_, err := config.FindConfigFile()
 	if err == nil {
@@ -291,8 +263,7 @@ func TestConfigValidate(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
-		tc := testCase
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.cfg.Validate()
 			if tc.wantErrContains == "" {
@@ -319,15 +290,4 @@ func writeFile(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-}
-
-func mustGetwd(t *testing.T) string {
-	t.Helper()
-
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-
-	return wd
 }

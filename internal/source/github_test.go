@@ -1,19 +1,15 @@
-package source
+package source_test
 
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/lockfile"
-	"resty.dev/v3"
+	"github.com/g5becks/dox/internal/source"
 )
 
 func TestIsSingleFilePath(t *testing.T) {
@@ -34,13 +30,12 @@ func TestIsSingleFilePath(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.path, func(t *testing.T) {
 			t.Parallel()
 
-			got := isSingleFilePath(tc.path)
+			got := source.IsSingleFilePath(tc.path)
 			if got != tc.want {
-				t.Fatalf("isSingleFilePath(%q) = %v, want %v", tc.path, got, tc.want)
+				t.Fatalf("IsSingleFilePath(%q) = %v, want %v", tc.path, got, tc.want)
 			}
 		})
 	}
@@ -49,52 +44,60 @@ func TestIsSingleFilePath(t *testing.T) {
 func TestBuildFileMapFiltersByBaseAndPatterns(t *testing.T) {
 	t.Parallel()
 
-	src := &githubSource{
-		source: config.Source{
-			Path:     "docs",
-			Patterns: []string{"**/*.md", "**/*.txt"},
-			Exclude:  []string{"**/skip.md"},
+	src := source.TestableGitHubSource(t, "widgets", config.Source{
+		Repo:     "acme/widgets",
+		Path:     "docs",
+		Patterns: []string{"**/*.md", "**/*.txt"},
+		Exclude:  []string{"**/skip.md"},
+	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
+		"/repos/acme/widgets/git/trees/main?recursive=1": {
+			Body: `{
+  "sha": "tree-sha",
+  "truncated": false,
+  "tree": [
+    {"path":"docs/getting-started.md","type":"blob","sha":"sha-1"},
+    {"path":"docs/skip.md","type":"blob","sha":"sha-2"},
+    {"path":"docs/sub/notes.txt","type":"blob","sha":"sha-3"},
+    {"path":"docs/ignored.go","type":"blob","sha":"sha-4"},
+    {"path":"other/outside.md","type":"blob","sha":"sha-5"},
+    {"path":"docs/subdir","type":"tree","sha":"sha-tree"}
+  ]
+}`,
 		},
-	}
+	}), "main")
 
-	tree := []githubTreeEntry{
-		{Path: "docs/getting-started.md", Type: "blob", SHA: "sha-1"},
-		{Path: "docs/skip.md", Type: "blob", SHA: "sha-2"},
-		{Path: "docs/sub/notes.txt", Type: "blob", SHA: "sha-3"},
-		{Path: "docs/ignored.go", Type: "blob", SHA: "sha-4"},
-		{Path: "other/outside.md", Type: "blob", SHA: "sha-5"},
-		{Path: "docs/subdir", Type: "tree", SHA: "sha-tree"},
-	}
-
-	files, err := src.buildFileMap(tree)
+	result, err := src.Sync(context.Background(), t.TempDir(), nil, source.SyncOptions{DryRun: true}, nil)
 	if err != nil {
-		t.Fatalf("buildFileMap() error = %v", err)
+		t.Fatalf("Sync() error = %v", err)
 	}
 
-	if len(files) != 2 {
-		t.Fatalf("buildFileMap() len = %d, want 2", len(files))
+	if result.Downloaded != 2 {
+		t.Fatalf("Downloaded = %d, want 2", result.Downloaded)
 	}
 
-	if files["getting-started.md"] != "sha-1" {
-		t.Fatalf("buildFileMap() getting-started.md = %q, want sha-1", files["getting-started.md"])
+	if result.LockEntry == nil {
+		t.Fatalf("LockEntry = nil, want non-nil")
 	}
 
-	if files["sub/notes.txt"] != "sha-3" {
-		t.Fatalf("buildFileMap() sub/notes.txt = %q, want sha-3", files["sub/notes.txt"])
+	if result.LockEntry.Files["getting-started.md"] != "sha-1" {
+		t.Fatalf("Files[getting-started.md] = %q, want sha-1", result.LockEntry.Files["getting-started.md"])
+	}
+
+	if result.LockEntry.Files["sub/notes.txt"] != "sha-3" {
+		t.Fatalf("Files[sub/notes.txt] = %q, want sha-3", result.LockEntry.Files["sub/notes.txt"])
 	}
 }
 
 func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
 	t.Parallel()
 
-	src := &githubSource{
-		name:   "widgets",
-		source: config.Source{Path: "docs", Patterns: []string{"**/*.md", "**/*.txt"}},
-		owner:  "acme",
-		repo:   "widgets",
-		client: newMockGitHubClient(t, map[string]mockHTTPResponse{
-			"/repos/acme/widgets/git/trees/main?recursive=1": {
-				body: `{
+	src := source.TestableGitHubSource(t, "widgets", config.Source{
+		Repo:     "acme/widgets",
+		Path:     "docs",
+		Patterns: []string{"**/*.md", "**/*.txt"},
+	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
+		"/repos/acme/widgets/git/trees/main?recursive=1": {
+			Body: `{
   "sha": "tree-new",
   "truncated": false,
   "tree": [
@@ -103,10 +106,8 @@ func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
     {"path":"docs/ignored.go","type":"blob","sha":"sha-go"}
   ]
 }`,
-			},
-		}),
-		resolvedRef: "main",
-	}
+		},
+	}), "main")
 
 	prevLock := &lockfile.LockEntry{
 		Type:    "github",
@@ -117,9 +118,9 @@ func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
 		},
 	}
 
-	result, err := src.syncDirectory(context.Background(), t.TempDir(), prevLock, SyncOptions{DryRun: true})
+	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{DryRun: true}, nil)
 	if err != nil {
-		t.Fatalf("syncDirectory() error = %v", err)
+		t.Fatalf("Sync() error = %v", err)
 	}
 
 	if result.Downloaded != 2 {
@@ -138,18 +139,15 @@ func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
 func TestSyncDirectorySkipsWhenTreeSHAUnchanged(t *testing.T) {
 	t.Parallel()
 
-	src := &githubSource{
-		name:   "widgets",
-		source: config.Source{Path: "docs", Patterns: []string{"**/*.md"}},
-		owner:  "acme",
-		repo:   "widgets",
-		client: newMockGitHubClient(t, map[string]mockHTTPResponse{
-			"/repos/acme/widgets/git/trees/main?recursive=1": {
-				body: `{"sha":"tree-same","truncated":false,"tree":[]}`,
-			},
-		}),
-		resolvedRef: "main",
-	}
+	src := source.TestableGitHubSource(t, "widgets", config.Source{
+		Repo:     "acme/widgets",
+		Path:     "docs",
+		Patterns: []string{"**/*.md"},
+	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
+		"/repos/acme/widgets/git/trees/main?recursive=1": {
+			Body: `{"sha":"tree-same","truncated":false,"tree":[]}`,
+		},
+	}), "main")
 
 	prevLock := &lockfile.LockEntry{
 		Type:    "github",
@@ -159,9 +157,9 @@ func TestSyncDirectorySkipsWhenTreeSHAUnchanged(t *testing.T) {
 		},
 	}
 
-	result, err := src.syncDirectory(context.Background(), t.TempDir(), prevLock, SyncOptions{})
+	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{}, nil)
 	if err != nil {
-		t.Fatalf("syncDirectory() error = %v", err)
+		t.Fatalf("Sync() error = %v", err)
 	}
 
 	if !result.Skipped {
@@ -174,21 +172,18 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 
 	destDir := t.TempDir()
 	encoded := base64.StdEncoding.EncodeToString([]byte("hello docs"))
-	src := &githubSource{
-		name:   "widgets",
-		source: config.Source{Path: "docs/overview.md"},
-		owner:  "acme",
-		repo:   "widgets",
-		client: newMockGitHubClient(t, map[string]mockHTTPResponse{
-			"/repos/acme/widgets/contents/docs/overview.md?ref=main": {
-				body: `{"type":"file","sha":"blob-1"}`,
-			},
-			"/repos/acme/widgets/git/blobs/blob-1": {
-				body: `{"encoding":"base64","content":"` + encoded + `"}`,
-			},
-		}),
-		resolvedRef: "main",
-	}
+
+	src := source.TestableGitHubSource(t, "widgets", config.Source{
+		Repo: "acme/widgets",
+		Path: "docs/overview.md",
+	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
+		"/repos/acme/widgets/contents/docs/overview.md?ref=main": {
+			Body: `{"type":"file","sha":"blob-1"}`,
+		},
+		"/repos/acme/widgets/git/blobs/blob-1": {
+			Body: `{"encoding":"base64","content":"` + encoded + `"}`,
+		},
+	}), "main")
 
 	prevLock := &lockfile.LockEntry{
 		Type: "github",
@@ -197,9 +192,9 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 		},
 	}
 
-	result, err := src.syncSingleFile(context.Background(), destDir, prevLock, SyncOptions{})
+	result, err := src.Sync(context.Background(), destDir, prevLock, source.SyncOptions{}, nil)
 	if err != nil {
-		t.Fatalf("syncSingleFile() error = %v", err)
+		t.Fatalf("Sync() error = %v", err)
 	}
 
 	if result.Downloaded != 1 {
@@ -220,18 +215,15 @@ func TestSyncSingleFileSkipsWhenSHAUnchanged(t *testing.T) {
 	t.Parallel()
 
 	destDir := t.TempDir()
-	src := &githubSource{
-		name:   "widgets",
-		source: config.Source{Path: "docs/overview.md"},
-		owner:  "acme",
-		repo:   "widgets",
-		client: newMockGitHubClient(t, map[string]mockHTTPResponse{
-			"/repos/acme/widgets/contents/docs/overview.md?ref=main": {
-				body: `{"type":"file","sha":"same-sha"}`,
-			},
-		}),
-		resolvedRef: "main",
-	}
+
+	src := source.TestableGitHubSource(t, "widgets", config.Source{
+		Repo: "acme/widgets",
+		Path: "docs/overview.md",
+	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
+		"/repos/acme/widgets/contents/docs/overview.md?ref=main": {
+			Body: `{"type":"file","sha":"same-sha"}`,
+		},
+	}), "main")
 
 	prevLock := &lockfile.LockEntry{
 		Type: "github",
@@ -240,75 +232,16 @@ func TestSyncSingleFileSkipsWhenSHAUnchanged(t *testing.T) {
 		},
 	}
 
-	result, err := src.syncSingleFile(context.Background(), destDir, prevLock, SyncOptions{})
+	result, err := src.Sync(context.Background(), destDir, prevLock, source.SyncOptions{}, nil)
 	if err != nil {
-		t.Fatalf("syncSingleFile() error = %v", err)
+		t.Fatalf("Sync() error = %v", err)
 	}
 
 	if !result.Skipped {
 		t.Fatalf("Skipped = %v, want true", result.Skipped)
 	}
 
-	if _, err := os.Stat(filepath.Join(destDir, "overview.md")); !os.IsNotExist(err) {
+	if _, statErr := os.Stat(filepath.Join(destDir, "overview.md")); !os.IsNotExist(statErr) {
 		t.Fatalf("overview.md exists unexpectedly")
 	}
-}
-
-type mockHTTPResponse struct {
-	status int
-	body   string
-	header http.Header
-}
-
-type mockHTTPTransport struct {
-	t         *testing.T
-	responses map[string]mockHTTPResponse
-}
-
-func newMockGitHubClient(t *testing.T, responses map[string]mockHTTPResponse) *resty.Client {
-	t.Helper()
-
-	client := resty.New().SetBaseURL("https://api.github.test")
-	client.SetTransport(&mockHTTPTransport{
-		t:         t,
-		responses: responses,
-	})
-
-	return client
-}
-
-func (m *mockHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	m.t.Helper()
-
-	key := req.URL.Path
-	if req.URL.RawQuery != "" {
-		key += "?" + req.URL.RawQuery
-	}
-
-	response, ok := m.responses[key]
-	if !ok {
-		m.t.Fatalf("unexpected request %s %s", req.Method, key)
-	}
-
-	status := response.status
-	if status == 0 {
-		status = http.StatusOK
-	}
-
-	header := response.header
-	if header == nil {
-		header = make(http.Header)
-	}
-	if header.Get("Content-Type") == "" {
-		header.Set("Content-Type", "application/json")
-	}
-
-	return &http.Response{
-		Status:        fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		StatusCode:    status,
-		Header:        header,
-		Body:          io.NopCloser(strings.NewReader(response.body)),
-		ContentLength: int64(len(response.body)),
-		Request:       req,
-	}, nil
 }

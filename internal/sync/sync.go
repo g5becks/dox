@@ -2,22 +2,23 @@ package sync
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	stdsync "sync"
 
+	"github.com/samber/oops"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/source"
-	"github.com/samber/oops"
-	"golang.org/x/sync/errgroup"
 )
 
 const defaultMaxParallel = 3
 
-type SyncOptions struct {
+type Options struct {
 	SourceNames []string
 	Force       bool
 	DryRun      bool
@@ -30,7 +31,7 @@ type runState struct {
 	err    error
 }
 
-func Run(ctx context.Context, cfg *config.Config, opts SyncOptions) error {
+func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	if cfg == nil {
 		return oops.
 			Code("CONFIG_INVALID").
@@ -69,7 +70,6 @@ func Run(ctx context.Context, cfg *config.Config, opts SyncOptions) error {
 	group.SetLimit(maxParallel)
 
 	for _, sourceName := range sourceNames {
-		sourceName := sourceName
 		sourceCfg := cfg.Sources[sourceName]
 		destinationDir := resolveSourceOutputDir(outputDir, sourceName, sourceCfg)
 		previousLock := lock.GetEntry(sourceName)
@@ -77,9 +77,9 @@ func Run(ctx context.Context, cfg *config.Config, opts SyncOptions) error {
 		group.Go(func() error {
 			state := runState{}
 
-			src, err := source.New(sourceName, sourceCfg, token)
-			if err != nil {
-				state.err = err
+			src, newErr := source.New(sourceName, sourceCfg, token)
+			if newErr != nil {
+				state.err = newErr
 			} else {
 				state.result, state.err = src.Sync(
 					groupCtx,
@@ -100,44 +100,25 @@ func Run(ctx context.Context, cfg *config.Config, opts SyncOptions) error {
 		})
 	}
 
-	if err := group.Wait(); err != nil {
-		return oops.Wrapf(err, "waiting for source sync workers")
+	if waitErr := group.Wait(); waitErr != nil {
+		return oops.Wrapf(waitErr, "waiting for source sync workers")
 	}
 
-	errorCount := 0
-	downloadedCount := 0
-	deletedCount := 0
-	skippedCount := 0
-
-	for _, sourceName := range sourceNames {
-		state := results[sourceName]
-		if state.err != nil {
-			errorCount++
-			continue
-		}
-
-		if state.result == nil {
-			continue
-		}
-
-		downloadedCount += state.result.Downloaded
-		deletedCount += state.result.Deleted
-		if state.result.Skipped {
-			skippedCount++
-		}
-
-		if !opts.DryRun && state.result.LockEntry != nil {
-			lock.SetEntry(sourceName, state.result.LockEntry)
-		}
-	}
+	errorCount, downloadedCount, deletedCount, skippedCount := processResults(
+		lock,
+		sourceNames,
+		results,
+		opts.DryRun,
+	)
 
 	if !opts.DryRun {
-		if err := lock.Save(outputDir); err != nil {
-			return err
+		if saveErr := lock.Save(outputDir); saveErr != nil {
+			return saveErr
 		}
 	}
 
-	printSummary(sourceNames, results, downloadedCount, deletedCount, skippedCount, opts.DryRun)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	printSummary(logger, sourceNames, results, downloadedCount, deletedCount, skippedCount, opts.DryRun)
 
 	if errorCount > 0 {
 		return oops.
@@ -214,7 +195,44 @@ func resolveSourceOutputDir(outputRoot string, sourceName string, sourceCfg conf
 	return filepath.Join(outputRoot, sourceName)
 }
 
+func processResults(
+	lock *lockfile.LockFile,
+	sourceNames []string,
+	results map[string]runState,
+	dryRun bool,
+) (int, int, int, int) {
+	errorCount := 0
+	downloadedCount := 0
+	deletedCount := 0
+	skippedCount := 0
+
+	for _, sourceName := range sourceNames {
+		state := results[sourceName]
+		if state.err != nil {
+			errorCount++
+			continue
+		}
+
+		if state.result == nil {
+			continue
+		}
+
+		downloadedCount += state.result.Downloaded
+		deletedCount += state.result.Deleted
+		if state.result.Skipped {
+			skippedCount++
+		}
+
+		if !dryRun && state.result.LockEntry != nil {
+			lock.SetEntry(sourceName, state.result.LockEntry)
+		}
+	}
+
+	return errorCount, downloadedCount, deletedCount, skippedCount
+}
+
 func printSummary(
+	logger *slog.Logger,
 	sourceNames []string,
 	results map[string]runState,
 	downloadedCount int,
@@ -227,39 +245,41 @@ func printSummary(
 		summaryLabel = "dry-run summary"
 	}
 
-	fmt.Printf(
-		"%s: sources=%d downloaded=%d deleted=%d skipped=%d\n",
-		summaryLabel,
-		len(sourceNames),
-		downloadedCount,
-		deletedCount,
-		skippedCount,
+	logger.Info(summaryLabel,
+		"sources", len(sourceNames),
+		"downloaded", downloadedCount,
+		"deleted", deletedCount,
+		"skipped", skippedCount,
 	)
+
 	if dryRun {
-		fmt.Println("dry-run: no files were written or removed")
+		logger.Info("dry-run: no files were written or removed")
 	}
 
 	for _, sourceName := range sourceNames {
 		state := results[sourceName]
 		if state.err != nil {
-			fmt.Printf("%s: failed (%v)\n", sourceName, state.err)
+			logger.Warn("source failed",
+				"source", sourceName,
+				"error", state.err,
+			)
+
 			continue
 		}
 
 		if state.result == nil {
-			fmt.Printf("%s: no result\n", sourceName)
+			logger.Info("source: no result", "source", sourceName)
 			continue
 		}
 
 		switch {
 		case state.result.Skipped:
-			fmt.Printf("%s: skipped\n", sourceName)
+			logger.Info("source: skipped", "source", sourceName)
 		default:
-			fmt.Printf(
-				"%s: synced (downloaded=%d deleted=%d)\n",
-				sourceName,
-				state.result.Downloaded,
-				state.result.Deleted,
+			logger.Info("source: synced",
+				"source", sourceName,
+				"downloaded", state.result.Downloaded,
+				"deleted", state.result.Deleted,
 			)
 		}
 	}

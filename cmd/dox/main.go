@@ -9,12 +9,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/samber/oops"
+	"github.com/urfave/cli/v3"
+
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/lockfile"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
-	"github.com/samber/oops"
-	"github.com/urfave/cli/v3"
 )
 
 const defaultParallel = 3
@@ -47,12 +48,10 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # filename = "my-framework.txt"                       # optional (default: basename from URL)
 `
 
+//nolint:gochecknoglobals // Build metadata is injected at build time with ldflags.
 var (
-	//nolint:gochecknoglobals // Build metadata is injected at build time with ldflags.
-	version = "dev"
-	//nolint:gochecknoglobals // Build metadata is injected at build time with ldflags.
-	commit = "unknown"
-	//nolint:gochecknoglobals // Build metadata is injected at build time with ldflags.
+	version   = "dev"
+	commit    = "unknown"
 	buildTime = "unknown"
 )
 
@@ -92,7 +91,10 @@ func newSyncCommand() *cli.Command {
 			&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Force refresh and skip freshness checks"},
 			&cli.BoolFlag{Name: "clean", Usage: "Delete output directory before syncing"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
-			&cli.IntFlag{Name: "parallel", Aliases: []string{"p"}, Usage: "Maximum parallel source syncs", Value: defaultParallel},
+			&cli.IntFlag{
+				Name: "parallel", Aliases: []string{"p"},
+				Usage: "Maximum parallel source syncs", Value: defaultParallel,
+			},
 		},
 		Action: syncAction,
 	}
@@ -160,7 +162,7 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	return doxsync.Run(ctx, cfg, doxsync.SyncOptions{
+	return doxsync.Run(ctx, cfg, doxsync.Options{
 		SourceNames: commandArgs(cmd),
 		Force:       cmd.Bool("force"),
 		DryRun:      cmd.Bool("dry-run"),
@@ -171,7 +173,7 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 
 func commandArgs(cmd *cli.Command) []string {
 	args := make([]string, 0, cmd.Args().Len())
-	for i := 0; i < cmd.Args().Len(); i++ {
+	for i := range cmd.Args().Len() {
 		args = append(args, cmd.Args().Get(i))
 	}
 
@@ -222,9 +224,9 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 		}
 
 		if includeFiles {
-			fileCount, err := countFiles(status.OutputDir)
-			if err != nil {
-				return err
+			fileCount, countErr := countFiles(status.OutputDir)
+			if countErr != nil {
+				return countErr
 			}
 			status.FileCount = fileCount
 		}
@@ -292,7 +294,7 @@ func initAction(_ context.Context, _ *cli.Command) error {
 		}
 	}
 
-	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o644); err != nil {
+	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o600); err != nil {
 		return oops.
 			Code("CONFIG_WRITE_ERROR").
 			With("path", "dox.toml").
@@ -348,8 +350,8 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		},
 	}
 	validationConfig.ApplyDefaults()
-	if err := validationConfig.Validate(); err != nil {
-		return err
+	if valErr := validationConfig.Validate(); valErr != nil {
+		return valErr
 	}
 
 	section := renderSourceSection(sourceName, newSource)
@@ -372,11 +374,11 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		updatedContent = appendSourceSection(fileContent, section)
 	}
 
-	if err := os.WriteFile(configPath, []byte(updatedContent), 0o644); err != nil {
+	if writeErr := os.WriteFile(configPath, []byte(updatedContent), 0o600); writeErr != nil {
 		return oops.
 			Code("CONFIG_WRITE_ERROR").
 			With("path", configPath).
-			Wrapf(err, "writing config file")
+			Wrapf(writeErr, "writing config file")
 	}
 
 	return nil
@@ -499,11 +501,11 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 	selectedSources := commandArgs(cmd)
 	outputDir := resolveOutputRoot(cfg)
 	if len(selectedSources) == 0 {
-		if err := os.RemoveAll(outputDir); err != nil {
+		if removeErr := os.RemoveAll(outputDir); removeErr != nil {
 			return oops.
 				Code("WRITE_FAILED").
 				With("path", outputDir).
-				Wrapf(err, "removing output directory")
+				Wrapf(removeErr, "removing output directory")
 		}
 
 		return nil
@@ -524,28 +526,18 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 				Errorf("source %q not found in config", sourceName)
 		}
 
-		if err := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); err != nil {
+		if removeErr := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); removeErr != nil {
 			return oops.
 				Code("WRITE_FAILED").
 				With("path", cfg.OutputDir(sourceName, sourceCfg)).
 				With("source", sourceName).
-				Wrapf(err, "removing source output directory")
+				Wrapf(removeErr, "removing source output directory")
 		}
 
 		lock.RemoveEntry(sourceName)
 	}
 
 	return lock.Save(outputDir)
-}
-
-func notImplementedAction(commandName string) cli.ActionFunc {
-	return func(_ context.Context, _ *cli.Command) error {
-		return oops.
-			Code("NOT_IMPLEMENTED").
-			With("command", commandName).
-			Hint("Follow PLAN.md implementation order to wire this command").
-			Errorf("%s command is not implemented yet", commandName)
-	}
 }
 
 func versionString() string {

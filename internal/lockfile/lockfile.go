@@ -45,12 +45,12 @@ func Load(outputDir string) (*LockFile, error) {
 	}
 
 	lock := &LockFile{}
-	if err := json.Unmarshal(data, lock); err != nil {
+	if unmarshalErr := json.Unmarshal(data, lock); unmarshalErr != nil {
 		return nil, oops.
 			Code("LOCK_ERROR").
 			With("path", lockPath).
 			Hint("Delete the lock file and run 'dox sync' to regenerate it").
-			Wrapf(err, "parsing lock file")
+			Wrapf(unmarshalErr, "parsing lock file")
 	}
 
 	if lock.Version == 0 {
@@ -87,21 +87,21 @@ func (l *LockFile) Save(outputDir string) error {
 		l.Sources = map[string]*LockEntry{}
 	}
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		return oops.
 			Code("LOCK_ERROR").
 			With("path", outputDir).
 			Wrapf(err, "creating lock directory")
 	}
 
-	bytes, err := json.MarshalIndent(l, "", "  ")
+	data, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
 		return oops.
 			Code("LOCK_ERROR").
 			Wrapf(err, "encoding lock file")
 	}
 
-	bytes = append(bytes, '\n')
+	data = append(data, '\n')
 	lockPath := filepath.Join(outputDir, fileName)
 
 	tempFile, err := os.CreateTemp(outputDir, fileName+".*.tmp")
@@ -117,27 +117,27 @@ func (l *LockFile) Save(outputDir string) error {
 		_ = os.Remove(tempPath)
 	}()
 
-	if _, err := tempFile.Write(bytes); err != nil {
+	if _, writeErr := tempFile.Write(data); writeErr != nil {
 		_ = tempFile.Close()
 		return oops.
 			Code("LOCK_ERROR").
 			With("path", tempPath).
-			Wrapf(err, "writing temporary lock file")
+			Wrapf(writeErr, "writing temporary lock file")
 	}
 
-	if err := tempFile.Close(); err != nil {
+	if closeErr := tempFile.Close(); closeErr != nil {
 		return oops.
 			Code("LOCK_ERROR").
 			With("path", tempPath).
-			Wrapf(err, "closing temporary lock file")
+			Wrapf(closeErr, "closing temporary lock file")
 	}
 
-	if err := os.Rename(tempPath, lockPath); err != nil {
+	if renameErr := os.Rename(tempPath, lockPath); renameErr != nil {
 		return oops.
 			Code("LOCK_ERROR").
 			With("from", tempPath).
 			With("to", lockPath).
-			Wrapf(err, "replacing lock file")
+			Wrapf(renameErr, "replacing lock file")
 	}
 
 	return nil
