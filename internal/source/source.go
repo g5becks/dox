@@ -31,6 +31,7 @@ type Source interface {
 		prevLock *lockfile.LockEntry,
 		opts SyncOptions,
 	) (*SyncResult, error)
+	Close() error
 }
 
 // New creates a Source from config.

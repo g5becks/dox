@@ -32,3 +32,4 @@ bin/
 dist/
 .dox/
 .docs/
+dox

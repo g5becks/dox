@@ -162,13 +162,20 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	return doxsync.Run(ctx, cfg, doxsync.Options{
+	printer := ui.NewSyncPrinter(cmd.Bool("dry-run"))
+
+	result, runErr := doxsync.Run(ctx, cfg, doxsync.Options{
 		SourceNames: commandArgs(cmd),
 		Force:       cmd.Bool("force"),
 		DryRun:      cmd.Bool("dry-run"),
 		MaxParallel: cmd.Int("parallel"),
 		Clean:       cmd.Bool("clean"),
+		OnEvent:     printer.HandleEvent,
 	})
+
+	printer.PrintSummary(result)
+
+	return runErr
 }
 
 func commandArgs(cmd *cli.Command) []string {

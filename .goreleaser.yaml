@@ -17,9 +17,22 @@ builds:
       - linux
       - darwin
       - windows
+      - freebsd
     goarch:
       - amd64
       - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -27,19 +40,153 @@ builds:
       - -X main.buildTime={{.Date}}
 
 archives:
-  - formats: [tar.gz]
+  - id: default
+    format_overrides:
+      - goos: windows
+        format: zip
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
     files:
       - README.md
       - LICENSE
+      - CONTRIBUTING.md
+
+universal_binaries:
+  - replace: true
+    name_template: "{{ .ProjectName }}"
+
+nfpms:
+  - id: packages
+    package_name: dox
+    vendor: g5becks
+    homepage: https://github.com/g5becks/dox
+    maintainer: g5becks <https://github.com/g5becks>
+    description: Fetch library documentation files for AI agents and indexing tools
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+      - archlinux
+    bindir: /usr/bin
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/dox/README.md
+      - src: ./LICENSE
+        dst: /usr/share/doc/dox/LICENSE
+      - src: ./CONTRIBUTING.md
+        dst: /usr/share/doc/dox/CONTRIBUTING.md
+
+aurs:
+  - name: dox-bin
+    homepage: https://github.com/g5becks/dox
+    description: Fetch library documentation files for AI agents and indexing tools
+    maintainers:
+      - 'g5becks <https://github.com/g5becks>'
+    license: MIT
+    private_key: '{{ .Env.AUR_KEY }}'
+    git_url: 'ssh://aur@aur.archlinux.org/dox-bin.git'
+    package: |-
+      # bin
+      install -Dm755 "./dox" "${pkgdir}/usr/bin/dox"
+
+      # license
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/dox/LICENSE"
+
+      # docs
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/dox/README.md"
+      install -Dm644 "./CONTRIBUTING.md" "${pkgdir}/usr/share/doc/dox/CONTRIBUTING.md"
+
+brews:
+  - repository:
+      owner: g5becks
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/g5becks/dox
+    description: Fetch library documentation files for AI agents and indexing tools
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    install: |-
+      bin.install "dox"
+    test: |-
+      system "#{bin}/dox", "--version"
+
+chocolateys:
+  - name: dox
+    owners: g5becks
+    title: dox
+    authors: g5becks
+    project_url: https://github.com/g5becks/dox
+    url_template: "https://github.com/g5becks/dox/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    icon_url: https://raw.githubusercontent.com/g5becks/dox/main/.github/icon.png
+    copyright: 2024 g5becks
+    license_url: https://github.com/g5becks/dox/blob/main/LICENSE
+    require_license_acceptance: false
+    project_source_url: https://github.com/g5becks/dox
+    docs_url: https://github.com/g5becks/dox/blob/main/README.md
+    bug_tracker_url: https://github.com/g5becks/dox/issues
+    tags: "documentation cli github sync docs"
+    summary: Fetch library documentation files for AI agents and indexing tools
+    description: |
+      dox is a CLI tool that syncs library and framework documentation from GitHub repos or URLs into a local directory. Perfect for use with AI code assistants, RAG systems, and documentation indexers.
+    release_notes: "https://github.com/g5becks/dox/releases/tag/v{{ .Version }}"
+    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+    source_repo: "https://push.chocolatey.org/"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"
+      - "ghcr.io/g5becks/dox:latest-amd64"
+    use: buildx
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Fetch library documentation files for AI agents"
+      - "--label=org.opencontainers.image.url=https://github.com/g5becks/dox"
+      - "--label=org.opencontainers.image.source=https://github.com/g5becks/dox"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    dockerfile: Dockerfile
+
+  - image_templates:
+      - "ghcr.io/g5becks/dox:{{ .Version }}-arm64"
+      - "ghcr.io/g5becks/dox:latest-arm64"
+    use: buildx
+    goos: linux
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Fetch library documentation files for AI agents"
+      - "--label=org.opencontainers.image.url=https://github.com/g5becks/dox"
+      - "--label=org.opencontainers.image.source=https://github.com/g5becks/dox"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    dockerfile: Dockerfile
+
+docker_manifests:
+  - name_template: "ghcr.io/g5becks/dox:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"
+      - "ghcr.io/g5becks/dox:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/g5becks/dox:latest"
+    image_templates:
+      - "ghcr.io/g5becks/dox:latest-amd64"
+      - "ghcr.io/g5becks/dox:latest-arm64"
 
 checksum:
   name_template: "checksums.txt"
@@ -49,12 +196,15 @@ snapshot:
 
 changelog:
   sort: asc
+  use: github
   filters:
     exclude:
       - "^docs:"
       - "^test:"
       - "^ci:"
       - "^chore:"
+      - Merge pull request
+      - Merge branch
   groups:
     - title: Features
       regexp: "^.*feat[(\\w)]*:+.*$"
@@ -62,26 +212,47 @@ changelog:
     - title: Bug Fixes
       regexp: "^.*fix[(\\w)]*:+.*$"
       order: 1
+    - title: Performance Improvements
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
     - title: Others
       order: 999
 
 release:
-  footer: >-
+  github:
+    owner: g5becks
+    name: dox
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## dox {{ .Tag }}
+
+    ### Installation
+
+    **Homebrew (macOS/Linux):**
+    ```bash
+    brew install g5becks/tap/dox
+    ```
+
+    **Download Binary:**
+    See assets below for your platform.
+
+    **Docker:**
+    ```bash
+    docker pull ghcr.io/g5becks/dox:{{ .Tag }}
+    ```
+  footer: |
     ---
 
     **Full Changelog**: https://github.com/g5becks/dox/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-brews:
-  - repository:
-      owner: g5becks
-      name: homebrew-tap
-    homepage: https://github.com/g5becks/dox
-    description: Fetch library documentation files for AI agents
-    license: MIT
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-    install: |-
-      bin.install "dox"
-    test: |-
-      system "#{bin}/dox", "--version"
+    ### Verifying the artifacts
+
+    Download `checksums.txt` and verify with:
+    ```bash
+    sha256sum --check checksums.txt
+    ```
+
+announce:
+  skip: "{{gt .Patch 0}}"

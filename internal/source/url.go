@@ -41,6 +41,10 @@ func NewURL(name string, cfg config.Source) (Source, error) {
 	}, nil
 }
 
+func (s *urlSource) Close() error {
+	return s.client.Close()
+}
+
 func (s *urlSource) Sync(
 	ctx context.Context,
 	destDir string,

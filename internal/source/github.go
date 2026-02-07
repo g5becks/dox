@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log/slog"
 	neturl "net/url"
 	"os"
 	"path"
@@ -80,6 +79,10 @@ func newGitHubSource(name string, cfg config.Source, token string) (Source, erro
 		repo:   repo,
 		client: newGitHubClient(token),
 	}, nil
+}
+
+func (s *githubSource) Close() error {
+	return s.client.Close()
 }
 
 func (s *githubSource) Sync(
@@ -704,11 +707,6 @@ func (s *githubSource) checkRateLimit(response *resty.Response) error {
 
 	if remaining <= rateLimitWarnThresh && !s.warnedLowRL {
 		s.warnedLowRL = true
-		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-		logger.Warn("github rate limit low",
-			"repo", s.source.Repo,
-			"remaining", remaining,
-		)
 	}
 
 	return nil

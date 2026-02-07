@@ -13,7 +13,7 @@ func TestRunWithNilConfigReturnsError(t *testing.T) {
 	ctx := context.Background()
 	opts := sync.Options{}
 
-	err := sync.Run(ctx, nil, opts)
+	_, err := sync.Run(ctx, nil, opts)
 	if err == nil {
 		t.Fatal("Run() with nil config: got nil error, want non-nil")
 	}

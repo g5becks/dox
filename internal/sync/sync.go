@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,12 +17,38 @@ import (
 
 const defaultMaxParallel = 3
 
+// EventKind identifies the type of sync progress event.
+type EventKind int
+
+const (
+	EventSourceStart EventKind = iota
+	EventSourceDone
+)
+
+// Event is emitted during sync to report per-source progress.
+type Event struct {
+	Kind   EventKind
+	Source string
+	Result *source.SyncResult // nil for start events
+	Err    error              // non-nil if source failed
+}
+
+// RunResult contains aggregate counts from a completed sync run.
+type RunResult struct {
+	Sources    int
+	Downloaded int
+	Deleted    int
+	Skipped    int
+	Errors     int
+}
+
 type Options struct {
 	SourceNames []string
 	Force       bool
 	DryRun      bool
 	MaxParallel int
 	Clean       bool
+	OnEvent     func(Event) // optional; nil = silent
 }
 
 type runState struct {
@@ -31,9 +56,9 @@ type runState struct {
 	err    error
 }
 
-func Run(ctx context.Context, cfg *config.Config, opts Options) error {
+func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
 	if cfg == nil {
-		return oops.
+		return nil, oops.
 			Code("CONFIG_INVALID").
 			Errorf("config is required")
 	}
@@ -41,7 +66,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	outputDir := resolveOutputRoot(cfg)
 	if opts.Clean && !opts.DryRun {
 		if err := os.RemoveAll(outputDir); err != nil {
-			return oops.
+			return nil, oops.
 				Code("WRITE_FAILED").
 				With("path", outputDir).
 				Wrapf(err, "cleaning output directory")
@@ -50,17 +75,22 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 
 	lock, err := lockfile.Load(outputDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sourceNames, err := resolveSourceNames(cfg.Sources, opts.SourceNames)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	maxParallel := opts.MaxParallel
 	if maxParallel <= 0 {
 		maxParallel = defaultMaxParallel
+	}
+
+	emit := opts.OnEvent
+	if emit == nil {
+		emit = func(Event) {}
 	}
 
 	results := make(map[string]runState, len(sourceNames))
@@ -75,23 +105,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 		previousLock := lock.GetEntry(sourceName)
 
 		group.Go(func() error {
-			state := runState{}
-
-			src, newErr := source.New(sourceName, sourceCfg, token)
-			if newErr != nil {
-				state.err = newErr
-			} else {
-				state.result, state.err = src.Sync(
-					groupCtx,
-					destinationDir,
-					previousLock,
-					source.SyncOptions{
-						Force:  opts.Force,
-						DryRun: opts.DryRun,
-					},
-				)
-			}
-
+			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, opts, emit)
 			resultsMu.Lock()
 			results[sourceName] = state
 			resultsMu.Unlock()
@@ -100,7 +114,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	}
 
 	if waitErr := group.Wait(); waitErr != nil {
-		return oops.Wrapf(waitErr, "waiting for source sync workers")
+		return nil, oops.Wrapf(waitErr, "waiting for source sync workers")
 	}
 
 	errorCount, downloadedCount, deletedCount, skippedCount := processResults(
@@ -112,21 +126,66 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 
 	if !opts.DryRun {
 		if saveErr := lock.Save(outputDir); saveErr != nil {
-			return saveErr
+			return nil, saveErr
 		}
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	printSummary(logger, sourceNames, results, downloadedCount, deletedCount, skippedCount, opts.DryRun)
+	runResult := &RunResult{
+		Sources:    len(sourceNames),
+		Downloaded: downloadedCount,
+		Deleted:    deletedCount,
+		Skipped:    skippedCount,
+		Errors:     errorCount,
+	}
 
 	if errorCount > 0 {
-		return oops.
+		return runResult, oops.
 			Code("DOWNLOAD_FAILED").
 			With("failed_sources", errorCount).
 			Errorf("%d source(s) failed during sync", errorCount)
 	}
 
-	return nil
+	return runResult, nil
+}
+
+func syncSource(
+	ctx context.Context,
+	sourceName string,
+	sourceCfg config.Source,
+	destinationDir string,
+	previousLock *lockfile.LockEntry,
+	token string,
+	opts Options,
+	emit func(Event),
+) runState {
+	state := runState{}
+
+	emit(Event{Kind: EventSourceStart, Source: sourceName})
+
+	src, newErr := source.New(sourceName, sourceCfg, token)
+	if newErr != nil {
+		state.err = newErr
+	} else {
+		defer src.Close()
+		state.result, state.err = src.Sync(
+			ctx,
+			destinationDir,
+			previousLock,
+			source.SyncOptions{
+				Force:  opts.Force,
+				DryRun: opts.DryRun,
+			},
+		)
+	}
+
+	emit(Event{
+		Kind:   EventSourceDone,
+		Source: sourceName,
+		Result: state.result,
+		Err:    state.err,
+	})
+
+	return state
 }
 
 func resolveSourceNames(
@@ -228,58 +287,4 @@ func processResults(
 	}
 
 	return errorCount, downloadedCount, deletedCount, skippedCount
-}
-
-func printSummary(
-	logger *slog.Logger,
-	sourceNames []string,
-	results map[string]runState,
-	downloadedCount int,
-	deletedCount int,
-	skippedCount int,
-	dryRun bool,
-) {
-	summaryLabel := "sync summary"
-	if dryRun {
-		summaryLabel = "dry-run summary"
-	}
-
-	logger.Info(summaryLabel,
-		"sources", len(sourceNames),
-		"downloaded", downloadedCount,
-		"deleted", deletedCount,
-		"skipped", skippedCount,
-	)
-
-	if dryRun {
-		logger.Info("dry-run: no files were written or removed")
-	}
-
-	for _, sourceName := range sourceNames {
-		state := results[sourceName]
-		if state.err != nil {
-			logger.Warn("source failed",
-				"source", sourceName,
-				"error", state.err,
-			)
-
-			continue
-		}
-
-		if state.result == nil {
-			logger.Info("source: no result", "source", sourceName)
-			continue
-		}
-
-		switch {
-		case state.result.Skipped:
-			logger.Info("source: skipped", "source", sourceName)
-		default:
-			logger.Info("source: synced",
-				"source", sourceName,
-				"downloaded", state.result.Downloaded,
-				"deleted", state.result.Deleted,
-			)
-		}
-	}
 }

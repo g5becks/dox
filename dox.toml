@@ -1,0 +1,24 @@
+output = ".dox"
+
+[sources.tanstack-db]
+type = "github"
+repo = "TanStack/db"
+path = "docs"
+ref = "main"
+
+[sources.tanstack-query]
+type = "github"
+repo = "TanStack/query"
+path = "docs"
+ref = "main"
+
+[sources.logtape]
+type = "github"
+repo = "dahlia/logtape"
+path = "docs"
+ref = "main"
+
+[sources.bun]
+type = "url"
+url = "https://bun.com/docs/llms.txt"
+filename = "bun.txt"

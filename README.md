@@ -1,6 +1,6 @@
 # dox
 
-`dox` is a Go CLI that syncs library and framework docs from GitHub repos or URLs into a local directory for indexing tools like Codana.
+`dox` is a Go CLI that syncs library and framework docs from GitHub repos or URLs into a local directory for indexing tools and AI assistants.
 
 ## Why
 
@@ -8,13 +8,61 @@ Keep documentation config in your repo, keep downloaded docs out of git, and rep
 
 ## Installation
 
-### Go install
+### Homebrew (macOS/Linux)
+
+```bash
+brew install g5becks/tap/dox
+```
+
+### Download Binary
+
+Download pre-built binaries from the [releases page](https://github.com/g5becks/dox/releases).
+
+**Linux/macOS:**
+```bash
+# Download and extract (adjust version and platform)
+curl -L https://github.com/g5becks/dox/releases/latest/download/dox_Linux_x86_64.tar.gz | tar xz
+sudo mv dox /usr/local/bin/
+```
+
+**Windows:**
+Download the `.zip` from releases, extract, and add to PATH.
+
+### Package Managers
+
+**Debian/Ubuntu:**
+```bash
+# Download .deb from releases page
+wget https://github.com/g5becks/dox/releases/latest/download/dox_amd64.deb
+sudo dpkg -i dox_amd64.deb
+```
+
+**RedHat/Fedora/CentOS:**
+```bash
+# Download .rpm from releases page
+wget https://github.com/g5becks/dox/releases/latest/download/dox_amd64.rpm
+sudo rpm -i dox_amd64.rpm
+```
+
+**Arch Linux (AUR):**
+```bash
+yay -S dox-bin
+# or
+paru -S dox-bin
+```
+
+**Chocolatey (Windows):**
+```powershell
+choco install dox
+```
+
+### Go Install
 
 ```bash
 go install github.com/g5becks/dox/cmd/dox@latest
 ```
 
-### Build from source
+### Build from Source
 
 ```bash
 git clone https://github.com/g5becks/dox.git
@@ -146,16 +194,73 @@ Default output root is `.dox/`:
 
 Each source writes into its own directory (source name by default, or `out` override).
 
-## Codana Workflow
+## Integrations
 
+`dox` downloads docs to a local directory that can be indexed by various tools:
+
+### AI Code Search & RAG
+
+- **[ck-search](https://github.com/BeaconBay/ck)** — Semantic code search powered by embeddings. Index your `.dox/` directory for context-aware documentation search.
+  ```bash
+  dox sync
+  ck index .dox/
+  ck search "how to configure goreleaser"
+  ```
+
+- **[kit](https://github.com/cased/kit)** — AI-powered development assistant. Point kit at your synced docs for enhanced context.
+  ```bash
+  dox sync
+  kit configure --docs-path .dox/
+  ```
+
+- **[aichat RAG](https://github.com/sigoden/aichat/wiki/RAG-Guide)** — Retrieval-Augmented Generation for LLMs. Build a RAG system from your documentation.
+  ```bash
+  dox sync
+  aichat --rag .dox/
+  ```
+
+### Documentation Indexers
+
+- **[Codana](https://codana.dev)** — Documentation search and indexing:
+  ```bash
+  dox sync
+  codana documents add-collection goreleaser .dox/goreleaser/
+  codana documents add-collection hono .dox/hono/
+  codana documents index
+  ```
+
+- **[Meilisearch](https://www.meilisearch.com/)** — Fast, typo-tolerant search engine:
+  ```bash
+  dox sync
+  # Index .dox/ directory with Meilisearch
+  ```
+
+- **[Typesense](https://typesense.org/)** — Open-source search engine:
+  ```bash
+  dox sync
+  # Index .dox/ with Typesense for fast doc search
+  ```
+
+### IDE & Editor Extensions
+
+Configure your editor to use `.dox/` as a documentation source:
+- VSCode: Point Copilot or Codeium context to `.dox/`
+- Cursor: Add `.dox/` to workspace context
+- Vim/Neovim: Use with coc.nvim or native LSP doc providers
+
+### Custom Scripts
+
+Since `dox` outputs plain files, you can build custom tooling:
 ```bash
-dox sync
-codana documents add-collection goreleaser .dox/goreleaser/
-codana documents add-collection hono .dox/hono/
-codana documents index
-```
+# Full-text search
+rg "pattern" .dox/
 
-Codana: https://codana.dev
+# Convert markdown to HTML
+find .dox/ -name "*.md" -exec pandoc -o {}.html {} \;
+
+# Generate embeddings
+python embed_docs.py .dox/
+```
 
 ## Notes
 
@@ -165,3 +270,11 @@ Codana: https://codana.dev
   1. `github_token` in config
   2. `GITHUB_TOKEN`
   3. `GH_TOKEN`
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT

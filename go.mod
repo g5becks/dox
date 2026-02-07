@@ -11,6 +11,7 @@ tool (
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1
+	github.com/fatih/color v1.18.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/jedib0t/go-pretty/v6 v6.7.8
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.0
@@ -172,7 +173,6 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/evilmartians/lefthook/v2 v2.1.0 // indirect
-	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
