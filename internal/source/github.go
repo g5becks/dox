@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ type githubSource struct {
 	repo        string
 	client      *resty.Client
 	resolvedRef string
+	warnedLowRL bool
 }
 
 type githubTreeResponse struct {
@@ -296,6 +298,10 @@ func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
 			Errorf("github API returned status %d for repository metadata", response.StatusCode())
 	}
 
+	if err := s.checkRateLimit(response); err != nil {
+		return "", err
+	}
+
 	if result.DefaultBranch == "" {
 		return "", oops.
 			Code("GITHUB_API_ERROR").
@@ -332,6 +338,10 @@ func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeRe
 			With("status", response.StatusCode()).
 			Hint("Check repository, path, and ref in your config").
 			Errorf("github API returned status %d for tree", response.StatusCode())
+	}
+
+	if err := s.checkRateLimit(response); err != nil {
+		return nil, err
 	}
 
 	if result.Truncated {
@@ -373,6 +383,10 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 			Errorf("github API returned status %d for content metadata", response.StatusCode())
 	}
 
+	if err := s.checkRateLimit(response); err != nil {
+		return "", err
+	}
+
 	if result.Type != "file" || result.SHA == "" {
 		return "", oops.
 			Code("GITHUB_API_ERROR").
@@ -407,6 +421,10 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 			With("sha", sha).
 			With("status", response.StatusCode()).
 			Errorf("github API returned status %d for blob", response.StatusCode())
+	}
+
+	if err := s.checkRateLimit(response); err != nil {
+		return nil, err
 	}
 
 	if result.Encoding != "base64" {
@@ -641,4 +659,38 @@ func newGitHubClient(token string) *resty.Client {
 	}
 
 	return client
+}
+
+func (s *githubSource) checkRateLimit(response *resty.Response) error {
+	remainingRaw := response.Header().Get("X-RateLimit-Remaining")
+	if remainingRaw == "" {
+		return nil
+	}
+
+	remaining, err := strconv.Atoi(remainingRaw)
+	if err != nil {
+		return nil
+	}
+
+	if remaining == 0 {
+		reset := response.Header().Get("X-RateLimit-Reset")
+		return oops.
+			Code("GITHUB_RATE_LIMIT").
+			With("repo", s.source.Repo).
+			With("reset", reset).
+			Hint("Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits").
+			Errorf("github API rate limit exhausted")
+	}
+
+	if remaining <= 10 && !s.warnedLowRL {
+		s.warnedLowRL = true
+		fmt.Fprintf(
+			os.Stderr,
+			"warning: github rate limit low for %s (%d requests remaining)\n",
+			s.source.Repo,
+			remaining,
+		)
+	}
+
+	return nil
 }
