@@ -214,9 +214,9 @@ dox outline goreleaser docs/install.md
 List all synced documentation collections:
 
 ```bash
-dox collections
-dox collections --format json
-dox collections --format csv
+dox collections                   # Table output
+dox collections --json            # JSON output
+dox collections --limit 5         # Limit results
 ```
 
 ### Files
@@ -224,38 +224,52 @@ dox collections --format csv
 List files in a collection with customizable output:
 
 ```bash
-# Default: path, type, size
+# Default table output
 dox files goreleaser
 
-# Custom fields
-dox files goreleaser --fields path,description,headings
+# JSON output
+dox files goreleaser --json
 
-# Different formats
-dox files goreleaser --format json
+# CSV output
 dox files goreleaser --format csv
+
+# Custom fields
+dox files goreleaser --fields path,type,size
 
 # Limit results
 dox files goreleaser --limit 10
+
+# Show all files (no limit)
+dox files goreleaser --all
+
+# Shorter descriptions
+dox files goreleaser --desc-length 100
 ```
 
-Available fields: `path`, `type`, `size`, `description`, `headings`
+Available fields: `path`, `type`, `lines`, `size`, `description`, `modified`
 
 ### Cat
 
-Read file contents with line numbers and pagination:
+Read file contents with line numbers:
 
 ```bash
 # Show entire file
 dox cat goreleaser docs/install.md
 
-# Show specific line range
-dox cat goreleaser docs/install.md --start 10 --end 50
+# Start at line 10
+dox cat goreleaser docs/install.md --offset 10
 
-# Paginate output
-dox cat goreleaser docs/install.md --page 2 --page-size 20
+# Show 20 lines
+dox cat goreleaser docs/install.md --limit 20
+
+# Start at line 10, show 20 lines
+dox cat goreleaser docs/install.md --offset 10 --limit 20
 
 # Without line numbers
 dox cat goreleaser docs/install.md --no-line-numbers
+
+# JSON output with metadata
+dox cat goreleaser docs/install.md --json
 ```
 
 ### Outline
@@ -278,8 +292,8 @@ Query commands are designed for AI agents and automation:
 ```bash
 # Agent workflow example
 dox sync                                    # Ensure docs are current
-dox collections --format json               # Discover available docs
-dox files react --format json --limit 100   # Find relevant files
+dox collections --json                      # Discover available docs
+dox files react --json --limit 100          # Find relevant files
 dox cat react docs/hooks.md                 # Read specific content
 ```
 
@@ -289,11 +303,11 @@ Customize query output in `dox.toml`:
 
 ```toml
 [display]
-limit = 50              # Default result limit
-desc_length = 200       # Max description length
-format = "table"        # Default format: table|json|csv
-show_line_numbers = true
-page_size = 50
+default_limit = 50            # Default result limit for dox files
+description_length = 200      # Max description length
+line_numbers = true           # Show line numbers in dox cat
+format = "table"              # Default format: table, json, csv
+list_fields = ["path", "type", "lines", "size", "description"]
 ```
 
 ### Troubleshooting
