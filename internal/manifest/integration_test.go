@@ -23,10 +23,10 @@ func TestFullWorkflowIntegration(t *testing.T) {
 
 	// Create sample files
 	files := map[string]string{
-		"readme.md":  "# Test\n\nDescription here.",
-		"guide.mdx":  "# Guide\n\nGuide content.",
-		"notes.txt":  "Plain text notes.",
-		"types.tsx":  "export interface Props {}\nexport function Component() {}",
+		"readme.md": "# Test\n\nDescription here.",
+		"guide.mdx": "# Guide\n\nGuide content.",
+		"notes.txt": "Plain text notes.",
+		"types.tsx": "export interface Props {}\nexport function Component() {}",
 	}
 
 	for name, content := range files {
@@ -131,8 +131,8 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 
 	// Save
-	if err := m1.Save(doxDir); err != nil {
-		t.Fatalf("save failed: %v", err)
+	if saveErr := m1.Save(doxDir); saveErr != nil {
+		t.Fatalf("save failed: %v", saveErr)
 	}
 
 	// Load again
@@ -176,10 +176,10 @@ func TestMixedFileTypes(t *testing.T) {
 		content  string
 		wantType string
 	}{
-		"doc.md":   {"# Markdown\n\nContent.", "md"},
-		"doc.mdx":  {"# MDX\n\nContent.", "mdx"},
-		"doc.txt":  {"Plain text.", "txt"},
-		"doc.tsx":  {"export const x = 1;", "tsx"},
+		"doc.md":  {"# Markdown\n\nContent.", "md"},
+		"doc.mdx": {"# MDX\n\nContent.", "mdx"},
+		"doc.txt": {"Plain text.", "txt"},
+		"doc.tsx": {"export const x = 1;", "tsx"},
 	}
 
 	for name, data := range files {

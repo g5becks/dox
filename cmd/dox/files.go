@@ -185,7 +185,13 @@ func outputFilesCSV(files []manifest.FileInfo, fields []string, descLength int) 
 	return nil
 }
 
-func outputFilesTable(files []manifest.FileInfo, fields []string, descLength int, limited bool, total int) error {
+func outputFilesTable(
+	files []manifest.FileInfo,
+	fields []string,
+	descLength int,
+	limited bool,
+	total int,
+) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(table.StyleRounded)
@@ -207,7 +213,9 @@ func outputFilesTable(files []manifest.FileInfo, fields []string, descLength int
 	t.Render()
 
 	if limited {
-		_, _ = os.Stdout.WriteString("\n(showing " + strconv.Itoa(len(files)) + " of " + strconv.Itoa(total) + " files, use --all to show all)\n")
+		msg := "\n(showing " + strconv.Itoa(len(files)) + " of " + strconv.Itoa(total) +
+			" files, use --all to show all)\n"
+		_, _ = os.Stdout.WriteString(msg)
 	}
 
 	return nil

@@ -31,8 +31,7 @@ func (p *TextParser) Parse(_ string, content []byte) (*ParseResult, error) {
 }
 
 func extractFirstLine(content []byte) string {
-	lines := bytes.Split(content, []byte("\n"))
-	for _, line := range lines {
+	for line := range bytes.SplitSeq(content, []byte("\n")) {
 		trimmed := strings.TrimSpace(string(line))
 		if trimmed != "" {
 			return trimmed

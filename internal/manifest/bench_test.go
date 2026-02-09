@@ -22,7 +22,7 @@ func BenchmarkManifestLoad100Files(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := manifest.Load(doxDir)
 		if err != nil {
 			b.Fatalf("load failed: %v", err)
@@ -41,7 +41,7 @@ func BenchmarkManifestLoad1000Files(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := manifest.Load(doxDir)
 		if err != nil {
 			b.Fatalf("load failed: %v", err)
@@ -57,7 +57,7 @@ func BenchmarkManifestGenerate100Files(b *testing.B) {
 	cfg := &config.Config{Output: doxDir}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if err := manifest.Generate(context.Background(), cfg); err != nil {
 			b.Fatalf("generate failed: %v", err)
 		}
@@ -72,7 +72,7 @@ func setupBenchmarkFiles(b *testing.B, doxDir string, count int) {
 		b.Fatalf("failed to create dir: %v", err)
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		content := fmt.Sprintf(`# Document %d
 
 This is a sample document for benchmarking.

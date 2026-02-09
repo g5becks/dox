@@ -443,7 +443,8 @@ path = "docs"
 				t.Errorf("DefaultLimit = %d, want %d", cfg.Display.DefaultLimit, tt.wantDisplay.DefaultLimit)
 			}
 			if cfg.Display.DescriptionLength != tt.wantDisplay.DescriptionLength {
-				t.Errorf("DescriptionLength = %d, want %d", cfg.Display.DescriptionLength, tt.wantDisplay.DescriptionLength)
+				t.Errorf("DescriptionLength = %d, want %d",
+					cfg.Display.DescriptionLength, tt.wantDisplay.DescriptionLength)
 			}
 			if cfg.Display.LineNumbers != tt.wantDisplay.LineNumbers {
 				t.Errorf("LineNumbers = %v, want %v", cfg.Display.LineNumbers, tt.wantDisplay.LineNumbers)

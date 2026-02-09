@@ -200,7 +200,11 @@ func newSyncCommand() *cli.Command {
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
-			&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Force refresh and skip freshness checks"},
+			&cli.BoolFlag{
+				Name:    "force",
+				Aliases: []string{"f"},
+				Usage:   "Force refresh and skip freshness checks",
+			},
 			&cli.BoolFlag{Name: "clean", Usage: "Delete output directory before syncing"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
 			&cli.IntFlag{
@@ -218,8 +222,15 @@ func newListCommand() *cli.Command {
 		Usage: "List configured sources and status",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "json", Usage: "Emit JSON output"},
-			&cli.BoolFlag{Name: "verbose", Aliases: []string{"v"}, Usage: "Show expanded source fields"},
-			&cli.BoolFlag{Name: "files", Usage: "Include file counts from local output directories"},
+			&cli.BoolFlag{
+				Name:    "verbose",
+				Aliases: []string{"v"},
+				Usage:   "Show expanded source fields",
+			},
+			&cli.BoolFlag{
+				Name:  "files",
+				Usage: "Include file counts from local output directories",
+			},
 			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
 		},
 		Action: listAction,
@@ -232,7 +243,12 @@ func newAddCommand() *cli.Command {
 		Usage:     "Add a source definition to the config file",
 		ArgsUsage: "<name>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "type", Aliases: []string{"t"}, Usage: "Source type: github or url", Required: true},
+			&cli.StringFlag{
+				Name:     "type",
+				Aliases:  []string{"t"},
+				Usage:    "Source type: github or url",
+				Required: true,
+			},
 			&cli.StringFlag{Name: "repo", Usage: "Repository in owner/repo format"},
 			&cli.StringFlag{Name: "path", Usage: "Path within repository"},
 			&cli.StringFlag{Name: "ref", Usage: "Branch, tag, or commit SHA"},
@@ -537,10 +553,16 @@ func renderSourceSection(sourceName string, sourceCfg config.Source) string {
 			lines = append(lines, fmt.Sprintf("ref = %q", sourceCfg.Ref))
 		}
 		if len(sourceCfg.Patterns) > 0 {
-			lines = append(lines, fmt.Sprintf("patterns = %s", formatTOMLStringArray(sourceCfg.Patterns)))
+			lines = append(
+				lines,
+				fmt.Sprintf("patterns = %s", formatTOMLStringArray(sourceCfg.Patterns)),
+			)
 		}
 		if len(sourceCfg.Exclude) > 0 {
-			lines = append(lines, fmt.Sprintf("exclude = %s", formatTOMLStringArray(sourceCfg.Exclude)))
+			lines = append(
+				lines,
+				fmt.Sprintf("exclude = %s", formatTOMLStringArray(sourceCfg.Exclude)),
+			)
 		}
 	}
 

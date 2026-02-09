@@ -12,10 +12,10 @@ func TestCrossParserIntegration(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		file         string
-		wantOutline  parser.OutlineType
-		wantDesc     bool
+		name        string
+		file        string
+		wantOutline parser.OutlineType
+		wantDesc    bool
 	}{
 		{
 			name:        "markdown file",

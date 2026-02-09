@@ -107,7 +107,13 @@ func outputOutlineJSON(fileInfo *manifest.FileInfo) error {
 }
 
 func outputOutlineText(fileInfo *manifest.FileInfo) error {
-	fmt.Fprintf(os.Stdout, "%s (%d lines, %s)\n\n", fileInfo.Path, fileInfo.Lines, formatSize(fileInfo.Size))
+	fmt.Fprintf(
+		os.Stdout,
+		"%s (%d lines, %s)\n\n",
+		fileInfo.Path,
+		fileInfo.Lines,
+		formatSize(fileInfo.Size),
+	)
 
 	if fileInfo.Outline == nil || fileInfo.Outline.Type == parser.OutlineTypeNone {
 		fmt.Fprintln(os.Stdout, "No outline available for text files.")

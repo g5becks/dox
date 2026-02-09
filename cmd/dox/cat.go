@@ -142,7 +142,12 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func outputCatJSON(collection string, fileInfo *manifest.FileInfo, content string, offset, limit int) error {
+func outputCatJSON(
+	collection string,
+	fileInfo *manifest.FileInfo,
+	content string,
+	offset, limit int,
+) error {
 	output := catOutput{
 		Collection: collection,
 		Path:       fileInfo.Path,

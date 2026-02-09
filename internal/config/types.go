@@ -89,7 +89,7 @@ type Display struct {
 	DefaultLimit      int      `koanf:"default_limit"`
 	DescriptionLength int      `koanf:"description_length"`
 	LineNumbers       bool     `koanf:"line_numbers"`
-	Format            string   `koanf:"format"            validate:"omitempty,oneof=table json csv"`
+	Format            string   `koanf:"format"             validate:"omitempty,oneof=table json csv"`
 	ListFields        []string `koanf:"list_fields"`
 }
 

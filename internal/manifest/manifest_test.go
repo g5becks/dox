@@ -64,7 +64,11 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 
 	if len(loaded.Collections) != len(original.Collections) {
-		t.Errorf("Collections count = %d, want %d", len(loaded.Collections), len(original.Collections))
+		t.Errorf(
+			"Collections count = %d, want %d",
+			len(loaded.Collections),
+			len(original.Collections),
+		)
 	}
 
 	coll := loaded.Collections["test"]

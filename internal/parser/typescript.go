@@ -131,8 +131,7 @@ func buildCodeDescription(content []byte, exports []Export) string {
 	jsdocMatches := jsdocRegex.FindSubmatch(content)
 	if len(jsdocMatches) > 1 {
 		doc := string(jsdocMatches[1])
-		lines := strings.Split(doc, "\n")
-		for _, line := range lines {
+		for line := range strings.SplitSeq(doc, "\n") {
 			line = strings.TrimSpace(line)
 			line = strings.TrimPrefix(line, "*")
 			line = strings.TrimSpace(line)

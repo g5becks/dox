@@ -76,8 +76,7 @@ func StripFrontmatter(content []byte) ([]byte, string, string) {
 
 	// Extract title and description
 	var title, description string
-	lines := bytes.Split(frontmatter, []byte("\n"))
-	for _, line := range lines {
+	for line := range bytes.SplitSeq(frontmatter, []byte("\n")) {
 		line = bytes.TrimSpace(line)
 		if titleAfter, titleFound := bytes.CutPrefix(line, []byte("title:")); titleFound {
 			title = strings.TrimSpace(string(titleAfter))
