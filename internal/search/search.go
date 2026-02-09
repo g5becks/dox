@@ -41,6 +41,8 @@ type searchIndex struct {
 	entries []indexEntry
 }
 
+const defaultFileEntryCapacity = 2
+
 func (s searchIndex) String(i int) string {
 	return s.entries[i].MatchValue
 }
@@ -49,13 +51,68 @@ func (s searchIndex) Len() int {
 	return len(s.entries)
 }
 
-func buildIndex(m *manifest.Manifest, collection string) searchIndex {
+func sortedCollectionNames(m *manifest.Manifest) []string {
 	names := make([]string, 0, len(m.Collections))
 	for name := range m.Collections {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	return names
+}
 
+func fileEntries(collection string, file manifest.FileInfo) []indexEntry {
+	entries := make([]indexEntry, 0, defaultFileEntryCapacity)
+	entries = append(entries, indexEntry{
+		Collection:  collection,
+		Path:        file.Path,
+		Type:        file.Type,
+		Description: file.Description,
+		MatchField:  "path",
+		MatchValue:  file.Path,
+	})
+
+	if file.Description != "" {
+		entries = append(entries, indexEntry{
+			Collection:  collection,
+			Path:        file.Path,
+			Type:        file.Type,
+			Description: file.Description,
+			MatchField:  "description",
+			MatchValue:  file.Description,
+		})
+	}
+
+	if file.Outline == nil {
+		return entries
+	}
+
+	for _, heading := range file.Outline.Headings {
+		entries = append(entries, indexEntry{
+			Collection:  collection,
+			Path:        file.Path,
+			Type:        file.Type,
+			Description: file.Description,
+			MatchField:  "heading",
+			MatchValue:  heading.Text,
+		})
+	}
+
+	for _, export := range file.Outline.Exports {
+		entries = append(entries, indexEntry{
+			Collection:  collection,
+			Path:        file.Path,
+			Type:        file.Type,
+			Description: file.Description,
+			MatchField:  "export",
+			MatchValue:  export.Name,
+		})
+	}
+
+	return entries
+}
+
+func buildIndex(m *manifest.Manifest, collection string) searchIndex {
+	names := sortedCollectionNames(m)
 	var entries []indexEntry
 	for _, name := range names {
 		if collection != "" && name != collection {
@@ -64,49 +121,7 @@ func buildIndex(m *manifest.Manifest, collection string) searchIndex {
 
 		coll := m.Collections[name]
 		for _, file := range coll.Files {
-			entries = append(entries, indexEntry{
-				Collection:  name,
-				Path:        file.Path,
-				Type:        file.Type,
-				Description: file.Description,
-				MatchField:  "path",
-				MatchValue:  file.Path,
-			})
-
-			if file.Description != "" {
-				entries = append(entries, indexEntry{
-					Collection:  name,
-					Path:        file.Path,
-					Type:        file.Type,
-					Description: file.Description,
-					MatchField:  "description",
-					MatchValue:  file.Description,
-				})
-			}
-
-			if file.Outline != nil {
-				for _, heading := range file.Outline.Headings {
-					entries = append(entries, indexEntry{
-						Collection:  name,
-						Path:        file.Path,
-						Type:        file.Type,
-						Description: file.Description,
-						MatchField:  "heading",
-						MatchValue:  heading.Text,
-					})
-				}
-
-				for _, export := range file.Outline.Exports {
-					entries = append(entries, indexEntry{
-						Collection:  name,
-						Path:        file.Path,
-						Type:        file.Type,
-						Description: file.Description,
-						MatchField:  "export",
-						MatchValue:  export.Name,
-					})
-				}
-			}
+			entries = append(entries, fileEntries(name, file)...)
 		}
 	}
 

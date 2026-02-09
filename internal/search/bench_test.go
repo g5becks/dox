@@ -1,4 +1,5 @@
-package search_test
+//nolint:testpackage // Benchmarks need unexported buildIndex access for isolated index-cost measurement.
+package search
 
 import (
 	"fmt"
@@ -9,23 +10,19 @@ import (
 
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/parser"
-	"github.com/g5becks/dox/internal/search"
 )
 
 func BenchmarkBuildIndex700Files(b *testing.B) {
 	m := buildBenchmarkManifest(700)
+	var idx searchIndex
 
 	b.ResetTimer()
 	for b.Loop() {
-		// Use a nonsense query to isolate index-building cost.
-		// Fuzzy matching returns immediately with 0 results for gibberish.
-		_, err := search.Metadata(m, search.MetadataOptions{
-			Query: "zzzxqqjjj",
-			Limit: 0,
-		})
-		if err != nil {
-			b.Fatalf("search failed: %v", err)
-		}
+		idx = buildIndex(m, "")
+	}
+
+	if idx.Len() == 0 {
+		b.Fatal("expected non-empty index")
 	}
 }
 
@@ -34,7 +31,7 @@ func BenchmarkMetadataSearch700Files(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := search.Metadata(m, search.MetadataOptions{
+		_, err := Metadata(m, MetadataOptions{
 			Query: "configuration",
 			Limit: 50,
 		})
@@ -51,7 +48,7 @@ func BenchmarkContentSearch700Files(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := search.Content(m, search.ContentOptions{
+		_, err := Content(m, ContentOptions{
 			OutputDir: tmpDir,
 			Query:     "configuration",
 			Limit:     50,
@@ -69,7 +66,7 @@ func BenchmarkContentSearchRegex700Files(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := search.Content(m, search.ContentOptions{
+		_, err := Content(m, ContentOptions{
 			OutputDir: tmpDir,
 			Query:     "func.*Config",
 			UseRegex:  true,
