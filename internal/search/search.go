@@ -134,6 +134,9 @@ func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, err
 
 	deduped := make(map[string]MetadataResult)
 	for _, match := range matches {
+		if match.Score < 0 {
+			continue
+		}
 		entry := entries[match.Index]
 		key := entry.Collection + "\x00" + entry.Path
 
