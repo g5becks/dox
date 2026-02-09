@@ -96,6 +96,29 @@ Some text here.
 			wantHeadings: 2,
 		},
 		{
+			name: "with multi-line import",
+			content: `import {
+  Component,
+  Other
+} from './components'
+
+# Title
+Content.`,
+			wantDesc:     "Title - Content.",
+			wantHeadings: 1,
+		},
+		{
+			name: "with multi-line export",
+			content: `export const meta = {
+  title: 'Test'
+}
+
+# Title
+Content.`,
+			wantDesc:     "Title - Content.",
+			wantHeadings: 1,
+		},
+		{
 			name:         "empty file",
 			content:      "",
 			wantDesc:     "",
