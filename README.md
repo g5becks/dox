@@ -309,6 +309,9 @@ dox search "api" --json
 
 # CSV output
 dox search "guide" --format csv
+
+# Truncate descriptions
+dox search "guide" --desc-length 80
 ```
 
 Metadata search returns:
@@ -370,8 +373,8 @@ Customize query output in `dox.toml`:
 
 ```toml
 [display]
-default_limit = 50            # Default result limit for dox files
-description_length = 200      # Max description length
+default_limit = 50            # Default result limit for dox files and dox search
+description_length = 200      # Max description/text length in table output
 line_numbers = true           # Show line numbers in dox cat
 format = "table"              # Default format: table, json, csv
 list_fields = ["path", "type", "lines", "size", "description"]
