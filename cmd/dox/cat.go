@@ -110,7 +110,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 			Errorf("file %q not found in collection %q", filePath, collectionName)
 	}
 
-	fullPath := filepath.Join(cfg.Output, collectionName, filePath)
+	fullPath := filepath.Join(cfg.Output, collection.Dir, filePath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return oops.
@@ -121,6 +121,11 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	lines := strings.Split(string(content), "\n")
+	// Remove phantom trailing empty line from files ending with newline
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
 	offset := cmd.Int("offset")
 	limit := cmd.Int("limit")
 
@@ -137,7 +142,10 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		return outputCatJSON(collectionName, fileInfo, strings.Join(lines, "\n"), offset, limit)
 	}
 
-	showLineNumbers := !cmd.Bool("no-line-numbers")
+	showLineNumbers := cfg.Display.LineNumbers
+	if cmd.IsSet("no-line-numbers") {
+		showLineNumbers = false
+	}
 	outputCatText(lines, offset, showLineNumbers)
 	return nil
 }
