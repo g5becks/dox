@@ -330,6 +330,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
+	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/sajari/fuzzy v1.0.0 // indirect
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/sassoftware/relic v7.2.1+incompatible // indirect
