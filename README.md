@@ -186,6 +186,126 @@ dox clean goreleaser
 dox init
 ```
 
+## Query Documentation
+
+Browse and read synced documentation directly from the CLI. After syncing, `dox` generates a manifest that enables fast querying of your documentation collections.
+
+### Quick Start
+
+```bash
+# Sync documentation
+dox sync
+
+# List all collections
+dox collections
+
+# List files in a collection
+dox files goreleaser
+
+# Read a file with line numbers
+dox cat goreleaser docs/install.md
+
+# Show document structure (headings/exports)
+dox outline goreleaser docs/install.md
+```
+
+### Collections
+
+List all synced documentation collections:
+
+```bash
+dox collections
+dox collections --format json
+dox collections --format csv
+```
+
+### Files
+
+List files in a collection with customizable output:
+
+```bash
+# Default: path, type, size
+dox files goreleaser
+
+# Custom fields
+dox files goreleaser --fields path,description,headings
+
+# Different formats
+dox files goreleaser --format json
+dox files goreleaser --format csv
+
+# Limit results
+dox files goreleaser --limit 10
+```
+
+Available fields: `path`, `type`, `size`, `description`, `headings`
+
+### Cat
+
+Read file contents with line numbers and pagination:
+
+```bash
+# Show entire file
+dox cat goreleaser docs/install.md
+
+# Show specific line range
+dox cat goreleaser docs/install.md --start 10 --end 50
+
+# Paginate output
+dox cat goreleaser docs/install.md --page 2 --page-size 20
+
+# Without line numbers
+dox cat goreleaser docs/install.md --no-line-numbers
+```
+
+### Outline
+
+Show document structure (headings for markdown/MDX, exports for TypeScript):
+
+```bash
+dox outline goreleaser docs/install.md
+```
+
+Output shows:
+- Markdown/MDX: Heading hierarchy with levels
+- TypeScript/TSX: Exported functions, classes, types
+- Text files: First line description
+
+### AI Agent Integration
+
+Query commands are designed for AI agents and automation:
+
+```bash
+# Agent workflow example
+dox sync                                    # Ensure docs are current
+dox collections --format json               # Discover available docs
+dox files react --format json --limit 100   # Find relevant files
+dox cat react docs/hooks.md                 # Read specific content
+```
+
+### Display Configuration
+
+Customize query output in `dox.toml`:
+
+```toml
+[display]
+limit = 50              # Default result limit
+desc_length = 200       # Max description length
+format = "table"        # Default format: table|json|csv
+show_line_numbers = true
+page_size = 50
+```
+
+### Troubleshooting
+
+**"Manifest not found"**
+- Run `dox sync` to generate the manifest
+- Manifest is created automatically after each sync
+
+**"Collection not found"**
+- Run `dox collections` to see available collections
+- Ensure the source name matches your `dox.toml` configuration
+
 ## Global Excludes
 
 Use the top-level `excludes` key to define patterns that apply to all git sources (GitHub, GitLab, Codeberg, etc.):

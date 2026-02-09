@@ -150,6 +150,8 @@ dox/
 ├── internal/
 │   ├── config/       # Configuration parsing & validation
 │   ├── lockfile/     # Lock file management
+│   ├── manifest/     # Manifest generation & persistence
+│   ├── parser/       # File parsers (markdown, MDX, TypeScript, text)
 │   ├── source/       # Source implementations (GitHub, URL)
 │   ├── sync/         # Sync orchestration
 │   └── ui/           # Terminal UI (tables, colors)
@@ -230,6 +232,30 @@ To add a new source (e.g., GitLab, BitBucket):
 3. **Register in factory** (`internal/source/source.go`)
 4. **Add tests** in `internal/source/newtype_test.go`
 5. **Update docs** (README.md, config examples)
+
+## Adding a New Parser
+
+To add support for a new file type in the query feature:
+
+1. **Implement `Parser` interface** in `internal/parser/newtype.go`:
+   ```go
+   type NewParser struct{}
+   
+   func (p *NewParser) CanParse(path string) bool {
+       return strings.HasSuffix(path, ".ext")
+   }
+   
+   func (p *NewParser) Parse(_ string, content []byte) (*ParseResult, error) {
+       // Extract headings, description, etc.
+       return &ParseResult{...}, nil
+   }
+   ```
+
+2. **Register parser** in `internal/manifest/generator.go` parsers list
+3. **Add tests** in `internal/parser/newtype_test.go`
+4. **Update docs** (README.md supported file types)
+
+Supported parsers: Markdown (.md), MDX (.mdx), TypeScript/TSX (.ts/.tsx), Text (.txt)
 
 ## Release Process
 
