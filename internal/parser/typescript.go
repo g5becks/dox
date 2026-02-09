@@ -63,12 +63,15 @@ func (p *TypeScriptParser) Parse(_ string, content []byte) (*ParseResult, error)
 }
 
 func extractJSXHeadings(content []byte) []Heading {
-	matches := jsxHeadingRegex.FindAllSubmatch(content, -1)
-	headings := make([]Heading, 0, len(matches))
+	indices := jsxHeadingRegex.FindAllSubmatchIndex(content, -1)
+	headings := make([]Heading, 0, len(indices))
 
-	for _, match := range matches {
-		level := int(match[1][0] - '0')
-		text := string(match[2])
+	for _, idx := range indices {
+		// idx[0]:idx[1] = full match
+		// idx[2]:idx[3] = capture group 1 (level digit)
+		// idx[4]:idx[5] = capture group 2 (heading text)
+		level := int(content[idx[2]] - '0')
+		text := string(content[idx[4]:idx[5]])
 		text = jsxTagStripper.ReplaceAllString(text, "")
 		text = strings.TrimSpace(text)
 
@@ -76,7 +79,7 @@ func extractJSXHeadings(content []byte) []Heading {
 			continue
 		}
 
-		lineNum := lineNumberAt(content, bytes.Index(content, match[0]))
+		lineNum := lineNumberAt(content, idx[0])
 		headings = append(headings, Heading{
 			Level: level,
 			Text:  text,
@@ -88,13 +91,15 @@ func extractJSXHeadings(content []byte) []Heading {
 }
 
 func extractExports(content []byte) []Export {
-	matches := exportRegex.FindAllSubmatch(content, -1)
-	exports := make([]Export, 0, len(matches))
+	indices := exportRegex.FindAllSubmatchIndex(content, -1)
+	exports := make([]Export, 0, len(indices))
 
-	for _, match := range matches {
-		exportType := string(match[1])
-		name := string(match[2])
-		lineNum := lineNumberAt(content, bytes.Index(content, match[0]))
+	for _, idx := range indices {
+		// idx[2]:idx[3] = capture group 1 (export type)
+		// idx[4]:idx[5] = capture group 2 (name)
+		exportType := string(content[idx[2]:idx[3]])
+		name := string(content[idx[4]:idx[5]])
+		lineNum := lineNumberAt(content, idx[0])
 
 		exports = append(exports, Export{
 			Type: exportType,

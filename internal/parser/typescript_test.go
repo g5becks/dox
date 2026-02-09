@@ -217,3 +217,51 @@ func TestTypeScriptParser_HeadingExtraction(t *testing.T) {
 		}
 	}
 }
+
+
+func TestTypeScriptParser_DuplicateHeadingLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	p := parser.NewTypeScriptParser()
+	content := "<h1>Title</h1>\n<p>text</p>\n<h2>Section</h2>\n<p>text</p>\n<h2>Section</h2>"
+
+	result, err := p.Parse("test.tsx", []byte(content))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if len(result.Outline.Headings) != 3 {
+		t.Fatalf("expected 3 headings, got %d", len(result.Outline.Headings))
+	}
+
+	// The two "Section" headings should have different line numbers
+	h2 := result.Outline.Headings[1]
+	h3 := result.Outline.Headings[2]
+	if h2.Line == h3.Line {
+		t.Errorf("duplicate headings should have different line numbers, both got line %d", h2.Line)
+	}
+	if h3.Line != 5 {
+		t.Errorf("third heading line = %d, want 5", h3.Line)
+	}
+}
+
+func TestTypeScriptParser_DuplicateExportLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	p := parser.NewTypeScriptParser()
+	content := "export const foo = 1\nexport const bar = 2\nexport const foo = 3"
+
+	result, err := p.Parse("test.ts", []byte(content))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	// Should have 3 exports with different line numbers
+	if len(result.Outline.Exports) != 3 {
+		t.Fatalf("expected 3 exports, got %d", len(result.Outline.Exports))
+	}
+
+	if result.Outline.Exports[2].Line != 3 {
+		t.Errorf("third export line = %d, want 3", result.Outline.Exports[2].Line)
+	}
+}
