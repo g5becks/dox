@@ -49,26 +49,7 @@ func (s searchIndex) Len() int {
 	return len(s.entries)
 }
 
-// Metadata performs fuzzy search across manifest metadata fields.
-func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, error) {
-	query := strings.TrimSpace(opts.Query)
-	if query == "" {
-		return nil, oops.
-			Code("INVALID_ARGS").
-			Hint("Provide a non-empty search query").
-			Errorf("search query cannot be empty")
-	}
-
-	if opts.Collection != "" {
-		if _, exists := m.Collections[opts.Collection]; !exists {
-			return nil, oops.
-				Code("COLLECTION_NOT_FOUND").
-				With("collection", opts.Collection).
-				Hint("Run 'dox collections' to see available collections").
-				Errorf("collection %q not found", opts.Collection)
-		}
-	}
-
+func buildIndex(m *manifest.Manifest, collection string) searchIndex {
 	names := make([]string, 0, len(m.Collections))
 	for name := range m.Collections {
 		names = append(names, name)
@@ -77,7 +58,7 @@ func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, err
 
 	var entries []indexEntry
 	for _, name := range names {
-		if opts.Collection != "" && name != opts.Collection {
+		if collection != "" && name != collection {
 			continue
 		}
 
@@ -129,7 +110,30 @@ func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, err
 		}
 	}
 
-	index := searchIndex{entries: entries}
+	return searchIndex{entries: entries}
+}
+
+// Metadata performs fuzzy search across manifest metadata fields.
+func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, error) {
+	query := strings.TrimSpace(opts.Query)
+	if query == "" {
+		return nil, oops.
+			Code("INVALID_ARGS").
+			Hint("Provide a non-empty search query").
+			Errorf("search query cannot be empty")
+	}
+
+	if opts.Collection != "" {
+		if _, exists := m.Collections[opts.Collection]; !exists {
+			return nil, oops.
+				Code("COLLECTION_NOT_FOUND").
+				With("collection", opts.Collection).
+				Hint("Run 'dox collections' to see available collections").
+				Errorf("collection %q not found", opts.Collection)
+		}
+	}
+
+	index := buildIndex(m, opts.Collection)
 	matches := fuzzy.FindFrom(query, index)
 
 	deduped := make(map[string]MetadataResult)
@@ -137,7 +141,7 @@ func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, err
 		if match.Score < 0 {
 			continue
 		}
-		entry := entries[match.Index]
+		entry := index.entries[match.Index]
 		key := entry.Collection + "\x00" + entry.Path
 
 		if existing, exists := deduped[key]; !exists || match.Score > existing.Score {
