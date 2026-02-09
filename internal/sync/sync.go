@@ -148,7 +148,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		}
 
 		// Generate manifest (non-fatal)
-		if genErr := manifest.Generate(ctx, cfg); genErr != nil {
+		if genErr := manifest.Generate(ctx, cfg, lock); genErr != nil {
 			if opts.OnEvent != nil {
 				opts.OnEvent(Event{
 					Kind: EventManifestError,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/parser"
 	"github.com/samber/oops"
 )
@@ -16,7 +17,7 @@ const (
 )
 
 // Generate creates a manifest by walking the output directory and parsing files.
-func Generate(_ context.Context, cfg *config.Config) error {
+func Generate(_ context.Context, cfg *config.Config, lock *lockfile.LockFile) error {
 	outputDir := cfg.Output
 	m := New()
 
@@ -34,13 +35,19 @@ func Generate(_ context.Context, cfg *config.Config) error {
 			continue
 		}
 
+		dirName := sourceName
+		if sourceCfg.Out != "" {
+			dirName = sourceCfg.Out
+		}
+
 		collection := &Collection{
 			Name:     sourceName,
+			Dir:      dirName,
 			Type:     sourceCfg.Type,
 			Source:   resolveSourceLocation(sourceCfg),
 			Path:     sourceCfg.Path,
 			Ref:      sourceCfg.Ref,
-			LastSync: time.Now(),
+			LastSync: resolveLastSync(lock, sourceName),
 		}
 
 		var skipped int
@@ -158,4 +165,14 @@ func countLines(content []byte) int {
 		}
 	}
 	return count + 1
+}
+
+
+func resolveLastSync(lock *lockfile.LockFile, sourceName string) time.Time {
+	if lock != nil {
+		if entry := lock.GetEntry(sourceName); entry != nil {
+			return entry.SyncedAt
+		}
+	}
+	return time.Now()
 }

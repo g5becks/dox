@@ -24,6 +24,7 @@ type Manifest struct {
 
 type Collection struct {
 	Name      string     `json:"name"`
+	Dir       string     `json:"dir"`
 	Type      string     `json:"type"`
 	Source    string     `json:"source"`
 	Path      string     `json:"path,omitempty"`

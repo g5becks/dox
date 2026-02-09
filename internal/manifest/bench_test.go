@@ -17,7 +17,7 @@ func BenchmarkManifestLoad100Files(b *testing.B) {
 	setupBenchmarkFiles(b, doxDir, 100)
 
 	cfg := &config.Config{Output: doxDir}
-	if err := manifest.Generate(context.Background(), cfg); err != nil {
+	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
 		b.Fatalf("generate failed: %v", err)
 	}
 
@@ -36,7 +36,7 @@ func BenchmarkManifestLoad1000Files(b *testing.B) {
 	setupBenchmarkFiles(b, doxDir, 1000)
 
 	cfg := &config.Config{Output: doxDir}
-	if err := manifest.Generate(context.Background(), cfg); err != nil {
+	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
 		b.Fatalf("generate failed: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func BenchmarkManifestGenerate100Files(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		if err := manifest.Generate(context.Background(), cfg); err != nil {
+		if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
 			b.Fatalf("generate failed: %v", err)
 		}
 	}
