@@ -100,6 +100,25 @@ excludes = [
 ]
 
 # ============================================================================
+# QUERY COMMAND DEFAULTS (used by: dox collections, dox files, dox cat, dox outline)
+# ============================================================================
+# [display]
+# Number of files to show in 'dox files' (0 = all)
+# default_limit = 50
+#
+# Maximum length for file descriptions
+# description_length = 200
+#
+# Show line numbers in 'dox cat' by default
+# line_numbers = true
+#
+# Default output format: table, json, csv
+# format = "table"
+#
+# Default fields for 'dox files' table
+# list_fields = ["path", "type", "lines", "size", "description"]
+
+# ============================================================================
 # SOURCES - Type is inferred from 'repo' or 'url' presence
 # ============================================================================
 
