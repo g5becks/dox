@@ -69,6 +69,12 @@ func (p *SyncPrinter) HandleEvent(e doxsync.Event) {
 
 	case doxsync.EventSourceDone:
 		p.handleDone(e)
+
+	case doxsync.EventManifestError:
+		fmt.Fprintf(p.w, "%s manifest generation failed: %v\n",
+			p.s.yellow.Sprint("⚠"),
+			e.Err,
+		)
 	}
 }
 

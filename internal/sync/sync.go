@@ -13,6 +13,7 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/lockfile"
+	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/source"
 )
 
@@ -34,6 +35,7 @@ type EventKind int
 const (
 	EventSourceStart EventKind = iota
 	EventSourceDone
+	EventManifestError
 )
 
 // Event is emitted during sync to report per-source progress.
@@ -143,6 +145,16 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	if !opts.DryRun {
 		if saveErr := lock.Save(outputDir); saveErr != nil {
 			return nil, saveErr
+		}
+
+		// Generate manifest (non-fatal)
+		if genErr := manifest.Generate(ctx, cfg); genErr != nil {
+			if opts.OnEvent != nil {
+				opts.OnEvent(Event{
+					Kind: EventManifestError,
+					Err:  genErr,
+				})
+			}
 		}
 	}
 
