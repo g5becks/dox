@@ -154,7 +154,10 @@ func resolveSourceLocation(src config.Source) string {
 	if src.Repo != "" {
 		return src.Repo
 	}
-	return src.URL
+	if src.URL != "" {
+		return src.URL
+	}
+	return "unknown"
 }
 
 func countLines(content []byte) int {
