@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/g5becks/dox/internal/config"
@@ -187,21 +188,9 @@ func formatWithLineNumber(lineNum int, content string) string {
 }
 
 func padLeft(num, width int) string {
-	s := intToString(num)
+	s := strconv.Itoa(num)
 	if len(s) >= width {
 		return s
 	}
 	return strings.Repeat(" ", width-len(s)) + s
-}
-
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var result []byte
-	for n > 0 {
-		result = append([]byte{byte('0' + n%10)}, result...)
-		n /= 10
-	}
-	return string(result)
 }

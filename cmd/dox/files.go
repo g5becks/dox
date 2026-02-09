@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/g5becks/dox/internal/config"
@@ -206,7 +207,7 @@ func outputFilesTable(files []manifest.FileInfo, fields []string, descLength int
 	t.Render()
 
 	if limited {
-		_, _ = os.Stdout.WriteString("\n(showing " + intToString(len(files)) + " of " + intToString(total) + " files, use --all to show all)\n")
+		_, _ = os.Stdout.WriteString("\n(showing " + strconv.Itoa(len(files)) + " of " + strconv.Itoa(total) + " files, use --all to show all)\n")
 	}
 
 	return nil
@@ -219,7 +220,7 @@ func getFieldValue(file manifest.FileInfo, field string, descLength int) string 
 	case "type":
 		return file.Type
 	case "lines":
-		return intToString(file.Lines)
+		return strconv.Itoa(file.Lines)
 	case "size":
 		return formatSize(file.Size)
 	case "description":
