@@ -189,6 +189,7 @@ func newRootCommand() *cli.Command {
 			newFilesCommand(),
 			newCatCommand(),
 			newOutlineCommand(),
+			newSearchCommand(),
 		},
 	}
 }
