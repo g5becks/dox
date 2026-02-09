@@ -101,7 +101,7 @@ func TestLoadNonExistent(t *testing.T) {
 
 func TestLoadCorrupted(t *testing.T) {
 	dir := t.TempDir()
-	manifestPath := manifest.ManifestPath(dir)
+	manifestPath := manifest.Path(dir)
 
 	if err := os.WriteFile(manifestPath, []byte("invalid json{"), 0o600); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestSaveCreatesDirectory(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	manifestPath := manifest.ManifestPath(subdir)
+	manifestPath := manifest.Path(subdir)
 	if _, err := os.Stat(manifestPath); err != nil {
 		t.Errorf("Manifest file should exist at %q", manifestPath)
 	}
@@ -169,7 +169,7 @@ func TestAtomicWrite(t *testing.T) {
 	}
 
 	// Verify manifest.json exists
-	manifestPath := manifest.ManifestPath(dir)
+	manifestPath := manifest.Path(dir)
 	if _, statErr := os.Stat(manifestPath); statErr != nil {
 		t.Errorf("Manifest file should exist at %q", manifestPath)
 	}

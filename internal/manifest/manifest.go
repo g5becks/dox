@@ -56,7 +56,7 @@ func New() *Manifest {
 }
 
 func Load(outputDir string) (*Manifest, error) {
-	manifestPath := ManifestPath(outputDir)
+	manifestPath := Path(outputDir)
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -112,7 +112,7 @@ func (m *Manifest) Save(outputDir string) error {
 	}
 
 	data = append(data, '\n')
-	manifestPath := ManifestPath(outputDir)
+	manifestPath := Path(outputDir)
 
 	tempFile, err := os.CreateTemp(outputDir, ManifestFile+".*.tmp")
 	if err != nil {
@@ -153,6 +153,6 @@ func (m *Manifest) Save(outputDir string) error {
 	return nil
 }
 
-func ManifestPath(outputDir string) string {
+func Path(outputDir string) string {
 	return filepath.Join(outputDir, ManifestFile)
 }
