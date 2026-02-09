@@ -65,7 +65,7 @@ func Content(m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error)
 	}
 	sort.Strings(names)
 
-	var results []ContentResult
+	results := make([]ContentResult, 0)
 	for _, name := range names {
 		if opts.Collection != "" && name != opts.Collection {
 			continue
