@@ -12,6 +12,23 @@ import (
 	"github.com/g5becks/dox/internal/search"
 )
 
+func BenchmarkBuildIndex700Files(b *testing.B) {
+	m := buildBenchmarkManifest(700)
+
+	b.ResetTimer()
+	for b.Loop() {
+		// Use a nonsense query to isolate index-building cost.
+		// Fuzzy matching returns immediately with 0 results for gibberish.
+		_, err := search.Metadata(m, search.MetadataOptions{
+			Query: "zzzxqqjjj",
+			Limit: 0,
+		})
+		if err != nil {
+			b.Fatalf("search failed: %v", err)
+		}
+	}
+}
+
 func BenchmarkMetadataSearch700Files(b *testing.B) {
 	m := buildBenchmarkManifest(700)
 
