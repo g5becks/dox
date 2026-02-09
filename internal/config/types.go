@@ -85,11 +85,20 @@ func DefaultExcludes() []string {
 	}
 }
 
+type Display struct {
+	DefaultLimit      int      `koanf:"default_limit"`
+	DescriptionLength int      `koanf:"description_length"`
+	LineNumbers       bool     `koanf:"line_numbers"`
+	Format            string   `koanf:"format"            validate:"omitempty,oneof=table json csv"`
+	ListFields        []string `koanf:"list_fields"`
+}
+
 type Config struct {
 	Output      string            `koanf:"output"       validate:"omitempty,dirpath"`
 	GitHubToken string            `koanf:"github_token"`
 	MaxParallel int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
 	Excludes    []string          `koanf:"excludes"`
+	Display     Display           `koanf:"display"`
 	Sources     map[string]Source `koanf:"sources"      validate:"required,dive"`
 	ConfigDir   string            `koanf:"-"`
 }
@@ -145,6 +154,20 @@ func mergeExcludes(global, source []string) []string {
 func (c *Config) ApplyDefaults() {
 	if c.Output == "" {
 		c.Output = DefaultOutput
+	}
+
+	// Apply display defaults
+	if c.Display.DefaultLimit == 0 {
+		c.Display.DefaultLimit = 50
+	}
+	if c.Display.DescriptionLength == 0 {
+		c.Display.DescriptionLength = 200
+	}
+	if c.Display.Format == "" {
+		c.Display.Format = "table"
+	}
+	if len(c.Display.ListFields) == 0 {
+		c.Display.ListFields = []string{"path", "type", "lines", "size", "description"}
 	}
 
 	for sourceName, sourceCfg := range c.Sources {
@@ -223,6 +246,27 @@ func normalizeGitType(host string) string {
 
 func (c *Config) Validate() error {
 	v := newValidator()
+
+	// Validate Display config
+	if err := v.Struct(c.Display); err != nil {
+		var validationErrors validator.ValidationErrors
+		if errors.As(err, &validationErrors) {
+			for _, fe := range validationErrors {
+				field := strings.ToLower(fe.Field())
+				if fe.Tag() == "oneof" && field == "format" {
+					return oops.
+						Code("CONFIG_INVALID").
+						With("field", "display.format").
+						With("value", c.Display.Format).
+						Hint("Supported formats: table, json, csv").
+						Errorf("invalid display format %q", c.Display.Format)
+				}
+			}
+		}
+		return oops.
+			Code("CONFIG_INVALID").
+			Wrapf(err, "validating display config")
+	}
 
 	for sourceName, sourceCfg := range c.Sources {
 		// Validate that source has either repo or url (not both, not neither)

@@ -364,6 +364,100 @@ exclude = ["*.jpg"]
 	}
 }
 
+func TestLoadConfigWithDisplaySection(t *testing.T) {
+	tests := []struct {
+		name        string
+		configTOML  string
+		wantDisplay config.Display
+	}{
+		{
+			name: "config with full display section",
+			configTOML: `
+[display]
+default_limit = 100
+description_length = 300
+line_numbers = true
+format = "json"
+list_fields = ["path", "type"]
+
+[sources.test]
+repo = "owner/repo"
+path = "docs"
+`,
+			wantDisplay: config.Display{
+				DefaultLimit:      100,
+				DescriptionLength: 300,
+				LineNumbers:       true,
+				Format:            "json",
+				ListFields:        []string{"path", "type"},
+			},
+		},
+		{
+			name: "config without display section gets defaults",
+			configTOML: `
+[sources.test]
+repo = "owner/repo"
+path = "docs"
+`,
+			wantDisplay: config.Display{
+				DefaultLimit:      50,
+				DescriptionLength: 200,
+				LineNumbers:       false,
+				Format:            "table",
+				ListFields:        []string{"path", "type", "lines", "size", "description"},
+			},
+		},
+		{
+			name: "config with partial display section",
+			configTOML: `
+[display]
+default_limit = 25
+format = "csv"
+
+[sources.test]
+repo = "owner/repo"
+path = "docs"
+`,
+			wantDisplay: config.Display{
+				DefaultLimit:      25,
+				DescriptionLength: 200,
+				LineNumbers:       false,
+				Format:            "csv",
+				ListFields:        []string{"path", "type", "lines", "size", "description"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "dox.toml")
+			writeFile(t, configPath, tt.configTOML)
+
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+
+			if cfg.Display.DefaultLimit != tt.wantDisplay.DefaultLimit {
+				t.Errorf("DefaultLimit = %d, want %d", cfg.Display.DefaultLimit, tt.wantDisplay.DefaultLimit)
+			}
+			if cfg.Display.DescriptionLength != tt.wantDisplay.DescriptionLength {
+				t.Errorf("DescriptionLength = %d, want %d", cfg.Display.DescriptionLength, tt.wantDisplay.DescriptionLength)
+			}
+			if cfg.Display.LineNumbers != tt.wantDisplay.LineNumbers {
+				t.Errorf("LineNumbers = %v, want %v", cfg.Display.LineNumbers, tt.wantDisplay.LineNumbers)
+			}
+			if cfg.Display.Format != tt.wantDisplay.Format {
+				t.Errorf("Format = %q, want %q", cfg.Display.Format, tt.wantDisplay.Format)
+			}
+			if !reflect.DeepEqual(cfg.Display.ListFields, tt.wantDisplay.ListFields) {
+				t.Errorf("ListFields = %v, want %v", cfg.Display.ListFields, tt.wantDisplay.ListFields)
+			}
+		})
+	}
+}
+
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 

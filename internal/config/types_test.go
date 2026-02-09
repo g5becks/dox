@@ -279,3 +279,146 @@ func TestApplyDefaultsPatterns(t *testing.T) {
 		t.Errorf("url-source Patterns = %v, want nil", urlPatterns)
 	}
 }
+
+func TestApplyDefaultsDisplay(t *testing.T) {
+	tests := []struct {
+		name    string
+		display Display
+		want    Display
+	}{
+		{
+			name:    "empty display gets all defaults",
+			display: Display{},
+			want: Display{
+				DefaultLimit:      50,
+				DescriptionLength: 200,
+				LineNumbers:       false,
+				Format:            "table",
+				ListFields:        []string{"path", "type", "lines", "size", "description"},
+			},
+		},
+		{
+			name: "partial display gets defaults for missing fields",
+			display: Display{
+				DefaultLimit: 100,
+				Format:       "json",
+			},
+			want: Display{
+				DefaultLimit:      100,
+				DescriptionLength: 200,
+				LineNumbers:       false,
+				Format:            "json",
+				ListFields:        []string{"path", "type", "lines", "size", "description"},
+			},
+		},
+		{
+			name: "explicit values are preserved",
+			display: Display{
+				DefaultLimit:      25,
+				DescriptionLength: 150,
+				LineNumbers:       true,
+				Format:            "csv",
+				ListFields:        []string{"path", "type"},
+			},
+			want: Display{
+				DefaultLimit:      25,
+				DescriptionLength: 150,
+				LineNumbers:       true,
+				Format:            "csv",
+				ListFields:        []string{"path", "type"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Display: tt.display,
+				Sources: map[string]Source{
+					"test": {
+						Repo: "owner/repo",
+						Path: "docs",
+					},
+				},
+			}
+
+			cfg.ApplyDefaults()
+
+			if cfg.Display.DefaultLimit != tt.want.DefaultLimit {
+				t.Errorf("DefaultLimit = %d, want %d", cfg.Display.DefaultLimit, tt.want.DefaultLimit)
+			}
+			if cfg.Display.DescriptionLength != tt.want.DescriptionLength {
+				t.Errorf("DescriptionLength = %d, want %d", cfg.Display.DescriptionLength, tt.want.DescriptionLength)
+			}
+			if cfg.Display.LineNumbers != tt.want.LineNumbers {
+				t.Errorf("LineNumbers = %v, want %v", cfg.Display.LineNumbers, tt.want.LineNumbers)
+			}
+			if cfg.Display.Format != tt.want.Format {
+				t.Errorf("Format = %q, want %q", cfg.Display.Format, tt.want.Format)
+			}
+			if !reflect.DeepEqual(cfg.Display.ListFields, tt.want.ListFields) {
+				t.Errorf("ListFields = %v, want %v", cfg.Display.ListFields, tt.want.ListFields)
+			}
+		})
+	}
+}
+
+func TestValidateDisplayFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		format  string
+		wantErr bool
+	}{
+		{
+			name:    "valid format table",
+			format:  "table",
+			wantErr: false,
+		},
+		{
+			name:    "valid format json",
+			format:  "json",
+			wantErr: false,
+		},
+		{
+			name:    "valid format csv",
+			format:  "csv",
+			wantErr: false,
+		},
+		{
+			name:    "invalid format xml",
+			format:  "xml",
+			wantErr: true,
+		},
+		{
+			name:    "invalid format yaml",
+			format:  "yaml",
+			wantErr: true,
+		},
+		{
+			name:    "empty format is valid (gets default)",
+			format:  "",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Display: Display{
+					Format: tt.format,
+				},
+				Sources: map[string]Source{
+					"test": {
+						Repo: "owner/repo",
+						Path: "docs",
+					},
+				},
+			}
+
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
