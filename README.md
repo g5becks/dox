@@ -286,6 +286,71 @@ Output shows line numbers alongside:
 - TypeScript/TSX: Exported functions, classes, types
 - Text files: First line description
 
+### Search
+
+Search across documentation metadata or file contents to discover relevant docs without guessing paths.
+
+#### Metadata Search (Default)
+
+Fuzzy search across file paths, descriptions, headings, and exports:
+
+```bash
+# Search all collections
+dox search "installation"
+
+# Search specific collection
+dox search "hooks" --collection react
+
+# Limit results
+dox search "config" --limit 10
+
+# JSON output
+dox search "api" --json
+
+# CSV output
+dox search "guide" --format csv
+```
+
+Metadata search returns:
+- Collection name
+- File path
+- File type
+- Match field (path, description, heading, or export)
+- Fuzzy match score
+- File description
+
+#### Content Search
+
+Search within file contents using literal or regex patterns:
+
+```bash
+# Literal search (case-insensitive)
+dox search "useState" --content
+
+# Search specific collection
+dox search "configuration" --content --collection goreleaser
+
+# Regex search
+dox search "func.*Logger" --content --regex
+
+# Limit results
+dox search "import" --content --limit 20
+```
+
+Content search returns:
+- Collection name
+- File path
+- Line number (1-based)
+- Matching line text
+
+#### Search Behavior
+
+- **Metadata mode**: Fuzzy matches across paths, descriptions, headings, and TypeScript exports
+- **Content mode**: Searches actual file contents (skips binary files and files >50MB)
+- **Regex mode**: Requires `--content` flag, uses case-insensitive patterns
+- **Collection filter**: Restricts search to a single collection
+- **Limit**: `0` means unlimited (default uses config `default_limit`)
+
 ### AI Agent Integration
 
 Query commands are designed for AI agents and automation:
@@ -294,7 +359,8 @@ Query commands are designed for AI agents and automation:
 # Agent workflow example
 dox sync                                    # Ensure docs are current
 dox collections --json                      # Discover available docs
-dox files react --json --limit 100          # Find relevant files
+dox search "authentication" --json          # Find relevant topics
+dox files react --json --limit 100          # Browse collection files
 dox cat react docs/hooks.md                 # Read specific content
 ```
 
