@@ -298,12 +298,33 @@ func TestMetadata_EmptyManifest(t *testing.T) {
 	}
 }
 
+func TestMetadata_NoResults(t *testing.T) {
+	t.Parallel()
+	m := buildTestManifest()
+
+	results, err := search.Metadata(m, search.MetadataOptions{
+		Query: "xyzzynonexistent",
+		Limit: 0,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for nonsense query, got %d", len(results))
+		for _, r := range results {
+			t.Logf("  result: collection=%s path=%s score=%d", r.Collection, r.Path, r.Score)
+		}
+	}
+}
+
 func TestMetadata_ScoreOrdering(t *testing.T) {
 	t.Parallel()
 	m := buildTestManifest()
 
 	results, err := search.Metadata(m, search.MetadataOptions{
-		Query: "config",
+		Query: "md",
 		Limit: 0,
 	})
 
@@ -312,7 +333,7 @@ func TestMetadata_ScoreOrdering(t *testing.T) {
 	}
 
 	if len(results) < 2 {
-		t.Skip("need at least 2 results to test ordering")
+		t.Fatalf("expected at least 2 results to validate ordering, got %d", len(results))
 	}
 
 	for i := 1; i < len(results); i++ {
