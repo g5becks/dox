@@ -43,6 +43,8 @@ func Generate(_ context.Context, cfg *config.Config) error {
 			LastSync: time.Now(),
 		}
 
+		var skipped int
+
 		err := filepath.WalkDir(sourceDir, func(path string, d os.DirEntry, walkErr error) error {
 			if walkErr != nil || d.IsDir() {
 				return walkErr
@@ -55,7 +57,8 @@ func Generate(_ context.Context, cfg *config.Config) error {
 			relPath, _ := filepath.Rel(sourceDir, path)
 			fileInfo, parseErr := parseFile(path, relPath, parsers)
 			if parseErr != nil {
-				return nil
+				skipped++
+				return nil //nolint:nilerr // intentionally skip unparseable files (binary, etc.)
 			}
 
 			collection.Files = append(collection.Files, *fileInfo)
@@ -71,6 +74,7 @@ func Generate(_ context.Context, cfg *config.Config) error {
 		}
 
 		collection.FileCount = len(collection.Files)
+		collection.Skipped = skipped
 		m.Collections[sourceName] = collection
 	}
 

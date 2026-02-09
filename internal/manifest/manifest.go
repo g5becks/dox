@@ -31,6 +31,7 @@ type Collection struct {
 	LastSync  time.Time  `json:"last_sync"`
 	FileCount int        `json:"file_count"`
 	TotalSize int64      `json:"total_size"`
+	Skipped   int        `json:"skipped,omitempty"`
 	Files     []FileInfo `json:"files"`
 }
 
