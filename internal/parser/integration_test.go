@@ -50,10 +50,10 @@ func TestCrossParserIntegration(t *testing.T) {
 	}
 
 	parsers := []parser.Parser{
-		&parser.MarkdownParser{},
-		&parser.MDXParser{},
-		&parser.TextParser{},
-		&parser.TypeScriptParser{},
+		parser.NewMarkdownParser(),
+		parser.NewMDXParser(),
+		parser.NewTextParser(),
+		parser.NewTypeScriptParser(),
 	}
 
 	for _, tt := range tests {
@@ -101,10 +101,10 @@ func TestAllParsersWithEmptyFiles(t *testing.T) {
 		parser parser.Parser
 		path   string
 	}{
-		{"markdown", &parser.MarkdownParser{}, "empty.md"},
-		{"mdx", &parser.MDXParser{}, "empty.mdx"},
-		{"text", &parser.TextParser{}, "empty.txt"},
-		{"typescript", &parser.TypeScriptParser{}, "empty.tsx"},
+		{"markdown", parser.NewMarkdownParser(), "empty.md"},
+		{"mdx", parser.NewMDXParser(), "empty.mdx"},
+		{"text", parser.NewTextParser(), "empty.txt"},
+		{"typescript", parser.NewTypeScriptParser(), "empty.tsx"},
 	}
 
 	for _, tt := range parsers {
@@ -135,8 +135,8 @@ This is test content.
 More content here.
 `
 
-	mdParser := &parser.MarkdownParser{}
-	mdxParser := &parser.MDXParser{}
+	mdParser := parser.NewMarkdownParser()
+	mdxParser := parser.NewMDXParser()
 
 	mdResult, err := mdParser.Parse("test.md", []byte(content))
 	if err != nil {
@@ -171,7 +171,7 @@ func TestTSXDocVsCodeComponent(t *testing.T) {
 		t.Fatalf("failed to read code component: %v", err)
 	}
 
-	tsParser := &parser.TypeScriptParser{}
+	tsParser := parser.NewTypeScriptParser()
 
 	docResult, err := tsParser.Parse("doc.tsx", docContent)
 	if err != nil {
@@ -206,10 +206,10 @@ func TestParserRoundTrip(t *testing.T) {
 	}
 
 	parsers := []parser.Parser{
-		&parser.MarkdownParser{},
-		&parser.MDXParser{},
-		&parser.TextParser{},
-		&parser.TypeScriptParser{},
+		parser.NewMarkdownParser(),
+		parser.NewMDXParser(),
+		parser.NewTextParser(),
+		parser.NewTypeScriptParser(),
 	}
 
 	for _, file := range testFiles {
