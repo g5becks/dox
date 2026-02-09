@@ -16,7 +16,16 @@ func BenchmarkManifestLoad100Files(b *testing.B) {
 	doxDir := filepath.Join(tmpDir, ".dox")
 	setupBenchmarkFiles(b, doxDir, 100)
 
-	cfg := &config.Config{Output: doxDir}
+	cfg := &config.Config{
+		Output: doxDir,
+		Sources: map[string]config.Source{
+			"bench": {
+				Type: "github",
+				Repo: "test/test",
+				Path: "docs",
+			},
+		},
+	}
 	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
 		b.Fatalf("generate failed: %v", err)
 	}
@@ -35,7 +44,16 @@ func BenchmarkManifestLoad1000Files(b *testing.B) {
 	doxDir := filepath.Join(tmpDir, ".dox")
 	setupBenchmarkFiles(b, doxDir, 1000)
 
-	cfg := &config.Config{Output: doxDir}
+	cfg := &config.Config{
+		Output: doxDir,
+		Sources: map[string]config.Source{
+			"bench": {
+				Type: "github",
+				Repo: "test/test",
+				Path: "docs",
+			},
+		},
+	}
 	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
 		b.Fatalf("generate failed: %v", err)
 	}
@@ -54,7 +72,16 @@ func BenchmarkManifestGenerate100Files(b *testing.B) {
 	doxDir := filepath.Join(tmpDir, ".dox")
 	setupBenchmarkFiles(b, doxDir, 100)
 
-	cfg := &config.Config{Output: doxDir}
+	cfg := &config.Config{
+		Output: doxDir,
+		Sources: map[string]config.Source{
+			"bench": {
+				Type: "github",
+				Repo: "test/test",
+				Path: "docs",
+			},
+		},
+	}
 
 	b.ResetTimer()
 	for b.Loop() {
