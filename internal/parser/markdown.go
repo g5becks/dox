@@ -8,6 +8,11 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 )
 
+const (
+	setextH1Level = 1
+	setextH2Level = 2
+)
+
 type MarkdownParser struct{}
 
 func NewMarkdownParser() *MarkdownParser {
@@ -52,7 +57,17 @@ func extractMarkdownContent(doc ast.Node, original, body []byte) ([]Heading, str
 		}
 
 		if heading, isHeading := node.(*ast.Heading); isHeading {
-			processHeading(heading, original, body, &headings, &firstH1Text, &foundH1)
+			text := extractText(heading)
+			if text != "" {
+				headings = append(headings, Heading{
+					Level: heading.Level,
+					Text:  text,
+				})
+				if heading.Level == 1 && firstH1Text == "" {
+					firstH1Text = text
+					foundH1 = true
+				}
+			}
 		} else if para, isPara := node.(*ast.Paragraph); isPara {
 			processParagraph(para, &firstParagraph, &paragraphAfterH1, foundH1)
 		}
@@ -60,25 +75,10 @@ func extractMarkdownContent(doc ast.Node, original, body []byte) ([]Heading, str
 		return ast.GoToNext
 	})
 
+	// Compute frontmatter line count so heading line numbers reflect the full file
+	fmLineOffset := bytes.Count(original[:len(original)-len(body)], []byte("\n"))
+	assignHeadingLineNumbers(headings, body, fmLineOffset)
 	return headings, firstH1Text, firstParagraph, paragraphAfterH1
-}
-
-func processHeading(n *ast.Heading, original, body []byte, headings *[]Heading, firstH1 *string, foundH1 *bool) {
-	text := extractText(n)
-	if text == "" {
-		return
-	}
-
-	*headings = append(*headings, Heading{
-		Level: n.Level,
-		Text:  text,
-		Line:  countLines(original, body, n),
-	})
-
-	if n.Level == 1 && *firstH1 == "" {
-		*firstH1 = text
-		*foundH1 = true
-	}
 }
 
 func processParagraph(n *ast.Paragraph, firstPara, paraAfterH1 *string, foundH1 bool) {
@@ -111,16 +111,94 @@ func extractText(node ast.Node) string {
 	return text
 }
 
-func countLines(original, body []byte, node ast.Node) int {
-	offset := len(original) - len(body)
-	container := node.AsContainer()
-	if container != nil && container.Literal != nil {
-		pos := bytes.Index(body, container.Literal)
-		if pos != -1 {
-			return bytes.Count(original[:offset+pos], []byte("\n")) + 1
+// assignHeadingLineNumbers scans content for heading markers and assigns
+// the correct line number to each heading in document order.
+// This is necessary because gomarkdown's AST does not store source positions.
+func assignHeadingLineNumbers(headings []Heading, content []byte, lineOffset int) {
+	if len(headings) == 0 {
+		return
+	}
+
+	lines := bytes.Split(content, []byte("\n"))
+	hi := 0
+	inFenced := false
+
+	for lineIdx := 0; lineIdx < len(lines) && hi < len(headings); lineIdx++ {
+		line := lines[lineIdx]
+		trimmed := bytes.TrimSpace(line)
+
+		if isFenceMarker(trimmed) {
+			inFenced = !inFenced
+			continue
+		}
+		if inFenced {
+			continue
+		}
+
+		if level := atxHeadingLevel(line); level == headings[hi].Level {
+			headings[hi].Line = lineOffset + lineIdx + 1
+			hi++
+			continue
+		}
+
+		if level := setextHeadingLevel(lines, lineIdx, trimmed); level == headings[hi].Level {
+			headings[hi].Line = lineOffset + lineIdx + 1
+			hi++
 		}
 	}
-	return 1
+}
+
+func isFenceMarker(trimmed []byte) bool {
+	return bytes.HasPrefix(trimmed, []byte("```")) || bytes.HasPrefix(trimmed, []byte("~~~"))
+}
+
+// atxHeadingLevel returns the heading level (1-6) for an ATX heading line,
+// or 0 if the line is not an ATX heading.
+func atxHeadingLevel(line []byte) int {
+	spaces := 0
+	for spaces < len(line) && spaces < 4 && line[spaces] == ' ' {
+		spaces++
+	}
+	if spaces >= 4 || spaces >= len(line) || line[spaces] != '#' {
+		return 0
+	}
+
+	level := 0
+	for spaces+level < len(line) && level < 7 && line[spaces+level] == '#' {
+		level++
+	}
+	if level >= 1 && level <= 6 && spaces+level < len(line) && line[spaces+level] == ' ' {
+		return level
+	}
+	return 0
+}
+
+// setextHeadingLevel returns the heading level for setext-style headings
+// (1 for === underline, 2 for --- underline), or 0 if not a setext heading.
+func setextHeadingLevel(lines [][]byte, lineIdx int, trimmed []byte) int {
+	if lineIdx+1 >= len(lines) || len(trimmed) == 0 {
+		return 0
+	}
+	nextTrimmed := bytes.TrimSpace(lines[lineIdx+1])
+	if allSameChar(nextTrimmed, '=') {
+		return setextH1Level
+	}
+	if allSameChar(nextTrimmed, '-') {
+		return setextH2Level
+	}
+	return 0
+}
+
+func allSameChar(b []byte, ch byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	for _, c := range b {
+		if c != ch {
+			return false
+		}
+	}
+	return true
 }
 
 func buildDescription(fmTitle, fmDesc, firstH1, paragraphAfterH1, firstParagraph string) string {

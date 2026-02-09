@@ -8,10 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/g5becks/dox/internal/config"
-	"github.com/g5becks/dox/internal/manifest"
 	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
+
+	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/manifest"
 )
 
 func newCatCommand() *cli.Command {

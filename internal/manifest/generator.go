@@ -6,14 +6,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/samber/oops"
+
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/parser"
-	"github.com/samber/oops"
 )
 
 const (
-	maxParseSize = 50 * 1024 * 1024 // 50MB
+	maxParseSize    = 50 * 1024 * 1024 // 50MB
+	unknownFileType = "unknown"
 )
 
 // Generate creates a manifest by walking the output directory and parsing files.
@@ -102,7 +104,7 @@ func parseFile(absPath string, relPath string, parsers []parser.Parser) (*FileIn
 
 	if stat.Size() > maxParseSize {
 		fileInfo.Warning = "file_too_large"
-		fileInfo.Type = "unknown"
+		fileInfo.Type = unknownFileType
 		return fileInfo, nil
 	}
 
@@ -124,7 +126,7 @@ func parseFile(absPath string, relPath string, parsers []parser.Parser) (*FileIn
 	}
 
 	if matchedParser == nil {
-		fileInfo.Type = "unknown"
+		fileInfo.Type = unknownFileType
 		fileInfo.Lines = countLines(content)
 		return fileInfo, nil
 	}
@@ -157,7 +159,7 @@ func resolveSourceLocation(src config.Source) string {
 	if src.URL != "" {
 		return src.URL
 	}
-	return "unknown"
+	return unknownFileType
 }
 
 func countLines(content []byte) int {
@@ -169,7 +171,6 @@ func countLines(content []byte) int {
 	}
 	return count + 1
 }
-
 
 func resolveLastSync(lock *lockfile.LockFile, sourceName string) time.Time {
 	if lock != nil {

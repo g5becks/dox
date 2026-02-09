@@ -218,7 +218,6 @@ func TestTypeScriptParser_HeadingExtraction(t *testing.T) {
 	}
 }
 
-
 func TestTypeScriptParser_DuplicateHeadingLineNumbers(t *testing.T) {
 	t.Parallel()
 

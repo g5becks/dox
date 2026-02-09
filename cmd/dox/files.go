@@ -8,11 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/g5becks/dox/internal/config"
-	"github.com/g5becks/dox/internal/manifest"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
+
+	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/manifest"
 )
 
 func newFilesCommand() *cli.Command {

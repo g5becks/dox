@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/g5becks/dox/internal/parser"
 	"github.com/samber/oops"
+
+	"github.com/g5becks/dox/internal/parser"
 )
 
 const (

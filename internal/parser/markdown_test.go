@@ -150,6 +150,7 @@ func TestMarkdownParser_ParseHeadingLevels(t *testing.T) {
 
 	expectedLevels := []int{1, 2, 3}
 	expectedTexts := []string{"Level 1", "Level 2", "Level 3"}
+	expectedLines := []int{1, 2, 3}
 
 	if len(result.Outline.Headings) != len(expectedLevels) {
 		t.Fatalf("Headings count = %d, want %d", len(result.Outline.Headings), len(expectedLevels))
@@ -162,5 +163,67 @@ func TestMarkdownParser_ParseHeadingLevels(t *testing.T) {
 		if heading.Text != expectedTexts[i] {
 			t.Errorf("Heading[%d].Text = %q, want %q", i, heading.Text, expectedTexts[i])
 		}
+		if heading.Line != expectedLines[i] {
+			t.Errorf("Heading[%d].Line = %d, want %d", i, heading.Line, expectedLines[i])
+		}
+	}
+}
+
+func TestMarkdownParser_HeadingLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	p := parser.NewMarkdownParser()
+
+	tests := []struct {
+		name      string
+		content   string
+		wantLines []int
+	}{
+		{
+			name:      "ATX headings with blank lines",
+			content:   "# Title\n\nSome text.\n\n## Section\n\n### Sub",
+			wantLines: []int{1, 5, 7},
+		},
+		{
+			name:      "frontmatter offsets line numbers",
+			content:   "---\ntitle: Test\n---\n\n## Query Basics\n\n### Details",
+			wantLines: []int{5, 7},
+		},
+		{
+			name:      "setext headings",
+			content:   "Title\n=====\n\nSection\n------\n\n### ATX",
+			wantLines: []int{1, 4, 7},
+		},
+		{
+			name:      "headings inside code blocks ignored",
+			content:   "# Real\n\n```\n# Fake\n```\n\n## Also Real",
+			wantLines: []int{1, 7},
+		},
+		{
+			name:      "frontmatter dashes not matched as setext",
+			content:   "---\ntitle: Queries\n---\n\n## Section",
+			wantLines: []int{5},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := p.Parse("test.md", []byte(tt.content))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			if len(result.Outline.Headings) != len(tt.wantLines) {
+				t.Fatalf("Headings count = %d, want %d", len(result.Outline.Headings), len(tt.wantLines))
+			}
+
+			for i, heading := range result.Outline.Headings {
+				if heading.Line != tt.wantLines[i] {
+					t.Errorf("Heading[%d] %q: Line = %d, want %d", i, heading.Text, heading.Line, tt.wantLines[i])
+				}
+			}
+		})
 	}
 }

@@ -278,10 +278,11 @@ Show document structure (headings for markdown/MDX, exports for TypeScript):
 
 ```bash
 dox outline goreleaser docs/install.md
+dox outline goreleaser docs/install.md --json
 ```
 
-Output shows:
-- Markdown/MDX: Heading hierarchy with levels
+Output shows line numbers alongside:
+- Markdown/MDX: Heading hierarchy with levels and indentation
 - TypeScript/TSX: Exported functions, classes, types
 - Text files: First line description
 
