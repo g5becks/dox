@@ -186,6 +186,7 @@ func newRootCommand() *cli.Command {
 			newCleanCommand(),
 			newInitCommand(),
 			newCollectionsCommand(),
+			newCatCommand(),
 			newOutlineCommand(),
 		},
 	}
