@@ -1,7 +1,6 @@
 package manifest_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +17,7 @@ func TestGenerate_EmptyDirectory(t *testing.T) {
 		Sources: map[string]config.Source{},
 	}
 
-	err := manifest.Generate(context.Background(), cfg, nil)
+	err := manifest.Generate(t.Context(), cfg, nil)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -57,7 +56,7 @@ func TestGenerate_WithMarkdownFiles(t *testing.T) {
 		},
 	}
 
-	err := manifest.Generate(context.Background(), cfg, nil)
+	err := manifest.Generate(t.Context(), cfg, nil)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -129,7 +128,7 @@ func TestGenerate_MixedFileTypes(t *testing.T) {
 		},
 	}
 
-	err := manifest.Generate(context.Background(), cfg, nil)
+	err := manifest.Generate(t.Context(), cfg, nil)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}

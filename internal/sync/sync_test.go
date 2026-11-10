@@ -1,7 +1,6 @@
 package sync_test
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 )
 
 func TestRunWithNilConfigReturnsError(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	opts := sync.Options{}
 
 	_, err := sync.Run(ctx, nil, opts)

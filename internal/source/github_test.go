@@ -1,7 +1,6 @@
 package source_test
 
 import (
-	"context"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -66,7 +65,7 @@ func TestBuildFileMapFiltersByBaseAndPatterns(t *testing.T) {
 		},
 	}), "main")
 
-	result, err := src.Sync(context.Background(), t.TempDir(), nil, source.SyncOptions{DryRun: true})
+	result, err := src.Sync(t.Context(), t.TempDir(), nil, source.SyncOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -118,7 +117,7 @@ func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{DryRun: true})
+	result, err := src.Sync(t.Context(), t.TempDir(), prevLock, source.SyncOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -157,7 +156,7 @@ func TestSyncDirectorySkipsWhenTreeSHAUnchanged(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), t.TempDir(), prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -192,7 +191,7 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), destDir, prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), destDir, prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -232,7 +231,7 @@ func TestSyncSingleFileSkipsWhenSHAUnchanged(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), destDir, prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), destDir, prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}

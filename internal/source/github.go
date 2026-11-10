@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	neturl "net/url"
 	"os"
 	"path"
@@ -247,7 +248,7 @@ func (s *githubSource) syncDirectory(
 }
 
 func (s *githubSource) downloadFiles(ctx context.Context, destDir string, toDownload map[string]string) error {
-	for _, relativePath := range sortedKeys(toDownload) {
+	for _, relativePath := range slices.Sorted(maps.Keys(toDownload)) {
 		sha := toDownload[relativePath]
 		content, fetchErr := s.fetchBlobContent(ctx, sha)
 		if fetchErr != nil {
@@ -272,7 +273,7 @@ func (s *githubSource) downloadFiles(ctx context.Context, destDir string, toDown
 }
 
 func (s *githubSource) deleteStaleFiles(destDir string, toDelete map[string]struct{}) error {
-	for _, relativePath := range sortedKeys(toDelete) {
+	for _, relativePath := range slices.Sorted(maps.Keys(toDelete)) {
 		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
 		if removeErr := os.Remove(localPath); removeErr != nil && !os.IsNotExist(removeErr) {
 			return oops.
@@ -527,16 +528,6 @@ func diffDeletes(oldFiles map[string]string, newFiles map[string]string) map[str
 	}
 
 	return toDelete
-}
-
-func sortedKeys[T any](values map[string]T) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-
-	slices.Sort(keys)
-	return keys
 }
 
 func relativePathWithinBase(remotePath string, basePath string) (string, bool) {

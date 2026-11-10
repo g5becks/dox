@@ -249,8 +249,7 @@ func (c *Config) Validate() error {
 
 	// Validate Display config
 	if err := v.Struct(c.Display); err != nil {
-		var validationErrors validator.ValidationErrors
-		if errors.As(err, &validationErrors) {
+		if validationErrors, ok := errors.AsType[validator.ValidationErrors](err); ok {
 			for _, fe := range validationErrors {
 				field := strings.ToLower(fe.Field())
 				if fe.Tag() == "oneof" && field == "format" {

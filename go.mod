@@ -1,6 +1,8 @@
 module github.com/g5becks/dox
 
-go 1.25.7
+go 1.26.0
+
+toolchain go1.27.3
 
 tool (
 	github.com/evilmartians/lefthook/v2

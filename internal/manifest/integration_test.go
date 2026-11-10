@@ -1,7 +1,6 @@
 package manifest_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,7 +47,7 @@ func TestFullWorkflowIntegration(t *testing.T) {
 	}
 
 	// Generate manifest
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -120,7 +119,7 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 
 	// Generate
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -200,7 +199,7 @@ func TestMixedFileTypes(t *testing.T) {
 		},
 	}
 
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -254,7 +253,7 @@ func TestEmptyCollection(t *testing.T) {
 		},
 	}
 
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -309,7 +308,7 @@ Content here.
 		},
 	}
 
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
