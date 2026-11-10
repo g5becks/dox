@@ -1,0 +1,7 @@
+#!/bin/sh
+# Project-pinned beads CLI (tools/go.mod, v0.49.6 — the version that wrote .beads/).
+# CGO is disabled because v0.49.6's embedded SQL engine otherwise needs ICU headers.
+# --no-daemon keeps it from starting a background process. `bd sync` only exports
+# to .beads/issues.jsonl in this version; commit that file with your code.
+root=$(cd "$(dirname "$0")/.." && pwd)
+CGO_ENABLED=0 BEADS_NO_DAEMON=1 exec go tool -modfile="$root/tools/go.mod" bd --no-daemon "$@"

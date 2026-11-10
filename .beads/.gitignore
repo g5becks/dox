@@ -42,3 +42,6 @@ sync_base.jsonl
 # contributors to accidentally commit upstream issue databases.
 # The JSONL files (issues.jsonl, interactions.jsonl) and config files
 # are tracked by git by default since no pattern above ignores them.
+
+# Lock file created by bd v0.49.6 during JSONL writes
+.jsonl.lock
