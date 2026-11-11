@@ -79,7 +79,8 @@ while IFS= read -r version; do
   printf 'Running Linux checks (golang:%s)\n' "$line"
   if docker run --rm \
       --user "$(id -u):$(id -g)" \
-      -e GOENV=off -e GOMODCACHE=/go/pkg/mod -e GOCACHE=/cache \
+      -e GOENV=off -e GOPATH=/cache/gopath -e GOMODCACHE=/go/pkg/mod -e GOCACHE=/cache \
+      -e GOLANGCI_LINT_CACHE=/cache/golangci-lint \
       -v "$linux_dir:/w" -v "$HOME/go/pkg/mod:/go/pkg/mod" \
       -v "$build_cache:/cache" -w /w "golang:$line" \
       bash scripts/ci-check.sh >"$logs/linux-$line.log" 2>&1; then
