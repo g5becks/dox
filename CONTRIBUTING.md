@@ -15,9 +15,10 @@ go tool -modfile=tools/go.mod task build
 ./bin/dox --help
 ```
 
-Task, golangci-lint, Lefthook, GoReleaser, and goimports are pinned in
+Task, golangci-lint, Lefthook, GoReleaser, goimports, and govulncheck are pinned in
 `tools/go.mod`. Invoke them as `go tool -modfile=tools/go.mod <tool>` from the
-repository root. No global installation is needed. Beads v0.49.6 is isolated in
+repository root. Actionlint is pinned separately in `tools/actionlint/go.mod` to preserve its
+compatible YAML graph. No global installation is needed. Beads v0.49.6 is isolated in
 `tools/beads/go.mod`; always use `scripts/bd`. Its wrapper disables CGO and the
 daemon. [The tools guide](tools/README.md) explains the separate graphs.
 
@@ -57,6 +58,7 @@ go fix -diff ./...
 go mod tidy -diff
 (cd tools && go mod tidy -diff)
 (cd tools/beads && go mod tidy -diff)
+(cd tools/actionlint && go mod tidy -diff)
 ```
 
 Lint must report zero issues. Formatting, modernization, and tidy checks must
@@ -78,9 +80,13 @@ full lint and race tests. To run the push checks manually:
 go tool -modfile=tools/go.mod lefthook run pre-push
 ```
 
-The CI issue adds `scripts/ci-local.sh <ref>` as the local gate. Once present,
-require its final `RESULT: PASS`. It checks a clean clone, macOS host jobs, Linux
-Docker jobs, and Windows compilation/vet. Native Windows execution remains a
+`bash scripts/ci-local.sh <ref>` is the local gate; require its final
+`RESULT: PASS`. It checks clean clones with both supported Go versions, macOS
+host jobs, Linux Docker jobs, and Windows compilation/vet. Logs and result tables
+are saved under `/Users/takinprofit/Dev/dox-release/ci-local/<sha>/logs/`.
+It uses Colima when needed and never starts or stops it. All native checks are
+shared with GitHub in `scripts/ci-check.sh`; tool execution uses Go 1.27.3 while
+project build/vet/race/fix/tidy checks use the selected matrix Go version. Native Windows execution remains a
 GitHub-only check. GitHub Actions currently cannot run because of the account's
 billing lock; report local results honestly rather than claiming an Actions run.
 

@@ -40,7 +40,7 @@ resume in the issue notes. Do not use `git stash`.
 
 ## Tools and checks
 
-The CLI module requires Go 1.26; development uses Go 1.27.3. Five development
+The CLI module requires Go 1.26; development uses Go 1.27.3. Development
 tools are pinned in `tools/go.mod`; beads has a separate compatible dependency
 graph in `tools/beads/`. See [tools/README.md](tools/README.md).
 
@@ -55,6 +55,7 @@ go fix -diff ./...
 go mod tidy -diff
 (cd tools && go mod tidy -diff)
 (cd tools/beads && go mod tidy -diff)
+(cd tools/actionlint && go mod tidy -diff)
 ```
 
 Lint must report zero issues; formatting, fix, and tidy checks must produce no
@@ -75,7 +76,7 @@ Release branches are `release/v0.4.0` and then `release/v0.5.0`, with the latter
 created from updated main after the first release prep merges. Never work on
 `dox-5il`: it belongs to the maintainer. Do not modify other repositories.
 
-After the local CI runner lands, `bash scripts/ci-local.sh <ref>` must print
+For committed refs, `bash scripts/ci-local.sh <ref>` must print
 `RESULT: PASS`; it replaces unavailable GitHub Actions execution during the
 billing lock. Record the checked SHA and results. Windows is cross-compiled and
 vetted locally; native Windows runs belong to GitHub. Do not claim an Actions
