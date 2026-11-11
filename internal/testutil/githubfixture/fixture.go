@@ -58,13 +58,14 @@ func New(tb testing.TB, count int) *Server {
 		f.blobs[sha] = name
 		f.entries = append(f.entries, map[string]string{"path": "docs/" + name, "type": "blob", fieldSHA: sha})
 	}
-	server := httptest.NewServer(http.HandlerFunc(f.serveHTTP))
+	server := httptest.NewServer(f)
 	f.URL = server.URL
 	tb.Cleanup(server.Close)
 	return f
 }
 
-func (f *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP exposes the same fixture routes to configurable test wrappers.
+func (f *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	active := f.active.Add(1)
 	defer f.active.Add(-1)
 	f.observeMax(active)

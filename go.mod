@@ -13,6 +13,7 @@ require (
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.2
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.4.1
+	github.com/rogpeppe/go-internal v1.16.0
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/samber/oops v1.21.0
 	github.com/urfave/cli/v3 v3.14.0
@@ -45,4 +46,5 @@ require (
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
+	golang.org/x/tools v0.52.0 // indirect
 )

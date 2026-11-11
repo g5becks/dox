@@ -1,0 +1,18 @@
+pathenv OUTPUT $WORK .dox docs
+dox list --json
+jsoncmp stdout want.json
+! stderr .
+
+-- dox.toml --
+output = ".dox"
+[sources.docs]
+type = "github"
+repo = "acme/docs"
+path = "docs"
+ref = "main"
+-- want.json --
+[{
+  "name": "docs", "type": "github", "repo": "acme/docs", "path": "docs",
+  "ref": "main", "patterns": ["**/*.md", "**/*.mdx", "**/*.txt"],
+  "output_dir": "$OUTPUT", "status": "not synced"
+}]

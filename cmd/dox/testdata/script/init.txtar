@@ -1,0 +1,5 @@
+dox init
+exists dox.toml
+grep 'Documentation source configuration' dox.toml
+! dox init
+stderr 'config file already exists'

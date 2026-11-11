@@ -98,9 +98,12 @@ for independent tests, `t.TempDir()` for writes, and `t.Context()` for test-scop
 operations. Never run destructive CLI repros outside a temporary directory.
 
 Use `httptest` for deterministic HTTP behavior: conditional requests, failures,
-cancellation, pagination, and rate limits. The CLI-harness issue adds testscript
-coverage for command output, exit status, flags, and config files, plus a fake
-GitHub API. Until it lands, these are planned harnesses, not existing commands.
+cancellation, pagination, and rate limits. The CLI scripts in `cmd/dox/testdata/script/` exercise command output,
+exit status, flags, and config files through `testscript.Main`. Run them with
+`go test ./cmd/dox -run TestScripts`. Local HTTP, environment expansion,
+portable paths, and JSON goldens are documented beside the scripts.
+`internal/testutil/fakegithub` provides deterministic GitHub routes and injectable
+status, rate-limit, Retry-After, latency, cancellation, and truncation behavior.
 From the regression-harness issue onward, register and first demonstrate each
 regression failing before fixing it. Keep all cases; never weaken assertions or
 add known failures just to pass the suite.

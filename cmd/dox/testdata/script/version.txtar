@@ -1,0 +1,4 @@
+# Exercise the existing version flag through the registered CLI main.
+dox --version
+stdout '^dox version dev \(commit unknown, built unknown\)'
+! stderr .
