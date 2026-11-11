@@ -90,3 +90,23 @@ loading are excluded from the timed work.
 | GitHubDirectory/108files | 5.769 s | 2,084,960 | 110 |
 
 Pathological growth (median 1 MiB / 256 KiB): **13.88×**.
+
+## Content-search comparison
+
+Corpus search benchmarks validate every result against the checked-in v0.3.0
+JSON digests in `internal/search/testdata/corpus-v0.3.0.json` before timing:
+36,000 literal `query` hits and 8,343 `use[A-Z]\w+` regex hits. The digest covers
+collection, path, 1-based line, original text, and order. Run both with:
+
+```sh
+DOX_BENCH_CORPUS="$HOME/.cache/dox-bench" go test ./internal/search -run '^$' -bench '^BenchmarkSearchContent' -benchtime=1x -count=6
+```
+
+The search optimization measured median 33.49 ms / 21,864,440 B for literal
+search and 80.17 ms / 10,528,192 B for regex on the baseline machine. The
+v0.3.0 medians were 113.00 ms / 98,405,088 B and 284.09 ms / 65,169,528 B.
+Only three historical samples exist, so their confidence intervals are limited;
+see the issue notes for the complete benchstat table and logs. The implementation
+uses at most eight workers. A limited query schedules at most one worker-sized
+window beyond its stopping point; unlimited queries use larger bounded windows
+for throughput. File order and output remain unchanged.

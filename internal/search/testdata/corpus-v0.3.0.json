@@ -1,0 +1,14 @@
+[
+  {
+    "count": 36000,
+    "query": "query",
+    "regex": false,
+    "sha256": "f720ee0363337ae29b03e0017b0dc0ddf4f9f9e5d2eb625465924907f2725389"
+  },
+  {
+    "count": 8343,
+    "query": "use[A-Z]\\w+",
+    "regex": true,
+    "sha256": "b35e9196434f2dc98b678d32f866df9cd03a3f86875925d8c4d1db1afe18f623"
+  }
+]

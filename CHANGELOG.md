@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- Content search scans bytes with bounded parallel file reads and reusable buffers, preserving result order, line text, Unicode literal matching, and limit behavior while reducing allocations.
+
 - Replaced the error library with typed internal errors and standard wrapping while preserving messages, hints, context, and legacy code identifiers.
 
 - Refreshed CLI, config, validation, globbing, table, and fuzzy-search dependencies. Command help is unchanged; updated x/net, x/text, and OpenTelemetry remove their reported dependency advisories.
