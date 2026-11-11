@@ -21,13 +21,14 @@ import (
 const (
 	cpuMultiplier         = 4  // Multiply CPU count for I/O-bound parallelism
 	minDefaultParallelism = 10 // Minimum parallelism even on low-core machines
+	maxDefaultParallelism = 16 // Bound the computed fallback; explicit choices are not capped
 )
 
 // getDefaultMaxParallel returns a smart default for I/O-bound operations.
-// Since syncing is network I/O (not CPU-bound), we can be aggressive.
+// The fallback balances network overlap with bounded resource use.
 func getDefaultMaxParallel() int {
 	cpus := runtime.NumCPU()
-	return max(cpus*cpuMultiplier, minDefaultParallelism)
+	return min(max(cpus*cpuMultiplier, minDefaultParallelism), maxDefaultParallelism)
 }
 
 // EventKind identifies the type of sync progress event.

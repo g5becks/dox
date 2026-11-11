@@ -91,7 +91,7 @@ dox sync
 # dox.toml
 output = ".dox"
 
-# Default parallelism for syncing (default: 4x CPU cores, min 10)
+# Default parallelism for syncing (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 max_parallel = 20
 
@@ -276,7 +276,7 @@ dox cat react docs/hooks.md                 # Read specific content
 |-------|------|---------|-------------|
 | `output` | string | `.dox` | Output directory root |
 | `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | GitHub API token for private repos and higher rate limits |
-| `max_parallel` | int | `4 × CPU cores` (min 10) | Max concurrent source syncs |
+| `max_parallel` | int | `4 × CPU cores` (min 10, max 16) | Max concurrent source syncs |
 | `excludes` | []string | `[]` | Global exclude patterns applied to all git sources |
 
 ### Git Sources
@@ -378,7 +378,7 @@ excludes = [
 - Config discovery searches for `dox.toml` or `.dox.toml` from CWD up to filesystem root.
 - Relative config paths resolve from the config file directory.
 - GitHub token resolution: `github_token` in config → `GITHUB_TOKEN` env → `GH_TOKEN` env.
-- Default parallelism is 4x CPU cores (min 10). Set `max_parallel` in config or use `--parallel` flag.
+- Parallelism uses an explicit `--parallel` value first, then config `max_parallel`, then `min(max(4 × CPU cores, 10), 16)`. An omitted flag (or `--parallel 0`) uses the fallback; explicit positive flag/config values can exceed 16. Pass `--parallel 3` to keep the previous accidental limit.
 
 ## Contributing
 

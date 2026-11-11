@@ -3,6 +3,7 @@ package sync_test
 import (
 	"errors"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/g5becks/dox/internal/config"
@@ -232,6 +233,30 @@ func TestResolveSourceOutputDir(t *testing.T) {
 			}
 			if result != tc.want {
 				t.Errorf("ResolveSourceOutputDir() = %q, want %q", result, tc.want)
+			}
+		})
+	}
+}
+
+func TestParallelPrecedence(t *testing.T) {
+	t.Parallel()
+	computed := min(max(4*runtime.NumCPU(), 10), 16)
+	for _, tc := range []struct {
+		name                   string
+		flag, configured, want int
+	}{
+		{"flag wins", 7, 20, 7},
+		{"config wins when flag unset", 0, 20, 20},
+		{"computed fallback", 0, 0, computed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := sync.ResolveMaxParallel(
+				&config.Config{MaxParallel: tc.configured},
+				sync.Options{MaxParallel: tc.flag},
+			)
+			if got != tc.want {
+				t.Fatalf("parallel=%d, want %d", got, tc.want)
 			}
 		})
 	}

@@ -6,4 +6,5 @@ package sync
 var (
 	ResolveSourceNames = resolveSourceNames
 	ResolveGitHubToken = resolveGitHubToken
+	ResolveMaxParallel = resolveMaxParallel
 )

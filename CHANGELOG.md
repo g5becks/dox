@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- Sync parallelism now uses flag > config > computed default. An omitted `--parallel` honors `max_parallel`; the computed fallback is `min(max(4 × CPU cores, 10), 16)`. Pass `--parallel 3` to retain the previous accidental default limit. Explicit positive flag/config values are not capped at 16.
+
 - Output writes and cleanup are confined to opened directory roots. Migrate `output = "."`, `".."`, or absolute paths to a dedicated relative directory such as `.dox`; intentional external directories require `dox --allow-external-output <command>`. Source `out` and `filename` paths must remain local. `clean` and `sync --clean` now require `.dox.lock` or `.dox-root`; run a normal `dox sync` first to mark existing output. Whole-output cleanup keeps the directory and ownership sentinel. Config directories, their ancestors, and filesystem roots remain protected even with the opt-in.
 
 - Content search scans bytes with bounded parallel file reads and reusable buffers, preserving result order, line text, Unicode literal matching, and limit behavior while reducing allocations.

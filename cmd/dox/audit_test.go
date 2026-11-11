@@ -206,7 +206,7 @@ func scriptParallelServe(ts *testscript.TestScript, neg bool, args []string) {
 				break
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		_, _ = w.Write([]byte("fixture\n"))
 	}))
 	ts.Defer(server.Close)

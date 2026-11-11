@@ -18,8 +18,6 @@ import (
 	"github.com/g5becks/dox/internal/ui"
 )
 
-const defaultParallel = 3
-
 const initTemplate = `# dox.toml - Documentation source configuration
 # Docs: https://github.com/g5becks/dox
 
@@ -37,7 +35,7 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
 # github_token = ""
 
-# Max parallel source syncs (default: 4x CPU cores, min 10)
+# Max parallel source syncs (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
 
@@ -218,7 +216,7 @@ func newSyncCommand() *cli.Command {
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
 			&cli.IntFlag{
 				Name: "parallel", Aliases: []string{"p"},
-				Usage: "Maximum parallel source syncs", Value: defaultParallel,
+				Usage: "Maximum parallel source syncs (0 uses config or computed default)",
 			},
 		},
 		Action: syncAction,
