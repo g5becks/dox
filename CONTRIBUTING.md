@@ -10,6 +10,11 @@ Be respectful and constructive. We're here to build great software together.
 
 ### Prerequisites
 
+Development tools are pinned in `tools/go.mod`; run them with
+`go tool -modfile=tools/go.mod <tool>`. Beads is isolated in
+`tools/beads/go.mod` and must run through `scripts/bd`. See
+[the tools guide](tools/README.md) for commands and module maintenance.
+
 - **Go 1.25.7+** (check with `go version`)
 - **Task** (optional but recommended): `go install github.com/go-task/task/v3/cmd/task@latest`
 - **golangci-lint** (for linting): https://golangci-lint.run/usage/install/

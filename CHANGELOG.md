@@ -9,3 +9,4 @@
 ### Maintenance
 
 - Applied Go modernizers and simplified sorted map iteration and test contexts without changing CLI behavior.
+- Moved development tools into `tools/go.mod` and pinned golangci-lint. Run Task with `go tool -modfile=tools/go.mod task` to use the repository's pinned version. Beads v0.49.6 is isolated in `tools/beads/go.mod`; continue using `scripts/bd`.

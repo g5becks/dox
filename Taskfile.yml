@@ -11,7 +11,7 @@ vars:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
   BUILD_TIME:
     sh: date -u '+%Y-%m-%dT%H:%M:%SZ'
-  GOLANGCI_LINT: github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+  TOOLS: go tool -modfile=tools/go.mod
 
 env:
   CGO_ENABLED: '0'
@@ -20,7 +20,7 @@ tasks:
   default:
     desc: Show available tasks
     cmds:
-      - task --list
+      - '{{.TOOLS}} task --list'
 
   dev:
     desc: Run the application in development mode
@@ -52,12 +52,12 @@ tasks:
   lint:
     desc: Run linters
     cmds:
-      - go tool {{.GOLANGCI_LINT}} run
+      - '{{.TOOLS}} golangci-lint run'
 
   lint:fix:
     desc: Run linters and fix issues
     cmds:
-      - go tool {{.GOLANGCI_LINT}} run --fix
+      - '{{.TOOLS}} golangci-lint run --fix'
 
   fmt:
     desc: Format code
