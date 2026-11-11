@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- Markdown/MDX outlines now use a linear line scanner with original source positions, matched code fences, and YAML/TOML metadata. `gomarkdown` is removed; Goldmark is limited to 256 KiB of inline text per file and metadata decoding to 64 KiB. Re-run `dox sync` after upgrading to regenerate corrected heading positions and metadata; oversized inline text keeps normalized source and oversized metadata is ignored. Corpus differences and fixture corrections are documented in `internal/parser/outline/README.md`.
+
 - The Docker image now uses a digest-pinned Distroless base with CA certificates and default nonroot UID 65532. HTTPS syncs work inside the image. For project bind mounts, migrate root-dependent setups to `--user "$(id -u):$(id -g)"` or grant UID 65532 access to the mounted directory.
 
 - `cat --line N` and `file:N` now accept the same 1-based locations reported by search and outlines; JSON adds a 1-based `line` while retaining `offset`. Migrate `--offset N` to `--line N+1`: the old 0-based flag warns and is scheduled for removal in v0.6.0. Conflicting and nonpositive locations are rejected.

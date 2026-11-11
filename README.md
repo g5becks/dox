@@ -251,6 +251,12 @@ dox outline goreleaser docs/install.md
 dox outline goreleaser docs/install.md --json
 ```
 
+Markdown/MDX outlines use source line positions, including frontmatter and MDX
+imports, and recognize both ATX and setext headings. Re-run `dox sync` after
+upgrading to regenerate manifests with corrected line numbers and metadata.
+YAML/TOML metadata blocks decode up to 64 KiB; formatted heading/description
+text has a 256 KiB per-file budget, after which normalized source text is kept.
+
 ### search
 
 Search across documentation metadata or file contents.

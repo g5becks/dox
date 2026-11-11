@@ -1,5 +1,7 @@
 package parser
 
+import "github.com/g5becks/dox/internal/parser/outline"
+
 // Parser extracts description and outline from file content.
 type Parser interface {
 	Parse(path string, content []byte) (*ParseResult, error)
@@ -35,11 +37,7 @@ const (
 	ComponentTypeNone          ComponentType = ""
 )
 
-type Heading struct {
-	Level int    `json:"level"`
-	Text  string `json:"text"`
-	Line  int    `json:"line"`
-}
+type Heading = outline.Heading
 
 type Export struct {
 	Type string `json:"type"`

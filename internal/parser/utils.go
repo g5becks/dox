@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/g5becks/dox/internal/parser/outline"
 )
 
 // IsBinary checks first 512 bytes for null bytes.
@@ -50,42 +52,6 @@ func DetectFileType(path string) string {
 // StripFrontmatter removes YAML frontmatter (--- delimited) and returns
 // the remaining content and extracted title/description if present.
 func StripFrontmatter(content []byte) ([]byte, string, string) {
-	if !bytes.HasPrefix(content, []byte("---\n")) && !bytes.HasPrefix(content, []byte("---\r\n")) {
-		return content, "", ""
-	}
-
-	// Find the closing ---
-	start := bytes.Index(content, []byte("\n"))
-	if start == -1 {
-		return content, "", ""
-	}
-	start++ // Move past the first newline
-
-	skipBytes := 5 // Default for "\n---\n"
-	end := bytes.Index(content[start:], []byte("\n---\n"))
-	if end == -1 {
-		end = bytes.Index(content[start:], []byte("\n---\r\n"))
-		if end == -1 {
-			return content, "", ""
-		}
-		skipBytes = 6 // For "\n---\r\n"
-	}
-
-	frontmatter := content[start : start+end]
-	body := content[start+end+skipBytes:]
-
-	// Extract title and description
-	var title, description string
-	for line := range bytes.SplitSeq(frontmatter, []byte("\n")) {
-		line = bytes.TrimSpace(line)
-		if titleAfter, titleFound := bytes.CutPrefix(line, []byte("title:")); titleFound {
-			title = strings.TrimSpace(string(titleAfter))
-			title = strings.Trim(title, `"'`)
-		} else if descAfter, descFound := bytes.CutPrefix(line, []byte("description:")); descFound {
-			description = strings.TrimSpace(string(descAfter))
-			description = strings.Trim(description, `"'`)
-		}
-	}
-
+	body, title, description, _ := outline.Frontmatter(content)
 	return body, title, description
 }

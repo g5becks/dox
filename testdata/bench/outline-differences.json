@@ -1,0 +1,667 @@
+[
+  {
+    "path": "arktype/(arktype)/agents.mdx",
+    "before_sha256": "97038626afe07395c0491eb2644e31dba70bffeb5e45c57e5985482950b62291",
+    "after_sha256": "74b25c9ed8e44f470d1ba78bb9b0355e54b5bee12fd56f5ea25e3fea26262792",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/blog/2.0.mdx",
+    "before_sha256": "a8b04f839cf1197ca9725376dcfcc188ffcfa6be02b5ec4084621599541e50a8",
+    "after_sha256": "a71e1ce40cd7ba58c000ae2fc64b1c312e57c911c6983b70751eacb597f485c7",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/blog/2.1.mdx",
+    "before_sha256": "81af2e5efd593c0d988ebf9c3141000ed5806b0705fe5c35632d30d59b2e6213",
+    "after_sha256": "165d2d6d3b4e230588c2602506d5fa8a673144523258228edbabda61aeac0484",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/blog/2.2.mdx",
+    "before_sha256": "c445a39deb4d11423027da377ff5f8362486e9e815ba4a26e84f8c0db5badcb3",
+    "after_sha256": "38a34facc7f3eb102c607e9dd0c06ea7da2ac5cf904904675668ea0b11997112",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/blog/arkregex.mdx",
+    "before_sha256": "ec2995178f328d73500039485675a09b130a28070411145a6423900b372539df",
+    "after_sha256": "2cb48ee023636a5baba539c02c360a87c579b97b6bc0c21bd2f1d6e539b3bb87",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/cheat-sheet.mdx",
+    "before_sha256": "bee24d638851585ed5eb872e4b692e10c4452def710f0555e95768deca5041cd",
+    "after_sha256": "7356568fe520c89b1330dcce7bc50a9fed9fd353865b37c0e5067a2483d718c3",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/configuration/index.mdx",
+    "before_sha256": "3921d08343526c04774c0522f27acc8e5118b05227bf0dc38011562322a7643b",
+    "after_sha256": "a330159eb94c59a4c351aa584ffb3610944c8b418835a3ec9d764fc08b84614f",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/ecosystem/index.mdx",
+    "before_sha256": "c4eb03aa71e07949c04270d125c572542b13dc3e2c54e885a9e222da32692c61",
+    "after_sha256": "991d0ea249eb22a11e83c8b2d8712d1c78bd3dc79f1f139f1c63a4096adbc7a0",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/expressions/index.mdx",
+    "before_sha256": "3876189efe2a784f48cbf98156eeec16b8a3ebc8c11ca577d0f83cca2103a4aa",
+    "after_sha256": "ba8c6e50776d134c707ce52be62de18025c386be79cf738b798cf4c73f820a47",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/faq.mdx",
+    "before_sha256": "cc06c2e9d97f9fed8b2d71d4ed78e41d0981a8ff5c60258cbac0a2374d886829",
+    "after_sha256": "3d0b3ff5203d62640f3e5f1b3a88587bddfffb46265baf213b8d941ca1d896b3",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/generics/index.mdx",
+    "before_sha256": "10f12a81a2d5d99a63d82b2b37b1dc9084a4a2693edf306ed12cca7744264555",
+    "after_sha256": "713d739d7e7df9df0e82c98931f0a6e72182997975c5b08bd47365a885bfcc00",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/integrations/index.mdx",
+    "before_sha256": "97ca8d83a0398b0289e5b2d8e3ef5b199423328eb2a4eb78a014721bdb26b0fb",
+    "after_sha256": "b1ea9efe2c0bfa9f8a18aeb5c00ec113208799cd89dac5470761ca02f88cad9a",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/internal/index.mdx",
+    "before_sha256": "c3b0d5b1d51c97814fd99c9e6419fcb112acc12eb44019d1cd8fce73a80abb94",
+    "after_sha256": "efd73f630de4c1d30b63e06e87bdcfb0b73bc983ae19bce12a4d17e5dcc1b1a2",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/intro/adding-constraints.mdx",
+    "before_sha256": "66fa892992cedbcddb48081bb9fb6f099009998af8b70e8cbb3015b0b20f7b25",
+    "after_sha256": "b3dd7f8acf4a2a18602397ccf0bdfe7af19bd3ae1b154bfa7bd771e4c3493e41",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/intro/setup.mdx",
+    "before_sha256": "4b2cecefa1bf62db0ffe8a06fed54c48f3694a598be487b35936992d38fdeeea",
+    "after_sha256": "d67150312369fad113d67c45735244ba00a9d45082f3735e2e6bb690a587a03f",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/intro/your-first-type.mdx",
+    "before_sha256": "83bdf14a80163950d9f82741e13cc497e4e9782b15e713db153f87f889d8e1a4",
+    "after_sha256": "b62640714b719bfea0f9aff25270ccaa8d1a6fa7abce7ca67145bfb51649edea",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/introspection/index.mdx",
+    "before_sha256": "5667b97b76e72d7a8d988ab66ae22827a713c85825403ea1460dfcbdca9448a8",
+    "after_sha256": "d9b69b060e361c9311f3da1108d3da9e1c8238dd7fa8de9e34eb72ffea33cff1",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/keywords.mdx",
+    "before_sha256": "5a8f96e492185a5b32b661a8fac36fdbec463009fe468ec18023f2c320076e16",
+    "after_sha256": "3873e1a1670d8e5eade6d32a951ea7861a0adef903b002f23944587c983c3c92",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/match.mdx",
+    "before_sha256": "143d41a995d888bea21e61644ed1f75d6b832244bc0255e93cb49f102c3a1590",
+    "after_sha256": "4057a76aa877f474859df89b3bab05737eba7d7cc6c2867e7027565a4fe03859",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/objects/index.mdx",
+    "before_sha256": "3d3fb5e6c5f7ed8517bf68b9b2c09cdbc3ca78341a6c9966093fc71ca9e85ffe",
+    "after_sha256": "c18363c0a8a5d1a5a10933b4d9e8e1f27296dc7bd18443e772aa2491e3f2ceb7",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/primitives/index.mdx",
+    "before_sha256": "4d7a508b44646652472e8afbefa004b748a61c1a16f591a5e975b6eee4306cd3",
+    "after_sha256": "998ab3d7f776b4808bfc4fc48c84e0b0c22fa0287469771e78ba0623307daeeb",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/scopes/index.mdx",
+    "before_sha256": "846160f1372ca9c82ca16b97e6813ea9c5135e2aa7252f1cb557b66254a8b2b6",
+    "after_sha256": "ccb5ec1191e2b5c98e5e5a4990ca626045cc181af3cf8fd9be4d605de8cff705",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/traversal-api.mdx",
+    "before_sha256": "e63a78bccaccd279cfcb2df7dcae34e9b64dcc75a0f8b666a7709916c50429b3",
+    "after_sha256": "2b0f056ae3bed6304c233c475aab4870dbb1f3682952e76b50a5b9525048314b",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/(arktype)/type-api/index.mdx",
+    "before_sha256": "cb047b880e9745d67b58f77f1c459b7972aa3ae78ff48449de28c8a7e4818df6",
+    "after_sha256": "6e1247fadda45e08b50a75b81b9b4663fc0d825f8b9495a8842961aef14be402",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/attest/assertions.mdx",
+    "before_sha256": "c7547f34c5c8b3132af11c51f2b6bb837f4748feaf290aaccfe0abea417020ae",
+    "after_sha256": "22b5d228dcdd895a2282bf2f3a0847d3d156a5ac54ec3efb2c1b1e2793ec773d",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/attest/benches.mdx",
+    "before_sha256": "7da48d82006b90c99bd8ebb9862a62d26cab1b87a35e01865ab69a9ae67fed76",
+    "after_sha256": "c4495cc90d34abe8f823b8517c3553879ad29451b92e7e3e11ee4b598c81a676",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/attest/cli.mdx",
+    "before_sha256": "87b96e3320aa3501b676ed6a53dca033d3d319efb41502145f3a79caa716b38f",
+    "after_sha256": "bdca3eaa86807130c9a72c9dc4200021c71ae8d7e606ffa1792165ec295d7fb9",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/attest/index.mdx",
+    "before_sha256": "de6158bc3c261fe25a79c49a0bf12d3046baecc6abfbe680ee1748954475c22a",
+    "after_sha256": "6905c63fe316c9ac0bc9fc280bca532f1f380374fbee73b8f36d70ef4e6a11dd",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/attest/integration.mdx",
+    "before_sha256": "982bbb1ae81036ecfa125f0e4c63109dbc7cc3d08011c3ee89c79034b5419940",
+    "after_sha256": "5b3bc8df807101e8fe39387a90941dceb2d85f4c5a78a28fc8718583e44ab0b7",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "arktype/attest/options.mdx",
+    "before_sha256": "f971e84a6efc6da6113375de08517b0a28797e54466e5702972f770009cc1b47",
+    "after_sha256": "e587d81c8dcfaa68576f91f37ee0324c6016f19136752165da9856d92bed4181",
+    "reasons": [
+      "MDX statements/frontmatter retain their original source lines"
+    ]
+  },
+  {
+    "path": "db/collections/electric-collection.md",
+    "before_sha256": "e1af9a751dd1e781e8c2bf198796b1b34ce8a81e52a45b33cb584f5be2db8301",
+    "after_sha256": "0525373b7d0a25893aa7a4238aba778acec74f30feaea12c64f1323279f3de6d",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "db/contributing/oracle-reviews/2026-09-30-offline-fail-stop-followup.md",
+    "before_sha256": "f06e76252ddb2333088234e321c72df8a5b8419c95bf8a84652c1abd22cd687f",
+    "after_sha256": "65388e36cd311377f9cb205a80f712576a4c0e5d32e99aa5ca14fd14c7c511f0",
+    "reasons": [
+      "Soft/hard line breaks retain separating whitespace instead of joining words"
+    ]
+  },
+  {
+    "path": "db/guides/error-handling.md",
+    "before_sha256": "d950f9e4815bc87492685fba88ccf6c60617f243f8abd29ea4e5990c2b20cde0",
+    "after_sha256": "80b1173c10e9b07a4a1e7b221ce3ea7b49cb4ea7d09702f8b77b8e01a8d3c7db",
+    "reasons": [
+      "Real headings following block-quoted fences or list blocks are recognized"
+    ]
+  },
+  {
+    "path": "db/guides/live-queries.md",
+    "before_sha256": "c5983f7b4c2d16c5649ad1ce744c656ce8cadf5a67f30c6723aa671ba74caa50",
+    "after_sha256": "cf198568eefbc405a6cfbe17ad739e145a87ffd6d919d2fa04a547362b942991",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/cli/watch.md",
+    "before_sha256": "976ffd4b08b743f696bdfff2e138e1abed61bad4c64cd9336b07b69a2a70d9b3",
+    "after_sha256": "5b71174a8a7fc3f0cbdf4689900ecf6c917906e237bc1c9c1bbc9bb18a8921e7",
+    "reasons": [
+      "ATX headings indented two spaces are recognized (four-space code remains excluded)"
+    ]
+  },
+  {
+    "path": "mise/configuration/environment-variables.md",
+    "before_sha256": "f25e2bb3d89b06974a1f72eea08fd0a0fb73206c24753b5966891646ec2af7b1",
+    "after_sha256": "69d9e25aad91eab8835546c4ee2d5dc0a6a70ad837ee1a2bb9973963dce58686",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/configuration.md",
+    "before_sha256": "404f070fa2c9b1f0b25d03f1e3d46e3739fe2c47aa2d81382e9ddcae2386c729",
+    "after_sha256": "920200446ae17be95300e3ef0d1c7f867e6bc7f4a3dad217de939bf6c6ee18a6",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/backends/aqua.md",
+    "before_sha256": "9fd2e38de9482d2f6a3a28cdb55b50a2d7acc130e35ccc450f18a09ee9d0b0ad",
+    "after_sha256": "495d07e95b17b7313f9f995d0c83289619f2b28d568f3c0d324a76099e5e8d4d",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/backends/asdf.md",
+    "before_sha256": "f9040e46aa2e862e96e26ddb2cfd05b60b4000a969c2c374c7ae17f5e97e2c87",
+    "after_sha256": "102bb860e95be27f44c8abb5c704ecfa131e72e2cec8b6b8874feca12ebd3b37",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/backends/github.md",
+    "before_sha256": "520089f8d7805d7c37e2cd25adf37f22cef1847aceb0a2b6f1c535055d16c801",
+    "after_sha256": "d79b268f1edbd9021021f9c9c2593d0fcdee122cd759a010c2797e273d61ec78",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/backends/http.md",
+    "before_sha256": "6edbd225eec94e7b96bee31281d9d6ba5548230d700664947973b812e880d60c",
+    "after_sha256": "b48d5084aa3216fb247b54da921ad90310e0d4551757019ba1d26d34b50ab284",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/backends/packslip.md",
+    "before_sha256": "4f22e7197df292799af3a19695d084048e7035fb0bb01edc26e553efce2c160b",
+    "after_sha256": "21410f1aba0b0e25bc8dd82ded0958d3c81c5228eb0a581c8cbd763c6a423ffa",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/backends/s3.md",
+    "before_sha256": "83fdcef654b984c0a088c7aa080627fb0cc6a8f82d04b607df7ef24c6cfe05e3",
+    "after_sha256": "ecaefa19036983e649e994a68e5d456f202745eb6dd76f0b119994bb56961f84",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/shims.md",
+    "before_sha256": "974ac825b9805a8fb76a9b70aadeaf72aa64d9a97952d246c1a37d39072c41a8",
+    "after_sha256": "aca60e9902c6f7253ffa05e6a8f3e96950f490cf1cffd0b5bca4a13e805582b1",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/dev-tools/versions.md",
+    "before_sha256": "c15e3049cc323a919137b4d356fbcaae448ccb5d85b0f6913a308e5f5fb5c53b",
+    "after_sha256": "d3ad0811fd83ba1e5c6bf8ceabfcaabc602e0dbebc8e558fc9e1ad04ee834685",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/directories.md",
+    "before_sha256": "e6621d6b873817e2fc01d896194032cbf8ebdb855408a6d2cde59f4f999f4672",
+    "after_sha256": "04147dae6851b78bbdcaeed24775e04fa86fec8e3181465495aa730b000a373c",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/environments/index.md",
+    "before_sha256": "c587b53ba3c284f203d83b42415986afe0ad6ebe18b066448e29b26b0570676e",
+    "after_sha256": "c90aadc6d946649d728591e05d7b8f6d1e7314111cab28e51cd95ca056b58626",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/environments/secrets/fnox.md",
+    "before_sha256": "36e054cbc542b6fa20655bc53509bc9e387675badb53a8b01e407792f7dfcba2",
+    "after_sha256": "09a0dceb2074605e2e203883126deb2ec4fcc465aa7f6beb716925d6ba24344a",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/errors.md",
+    "before_sha256": "6e8970292afebecccc2d37d7abd9ea2ae7a6b04aedf708dc42a5e16f26192060",
+    "after_sha256": "a52afbf23dba064a4d5354360e556574df80e36fa11cb45198a902c07297667b",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/glossary.md",
+    "before_sha256": "23fb14f4935ac89d2466a46fd151ff46358f2bcd45cad9e7a32522478d1d33a9",
+    "after_sha256": "ff1aba89eed9faabfabb90cd035b783cbf1e91793146c4e16292f25a6ebc7f67",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/hooks.md",
+    "before_sha256": "f21e58f0aeebf0ddbfc575c03169f0e5720a306c294f6fd4df1108e23fe346a2",
+    "after_sha256": "242cdae581c5ec674ebfcbac33429a4d6c4fa283b95755c73f6925b405bd1aad",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/lang/java.md",
+    "before_sha256": "8adc9da98d810f235dbae09c5cf3642683bb04ef2d10603e7705db98112f49fa",
+    "after_sha256": "c30bd4cd6e87b1fd2a3cf427f5f4a9f1a4ac81c5bf72e8c4975ebe576e31676f",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/lang/python.md",
+    "before_sha256": "3a2454ee59bd5f82f759833cc3daf1ae4451df92b64a7079578d3270fc4a9d6e",
+    "after_sha256": "3b8b2f15b42f31189236d3915098399baa6661979e442dcff02f47e49ee63f2f",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/plugin-lua-modules.md",
+    "before_sha256": "b8f81b1419e57ec371cf0baa933e4fcb91274c838a2a33737141c2ab043d62ce",
+    "after_sha256": "4512db807da88ae31a0aab850d8b5a8045aa85dc388c9e2650754129affcd170",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "mise/tasks/architecture.md",
+    "before_sha256": "7a62134aecb3bb2f435692c9154ba2e24ea4b178fa2b4eb0ba5fab41253b424b",
+    "after_sha256": "a993700e110be4881698a511d9ed0356534b16649e31eadecb8cad7961807027",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "query/community-resources.md",
+    "before_sha256": "abb78bbc8dbf9756d66e55a2aafacca3ecec8b3951cd2b0810025f37eb467004",
+    "after_sha256": "78f6febdf0fda79d12e74b581722616839be5ad68f5f4bdbeca4087e7d76fbf7",
+    "reasons": [
+      "Structured YAML selects root title instead of overwriting it with nested article titles/descriptions"
+    ]
+  },
+  {
+    "path": "query/framework/react/guides/filters.md",
+    "before_sha256": "42b9f53ade5a1ef59108130a9ee9f4873be75ef28f3a64ec452003904a3fe7dd",
+    "after_sha256": "193c578755cc292d5be9a5256254a18bc6cc1d5a3e5e2334d0d6894a341aa87e",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "query/framework/react/guides/query-cancellation.md",
+    "before_sha256": "98ba7d2c4bf8484ba6d43fbed4527812d3f58d496fec6e7a374a24643c32ed21",
+    "after_sha256": "afbfe40cb82db991ff3c8b3be899ab9b38a10fb9e813d55ccaf94b5be23a6a68",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/router/api/router/createLazyFileRouteFunction.md",
+    "before_sha256": "c5eaf1e93cec08dce1d0df5f52252d59c4da27bbb897b1bd9dc31109873b61b6",
+    "after_sha256": "30f8efe58844a0de9ee7acd0570efe699c1f25c0ca1e6f37e4d26a06e16b3c27",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/router/api/router/createLazyRouteFunction.md",
+    "before_sha256": "927a79b53ca3542188eec040cd39bd01c596dc46a651501eeaba0e41280df600",
+    "after_sha256": "cf1d3172f530aabfdfe2b507a2b70fdefb8ebddb8c52c831c017366b05f236c1",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/router/faq.md",
+    "before_sha256": "98571d6205ad0f5781a358404e7634af779ca70b17fd2daaf259f46211fddaf3",
+    "after_sha256": "cd4fc3e59418999bdfb27531df3822d25a33272c09630a80095fc920da8e3873",
+    "reasons": [
+      "Real headings following framework HTML-comment markers are recognized"
+    ]
+  },
+  {
+    "path": "router/router/guide/custom-link.md",
+    "before_sha256": "074a59e89ab618689fdf93cb60c96fd5b367548f2fe6e94a4cb307182f4a71df",
+    "after_sha256": "4db62b1ec9fbd46a4acbcf1da02f680a10ea68f3d3bde7907efa4bc714ef4461",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/router/guide/data-loading.md",
+    "before_sha256": "34e2a21611b756e330f8209ff716d162e0afb19b6be6f523276968f1f197b9db",
+    "after_sha256": "74c11bc72b75c76c30d12ea025ec9ef6b585d4bcde29b1969e4604576e622615",
+    "reasons": [
+      "Real headings following block-quoted fences or list blocks are recognized"
+    ]
+  },
+  {
+    "path": "router/router/guide/document-head-management.md",
+    "before_sha256": "3a0bb31a85ebbd67e986de4ed8bc61da7cb1d2e22529a3eaa7d462d44cd17b9a",
+    "after_sha256": "5ed14b42c2e5877312399bbc16f490d95247e6ae29ae0ef1530de8d3461d9056",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/router/guide/navigation.md",
+    "before_sha256": "833be5b8d70014c21944a505eedceb234eede36e83efba35d9673a3c0fd87a04",
+    "after_sha256": "bf21c8aa91b29ba4036431efe18708183b6abb04ff419c8ad5ce95ee39392473",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/router/how-to/drafts/build-search-filtering-systems.draft.md",
+    "before_sha256": "8d869341ee0648e5f670bae68266aafdd0c046b1c049ee5732dba1d39622c383",
+    "after_sha256": "0afd8eff53f9ad0425a0353698f773261c10a5dabf57ca419b1fb1f4c2ff00a3",
+    "reasons": [
+      "Soft/hard line breaks retain separating whitespace instead of joining words"
+    ]
+  },
+  {
+    "path": "router/router/how-to/drafts/optimize-search-param-performance.draft.md",
+    "before_sha256": "25ef422828e8ac73cc94ce43ccb22c8a1e6ceeca57952f35564b75156d4f48c3",
+    "after_sha256": "2f7564a6decc1c87b3389cb5af03c8097c4a55bf23497b7758c418c17544cb28",
+    "reasons": [
+      "Soft/hard line breaks retain separating whitespace instead of joining words"
+    ]
+  },
+  {
+    "path": "router/router/how-to/drafts/search-params-in-forms.draft.md",
+    "before_sha256": "6901ea118d344ea173157b9fd3f862fcfee11de7fdcf79509a455f3c15ab5a2b",
+    "after_sha256": "bfe2921612016000de50bd2ecb96bb4367221264ba66a189aa23d432fbb6e971",
+    "reasons": [
+      "Soft/hard line breaks retain separating whitespace instead of joining words"
+    ]
+  },
+  {
+    "path": "router/router/how-to/share-search-params-across-routes.md",
+    "before_sha256": "6e1f3c948f46d6c85d7f6aeab0c8a7a30df52ae5060538b2cb63ccba4d558d42",
+    "after_sha256": "810b07c301538534fd8eeeb7eb52e3a4943218a08cbd4fa64d0b9af143af3f0a",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/start/framework/react/guide/selective-ssr.md",
+    "before_sha256": "1172c2f029b17af5d6b7ccc946146fc3166d26bb8789c10ccb9f54903ea09d9a",
+    "after_sha256": "6d57993c8eff77a0979eaddc81c0db7c4a332acdd02f8793c6fdf6b9bc2e9ad1",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "router/start/framework/react/guide/server-functions.md",
+    "before_sha256": "15345ced86ceb2caa0375342646052f824b0d2b03a0acb58b784857a43508e0f",
+    "after_sha256": "a9cc40b861416132d1e37c61746ef28bee8593c783c50f2cd09239f3cafd90b8",
+    "reasons": [
+      "Real headings following block-quoted fences or list blocks are recognized"
+    ]
+  },
+  {
+    "path": "router/start/framework/solid/guide/selective-ssr.md",
+    "before_sha256": "843e99cfaf4a9bd8b50c223607925167a72a7763090fb27d69607fa4d6ee3df6",
+    "after_sha256": "fb921de0cf83ea67d599e3786e9afa1cbb523a43c4bae6fab679a050490107ee",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/blog/vitest-4.md",
+    "before_sha256": "b032627934fd544257d9d1cd064841e776a78ca0cd35964f53af7e8ec3fd4dd9",
+    "after_sha256": "a0c9995a65628748b0f395735105287e7161b31f05d1d14b454b2ccb8a75de76",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/blog/vitest-5.md",
+    "before_sha256": "41b837dd19f766d1fd98fb71ef5431aa47641a5a16e42328652365c3da20860f",
+    "after_sha256": "182586355bf390ccbafc76f0c2a9a04c7a39025ebfe70f6033d3d4b270dcd94b",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/config/browser/playwright.md",
+    "before_sha256": "16eb2c5a992d24df459e8beb647c72934a4e3037d203191098caa4198f43e5f1",
+    "after_sha256": "a0cfb6a19ce132a340ed7247a1d5c0cb5ca2b6967ac9963048f5c8479bdb994a",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/guide/benchmarking.md",
+    "before_sha256": "a7c6c119c8790481133ca164064187294f70356f5a8ce4cd922cb68beae4d9be",
+    "after_sha256": "4dd55ffcc21b3ed4d0ffa2c97703c959e51f93a2fbaa7ace06b3dfb95261c8e3",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/guide/extending-matchers.md",
+    "before_sha256": "1937215bb9f3d9c0669258200d78ab72c8d68e68801035af37c330082db48c29",
+    "after_sha256": "2772c6c508a121c35880aa19fe40710abb46ab595505875025a641d96dad79fc",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/guide/migration/jest.md",
+    "before_sha256": "2b00145cedde15d052e2f27b99cb637354b650d31973df8edf2afea047b7ded9",
+    "after_sha256": "021f6af87856f60cb0459536404bfd1dfb196c77fc9420dd522a8023c4196a64",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/guide/open-telemetry.md",
+    "before_sha256": "e5323e441d3cb58b5ff63aaf657c3004e8757caa29ff45ced3193fb62565dcb6",
+    "after_sha256": "e810a40aa878ca00d511277d299fb06477dc2b3d304578105a43ae7401698ebc",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation",
+      "Callout paragraph text is retained instead of a bare directive marker"
+    ]
+  },
+  {
+    "path": "vitest/guide/profiling-test-performance.md",
+    "before_sha256": "2d6e838c81204b704513b26a51eacb1a226d22cb041003dcf6587c680441240d",
+    "after_sha256": "9addf7ae65cbb4d4256caa7dca79cf7b1371c2dbada72e35bb3382de2c0add97",
+    "reasons": [
+      "Real headings following block-quoted fences or list blocks are recognized"
+    ]
+  },
+  {
+    "path": "vitest/guide/recipes/conditional-mocking.md",
+    "before_sha256": "87c0d7221077b6b6e144f76c58a00a80f4af577d58ba68d315626e06b638c131",
+    "after_sha256": "a5af047051bb02c882a9c15a25a8bc27464806c452a330cf0e0b88a90e994e01",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/guide/test-context.md",
+    "before_sha256": "5c8df40bee8b06a7f198fa40c57056080519c70e64fb049694d8dd47255de053",
+    "after_sha256": "f59febf19987a5c6d102b08db5e72ac24025704176c0a0c949cc3763f342a38b",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  },
+  {
+    "path": "vitest/guide/testing-types.md",
+    "before_sha256": "bdcbb1bd48241e15ef81b34cf3e01e892b02b3525b475ced117615a0557e713c",
+    "after_sha256": "5659e9466bfb3b94317038b2a8a4142d784e1b66f5e2680c326359d3df5a8338",
+    "reasons": [
+      "Source-position scan fixes legacy heading-marker recovery around fences and indentation"
+    ]
+  }
+]

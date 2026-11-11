@@ -110,3 +110,32 @@ see the issue notes for the complete benchstat table and logs. The implementatio
 uses at most eight workers. A limited query schedules at most one worker-sized
 window beyond its stopping point; unlimited queries use larger bounded windows
 for throughput. File order and output remain unchanged.
+
+## Outline comparison
+
+The scanner's reviewed corpus differences are stored as per-file before/after
+hashes with reasons in `outline-differences.json`. To reproduce the old output,
+copy the capture helper into an owned archive of the original source, keeping
+production source unchanged:
+
+```sh
+legacy=$(mktemp -d)
+git archive v0.3.0 | tar -x -C "$legacy"
+mkdir -p "$legacy/cmd/capture-outline"
+cp testdata/bench/capture-outline/main.go "$legacy/cmd/capture-outline/"
+(cd "$legacy" && GOTOOLCHAIN=go1.27.4 go run ./cmd/capture-outline "$DOX_BENCH_CORPUS/docs") > v0.3.0-outlines.jsonl
+GOTOOLCHAIN=go1.27.4 go run ./testdata/bench/compare-outline -corpus "$DOX_BENCH_CORPUS/docs" -baseline v0.3.0-outlines.jsonl
+```
+
+The capture filters Markdown/MDX files to at most 256 KiB. The checked corpus
+has 3,651 such files: 3,568 exact matches and 83 individually explained changes.
+The verifier rejects unexpected changes and stale exceptions. Existing fixtures
+also keep complete before/after goldens for four deliberate corrections.
+
+On Apple M5 / Go 1.27.4 / GOMAXPROCS=10, six one-iteration scanner samples
+measured median 0.428 ms for pathological 256 KiB, 1.615 ms for pathological
+1 MiB, and 2.437 ms for Bun's 2,070,979-byte file (formerly 39 seconds). The
+pathological growth ratio is 3.77, below the 5x target. Historical baseline
+confidence intervals remain limited by their three samples; see issue notes
+for complete benchstat output. Run the original `BenchmarkOutline` cases to
+repeat the measurements.
