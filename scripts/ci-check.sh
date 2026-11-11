@@ -33,7 +33,11 @@ project_go vet ./...
 CGO_ENABLED=0 tool golangci-lint run
 project_go test -race -coverprofile=coverage.out ./...
 tool govulncheck -show verbose ./...
-fix_diff=$(project_go fix -diff ./...)
+if ! fix_diff=$(project_go fix -diff ./... 2>&1); then
+  printf '%s\n' "$fix_diff"
+  echo 'go fix failed or produced a diff' >&2
+  exit 1
+fi
 if [[ -n "$fix_diff" ]]; then
   printf '%s\n' "$fix_diff"
   echo 'go fix produced a diff' >&2

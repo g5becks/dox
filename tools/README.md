@@ -1,7 +1,7 @@
 # Development tools
 
 The root module contains CLI dependencies. `tools/go.mod` pins Task,
-golangci-lint, Lefthook, GoReleaser, goimports, and govulncheck. Run them from the
+golangci-lint, Lefthook, GoReleaser, goimports, govulncheck, and benchstat. Run them from the
 repository root, for example:
 
 ```sh

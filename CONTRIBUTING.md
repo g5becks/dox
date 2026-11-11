@@ -15,7 +15,7 @@ go tool -modfile=tools/go.mod task build
 ./bin/dox --help
 ```
 
-Task, golangci-lint, Lefthook, GoReleaser, goimports, and govulncheck are pinned in
+Task, golangci-lint, Lefthook, GoReleaser, goimports, govulncheck, and benchstat are pinned in
 `tools/go.mod`. Invoke them as `go tool -modfile=tools/go.mod <tool>` from the
 repository root. Actionlint is pinned separately in `tools/actionlint/go.mod` to preserve its
 compatible YAML graph. No global installation is needed. Beads v0.49.6 is isolated in
@@ -106,8 +106,8 @@ regression failing before fixing it. Keep all cases; never weaken assertions or
 add known failures just to pass the suite.
 
 Parser, manifest, and search benchmarks are alongside their packages. The
-benchmark-corpus issue adds a pinned corpus, `DOX_BENCH_CORPUS`, and the v0.3.0
-baseline. Compare relevant performance changes with that same corpus and machine
+pinned corpus, `DOX_BENCH_CORPUS`, and v0.3.0 baseline are documented in
+[testdata/bench/README.md](testdata/bench/README.md). Compare relevant performance changes with that same corpus and machine
 using benchstat; record the commands, baseline, and results in issue notes. Live
 GitHub benchmarks require an explicit token in the process environment; never
 print credentials or embed them in output or fixtures.

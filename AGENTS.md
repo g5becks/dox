@@ -2,9 +2,13 @@
 
 Use shell commands in the sandbox: `rg` for search, `go doc`/`go list` for APIs,
 and Go tools for checks. MCP tools require unavailable approval in this run;
-a rejected MCP call is a tool limitation, so use the shell equivalent. Stop for
-actual sandbox file/network denials, missing credentials, or interactive prompts.
-Do not work around sandbox restrictions.
+a rejected MCP call is a tool limitation, so use the shell equivalent. Sandbox file denials, missing credentials, and interactive prompts are hard stops.
+Temporary network/DNS/connection/timeout errors and HTTP 429/5xx responses are
+retryable: retry the same command up to three more times after sleeps of 120,
+300, and 600 seconds. Record every attempt and its outcome in issue notes; a
+retried success does not erase previous failures. Do not switch proxies, hosts,
+or credentials. If exhausted, mark the issue `BLOCKED: network` and continue
+ready work that needs no network. Do not work around sandbox restrictions.
 
 ## Issue tracking
 
