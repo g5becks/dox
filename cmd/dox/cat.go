@@ -19,7 +19,7 @@ func newCatCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "cat",
 		Usage:     "Read file contents from a collection",
-		ArgsUsage: "<collection> <file>",
+		ArgsUsage: "<collection> <file[:line]>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    flagConfig,
@@ -34,10 +34,8 @@ func newCatCommand() *cli.Command {
 				Name:  "no-line-numbers",
 				Usage: "Don't show line numbers",
 			},
-			&cli.IntFlag{
-				Name:  "offset",
-				Usage: "Start at line N (0-based)",
-			},
+			&cli.IntFlag{Name: flagLine, Usage: "Start at line N (1-based)", Value: 1},
+			&cli.IntFlag{Name: "offset", Usage: "Deprecated: 0-based start (removed in v0.6.0); use --line"},
 			&cli.IntFlag{
 				Name:  flagLimit,
 				Usage: "Show N lines (0 = all)",
@@ -55,6 +53,7 @@ type catOutput struct {
 	Size       int64  `json:"size"`
 	Content    string `json:"content"`
 	Offset     int    `json:"offset"`
+	Line       int    `json:"line"`
 	Limit      int    `json:"limit"`
 }
 
@@ -70,7 +69,11 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	collectionName := cmd.Args().Get(0)
-	filePath := cmd.Args().Get(1)
+	position, positionErr := resolveCatPosition(cmd)
+	if positionErr != nil {
+		return positionErr
+	}
+	filePath := position.path
 
 	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
@@ -121,7 +124,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		lines = lines[:len(lines)-1]
 	}
 
-	offset := cmd.Int("offset")
+	offset := position.offset
 	limit := cmd.Int(flagLimit)
 
 	if offset >= len(lines) {
@@ -159,6 +162,7 @@ func outputCatJSON(
 		Size:       fileInfo.Size,
 		Content:    content,
 		Offset:     offset,
+		Line:       offset + 1,
 		Limit:      limit,
 	}
 

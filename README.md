@@ -216,12 +216,19 @@ Available fields: `path`, `type`, `lines`, `size`, `description`, `modified`
 
 ```bash
 dox cat goreleaser docs/install.md                      # Show entire file
-dox cat goreleaser docs/install.md --offset 10          # Start at line 10
+dox cat goreleaser docs/install.md --line 10            # Start at line 10
 dox cat goreleaser docs/install.md --limit 20           # Show 20 lines
-dox cat goreleaser docs/install.md --offset 10 --limit 20  # Range
+dox cat goreleaser docs/install.md:11 --limit 20       # Range
 dox cat goreleaser docs/install.md --no-line-numbers    # No line numbers
 dox cat goreleaser docs/install.md --json               # JSON output with metadata
 ```
+
+Line locations in search results, outlines, `cat --line N`, and `file:N` use
+1-based numbering. For example, `dox cat goreleaser docs/install.md:10 --limit 1`
+reads the line numbered 10. JSON adds `line` for that starting line and retains
+the legacy 0-based `offset` field. Use only one of `--line`, `file:N`, or
+`--offset`. The old `--offset N` still works with a deprecation warning; migrate
+to `--line N+1` before its removal in v0.6.0.
 
 ### outline
 
