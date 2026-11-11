@@ -1,6 +1,6 @@
 #!/bin/sh
 # Conventional Commit Message Linter
-# Validates commit messages follow: type(scope): description
+# Validates commit messages follow: type(scope)!: description
 
 commit_msg_file="$1"
 
@@ -30,12 +30,12 @@ fi
 # Valid conventional commit types
 types="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
 
-# Pattern: type(scope): description  OR  type: description
+# Pattern: type(scope)!: description; scope and ! are optional
 # - type is required and must be one of the valid types
-# - scope is optional, wrapped in parentheses
+# - scope is optional, wrapped in parentheses; ! optionally marks a breaking change
 # - colon and space after type/scope is required
-# - description is required and must start with lowercase
-pattern="^($types)(\([a-zA-Z0-9_-]+\))?: .+"
+# - description is required
+pattern="^($types)(\([a-zA-Z0-9_-]+\))?!?: .+"
 
 if ! echo "$subject" | grep -qE "$pattern"; then
     echo ""
@@ -43,7 +43,7 @@ if ! echo "$subject" | grep -qE "$pattern"; then
     echo ""
     echo "Your message:  $subject"
     echo ""
-    echo "Expected format: <type>(<scope>): <description>"
+    echo "Expected format: <type>(<scope>)!: <description> (scope and ! optional)"
     echo ""
     echo "Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
     echo ""

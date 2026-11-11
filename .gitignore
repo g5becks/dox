@@ -32,7 +32,7 @@ bin/
 dist/
 .dox/
 .docs/
-dox
+/dox
 
 # bv (beads viewer) local config and caches
 .bv/

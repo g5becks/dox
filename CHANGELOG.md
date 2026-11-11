@@ -31,6 +31,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Fixed
 
+- The binary ignore rule now applies only at the repository root, and commit-message hooks accept standard breaking-change subjects with `!`.
+
 - `dox add` writes updated configuration through a private temporary file and rename, avoiding partial writes and changes through other hard links. Validation and sync orchestration were refactored to satisfy the pinned lint checks.
 
 ## [0.3.0] - 2026-02-09
