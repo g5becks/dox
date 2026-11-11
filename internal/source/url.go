@@ -66,7 +66,7 @@ func (s *urlSource) Sync(
 		return nil, oops.
 			Code("DOWNLOAD_FAILED").
 			With("source", s.name).
-			With("url", s.source.URL).
+			With(sourceTypeURL, s.source.URL).
 			Wrapf(err, "downloading url source")
 	}
 
@@ -74,11 +74,11 @@ func (s *urlSource) Sync(
 		lock := cloneLockEntry(prevLock)
 		if lock == nil {
 			lock = &lockfile.LockEntry{
-				Type: "url",
+				Type: sourceTypeURL,
 			}
 		}
 
-		lock.Type = "url"
+		lock.Type = sourceTypeURL
 		lock.SyncedAt = time.Now().UTC()
 
 		return &SyncResult{
@@ -91,7 +91,7 @@ func (s *urlSource) Sync(
 		return nil, oops.
 			Code("DOWNLOAD_FAILED").
 			With("source", s.name).
-			With("url", s.source.URL).
+			With(sourceTypeURL, s.source.URL).
 			With("status", response.StatusCode()).
 			Errorf("url source returned non-success status %d", response.StatusCode())
 	}
@@ -102,7 +102,7 @@ func (s *urlSource) Sync(
 		return nil, oops.
 			Code("DOWNLOAD_FAILED").
 			With("source", s.name).
-			With("url", s.source.URL).
+			With(sourceTypeURL, s.source.URL).
 			Wrapf(err, "reading response body")
 	}
 
@@ -123,7 +123,7 @@ func (s *urlSource) Sync(
 	return &SyncResult{
 		Downloaded: 1,
 		LockEntry: &lockfile.LockEntry{
-			Type:     "url",
+			Type:     sourceTypeURL,
 			ETag:     response.Header().Get("ETag"),
 			LastMod:  response.Header().Get("Last-Modified"),
 			SyncedAt: time.Now().UTC(),

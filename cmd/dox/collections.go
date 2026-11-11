@@ -21,16 +21,16 @@ func newCollectionsCommand() *cli.Command {
 		Usage: "List all documentation collections",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output as JSON",
+				Name:  formatJSON,
+				Usage: helpJSON,
 			},
 			&cli.IntFlag{
-				Name:  "limit",
+				Name:  flagLimit,
 				Usage: "Limit number of results (0 = all)",
 			},
 		},
@@ -49,7 +49,7 @@ type collectionOutput struct {
 }
 
 func collectionsAction(_ context.Context, cmd *cli.Command) error {
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 	}
 	sort.Strings(names)
 
-	limit := cmd.Int("limit")
+	limit := cmd.Int(flagLimit)
 	if limit > 0 && len(names) > limit {
 		names = names[:limit]
 	}
@@ -89,7 +89,7 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 		})
 	}
 
-	if cmd.Bool("json") {
+	if cmd.Bool(formatJSON) {
 		return outputCollectionsJSON(collections)
 	}
 

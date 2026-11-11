@@ -22,13 +22,13 @@ func newOutlineCommand() *cli.Command {
 		ArgsUsage: "<collection> <file>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output as JSON",
+				Name:  formatJSON,
+				Usage: helpJSON,
 			},
 		},
 		Action: outlineAction,
@@ -47,7 +47,7 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 	collectionName := cmd.Args().Get(0)
 	filePath := cmd.Args().Get(1)
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 	if !ok {
 		return oops.
 			Code("COLLECTION_NOT_FOUND").
-			With("collection", collectionName).
+			With(fieldCollection, collectionName).
 			Hint("Run 'dox collections' to see available collections").
 			Errorf("collection %q not found", collectionName)
 	}
@@ -83,12 +83,12 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 		return oops.
 			Code("FILE_NOT_FOUND").
 			With("file", filePath).
-			With("collection", collectionName).
+			With(fieldCollection, collectionName).
 			Hint("Run 'dox files' to see available files").
 			Errorf("file %q not found in collection %q", filePath, collectionName)
 	}
 
-	if cmd.Bool("json") {
+	if cmd.Bool(formatJSON) {
 		return outputOutlineJSON(fileInfo)
 	}
 

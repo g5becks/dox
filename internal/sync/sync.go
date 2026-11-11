@@ -96,43 +96,13 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
-	maxParallel := opts.MaxParallel
-	if maxParallel <= 0 {
-		// Check if config specifies a default, otherwise use smart default
-		if cfg.MaxParallel > 0 {
-			maxParallel = cfg.MaxParallel
-		} else {
-			maxParallel = getDefaultMaxParallel()
-		}
-	}
-
 	emit := opts.OnEvent
 	if emit == nil {
 		emit = func(Event) {}
 	}
-
-	results := make(map[string]runState, len(sourceNames))
-	var resultsMu stdsync.Mutex
-	token := resolveGitHubToken(cfg)
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(maxParallel)
-
-	for _, sourceName := range sourceNames {
-		sourceCfg := cfg.Sources[sourceName]
-		destinationDir := resolveSourceOutputDir(outputDir, sourceName, sourceCfg)
-		previousLock := lock.GetEntry(sourceName)
-
-		group.Go(func() error {
-			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, opts, emit)
-			resultsMu.Lock()
-			results[sourceName] = state
-			resultsMu.Unlock()
-			return nil
-		})
-	}
-
-	if waitErr := group.Wait(); waitErr != nil {
-		return nil, oops.Wrapf(waitErr, "waiting for source sync workers")
+	results, err := executeSources(ctx, cfg, opts, outputDir, sourceNames, lock, emit)
+	if err != nil {
+		return nil, err
 	}
 
 	errorCount, downloadedCount, deletedCount, skippedCount := processResults(
@@ -143,18 +113,8 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	)
 
 	if !opts.DryRun {
-		if saveErr := lock.Save(outputDir); saveErr != nil {
-			return nil, saveErr
-		}
-
-		// Generate manifest (non-fatal)
-		if genErr := manifest.Generate(ctx, cfg, lock); genErr != nil {
-			if opts.OnEvent != nil {
-				opts.OnEvent(Event{
-					Kind: EventManifestError,
-					Err:  genErr,
-				})
-			}
+		if commitErr := commitSync(ctx, cfg, lock, outputDir, emit); commitErr != nil {
+			return nil, commitErr
 		}
 	}
 
@@ -174,6 +134,73 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	return runResult, nil
+}
+
+func resolveMaxParallel(cfg *config.Config, opts Options) int {
+	maxParallel := opts.MaxParallel
+	if maxParallel <= 0 {
+		// Check if config specifies a default, otherwise use smart default
+		if cfg.MaxParallel > 0 {
+			maxParallel = cfg.MaxParallel
+		} else {
+			maxParallel = getDefaultMaxParallel()
+		}
+	}
+
+	return maxParallel
+}
+
+func executeSources(
+	ctx context.Context,
+	cfg *config.Config,
+	opts Options,
+	outputDir string,
+	sourceNames []string,
+	lock *lockfile.LockFile,
+	emit func(Event),
+) (map[string]runState, error) {
+	results := make(map[string]runState, len(sourceNames))
+	var resultsMu stdsync.Mutex
+	token := resolveGitHubToken(cfg)
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(resolveMaxParallel(cfg, opts))
+
+	for _, sourceName := range sourceNames {
+		sourceCfg := cfg.Sources[sourceName]
+		destinationDir := resolveSourceOutputDir(outputDir, sourceName, sourceCfg)
+		previousLock := lock.GetEntry(sourceName)
+
+		group.Go(func() error {
+			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, opts, emit)
+			resultsMu.Lock()
+			results[sourceName] = state
+			resultsMu.Unlock()
+			return nil
+		})
+	}
+
+	if waitErr := group.Wait(); waitErr != nil {
+		return nil, oops.Wrapf(waitErr, "waiting for source sync workers")
+	}
+
+	return results, nil
+}
+
+func commitSync(
+	ctx context.Context,
+	cfg *config.Config,
+	lock *lockfile.LockFile,
+	outputDir string,
+	emit func(Event),
+) error {
+	if err := lock.Save(outputDir); err != nil {
+		return err
+	}
+	// Manifest failures are reported but do not fail the sync.
+	if err := manifest.Generate(ctx, cfg, lock); err != nil {
+		emit(Event{Kind: EventManifestError, Err: err})
+	}
+	return nil
 }
 
 func syncSource(

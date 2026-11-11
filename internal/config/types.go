@@ -246,9 +246,20 @@ func normalizeGitType(host string) string {
 
 func (c *Config) Validate() error {
 	v := newValidator()
+	if err := validateDisplay(v, c.Display); err != nil {
+		return err
+	}
+	for name, sourceCfg := range c.Sources {
+		if err := validateSource(v, name, sourceCfg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func validateDisplay(v *validator.Validate, display Display) error {
 	// Validate Display config
-	if err := v.Struct(c.Display); err != nil {
+	if err := v.Struct(display); err != nil {
 		if validationErrors, ok := errors.AsType[validator.ValidationErrors](err); ok {
 			for _, fe := range validationErrors {
 				field := strings.ToLower(fe.Field())
@@ -256,9 +267,9 @@ func (c *Config) Validate() error {
 					return oops.
 						Code("CONFIG_INVALID").
 						With("field", "display.format").
-						With("value", c.Display.Format).
+						With("value", display.Format).
 						Hint("Supported formats: table, json, csv").
-						Errorf("invalid display format %q", c.Display.Format)
+						Errorf("invalid display format %q", display.Format)
 				}
 			}
 		}
@@ -267,56 +278,57 @@ func (c *Config) Validate() error {
 			Wrapf(err, "validating display config")
 	}
 
-	for sourceName, sourceCfg := range c.Sources {
-		// Validate that source has either repo or url (not both, not neither)
-		hasRepo := sourceCfg.Repo != ""
-		hasURL := sourceCfg.URL != ""
+	return nil
+}
 
-		if !hasRepo && !hasURL {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				Hint("Each source must have either 'repo' (for git hosting) or 'url' (for direct downloads)").
-				Errorf("source %q has neither 'repo' nor 'url'", sourceName)
-		}
+func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) error {
+	// Validate that source has either repo or url (not both, not neither)
+	hasRepo := sourceCfg.Repo != ""
+	hasURL := sourceCfg.URL != ""
 
-		if hasRepo && hasURL {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				Hint("Use 'repo' for git hosting OR 'url' for direct downloads, not both").
-				Errorf("source %q has both 'repo' and 'url'", sourceName)
-		}
-
-		// For git hosting sources, require path
-		if hasRepo && sourceCfg.Path == "" {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				With("field", "path").
-				Hint("Set path to a file or directory in the repository").
-				Errorf("missing 'path' for source %q", sourceName)
-		}
-
-		// Struct validation for URL format, repo format, etc.
-		valErr := v.Struct(sourceCfg)
-		if valErr == nil {
-			continue
-		}
-
-		var validationErrors validator.ValidationErrors
-		if !errors.As(valErr, &validationErrors) {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				Wrapf(valErr, "validating source %q", sourceName)
-		}
-
-		for _, fe := range validationErrors {
-			return mapValidationError(sourceName, sourceCfg, fe)
-		}
+	if !hasRepo && !hasURL {
+		return oops.
+			Code("CONFIG_INVALID").
+			With("source", sourceName).
+			Hint("Each source must have either 'repo' (for git hosting) or 'url' (for direct downloads)").
+			Errorf("source %q has neither 'repo' nor 'url'", sourceName)
 	}
 
+	if hasRepo && hasURL {
+		return oops.
+			Code("CONFIG_INVALID").
+			With("source", sourceName).
+			Hint("Use 'repo' for git hosting OR 'url' for direct downloads, not both").
+			Errorf("source %q has both 'repo' and 'url'", sourceName)
+	}
+
+	// For git hosting sources, require path
+	if hasRepo && sourceCfg.Path == "" {
+		return oops.
+			Code("CONFIG_INVALID").
+			With("source", sourceName).
+			With("field", "path").
+			Hint("Set path to a file or directory in the repository").
+			Errorf("missing 'path' for source %q", sourceName)
+	}
+
+	// Struct validation for URL format, repo format, etc.
+	valErr := v.Struct(sourceCfg)
+	if valErr == nil {
+		return nil
+	}
+
+	var validationErrors validator.ValidationErrors
+	if !errors.As(valErr, &validationErrors) {
+		return oops.
+			Code("CONFIG_INVALID").
+			With("source", sourceName).
+			Wrapf(valErr, "validating source %q", sourceName)
+	}
+
+	for _, fe := range validationErrors {
+		return mapValidationError(sourceName, sourceCfg, fe)
+	}
 	return nil
 }
 

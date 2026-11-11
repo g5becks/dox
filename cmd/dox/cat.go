@@ -22,12 +22,12 @@ func newCatCommand() *cli.Command {
 		ArgsUsage: "<collection> <file>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.BoolFlag{
-				Name:  "json",
+				Name:  formatJSON,
 				Usage: "Output as JSON with metadata",
 			},
 			&cli.BoolFlag{
@@ -39,7 +39,7 @@ func newCatCommand() *cli.Command {
 				Usage: "Start at line N (0-based)",
 			},
 			&cli.IntFlag{
-				Name:  "limit",
+				Name:  flagLimit,
 				Usage: "Show N lines (0 = all)",
 			},
 		},
@@ -70,7 +70,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	collectionName := cmd.Args().Get(0)
 	filePath := cmd.Args().Get(1)
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	if !ok {
 		return oops.
 			Code("COLLECTION_NOT_FOUND").
-			With("collection", collectionName).
+			With(fieldCollection, collectionName).
 			Hint("Run 'dox collections' to see available collections").
 			Errorf("collection %q not found", collectionName)
 	}
@@ -106,7 +106,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		return oops.
 			Code("FILE_NOT_FOUND").
 			With("file", filePath).
-			With("collection", collectionName).
+			With(fieldCollection, collectionName).
 			Hint("Run 'dox files' to see available files").
 			Errorf("file %q not found in collection %q", filePath, collectionName)
 	}
@@ -116,7 +116,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return oops.
 			Code("FILE_READ_ERROR").
-			With("path", fullPath).
+			With(fieldPath, fullPath).
 			Hint("Run 'dox sync' to re-download the file").
 			Wrapf(err, "reading file")
 	}
@@ -128,7 +128,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	offset := cmd.Int("offset")
-	limit := cmd.Int("limit")
+	limit := cmd.Int(flagLimit)
 
 	if offset >= len(lines) {
 		lines = []string{}
@@ -139,7 +139,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if cmd.Bool("json") {
+	if cmd.Bool(formatJSON) {
 		return outputCatJSON(collectionName, fileInfo, strings.Join(lines, "\n"), offset, limit)
 	}
 

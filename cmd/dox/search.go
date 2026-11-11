@@ -17,11 +17,6 @@ import (
 	"github.com/g5becks/dox/internal/search"
 )
 
-const (
-	formatJSON = "json"
-	formatCSV  = "csv"
-)
-
 func newSearchCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "search",
@@ -29,12 +24,12 @@ func newSearchCommand() *cli.Command {
 		ArgsUsage: "<query>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.StringFlag{
-				Name:  "collection",
+				Name:  fieldCollection,
 				Usage: "Search only within one collection",
 			},
 			&cli.BoolFlag{
@@ -46,15 +41,15 @@ func newSearchCommand() *cli.Command {
 				Usage: "Treat query as regex (requires --content)",
 			},
 			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output as JSON",
+				Name:  formatJSON,
+				Usage: helpJSON,
 			},
 			&cli.StringFlag{
 				Name:  "format",
 				Usage: "Output format: table, json, csv",
 			},
 			&cli.IntFlag{
-				Name:  "limit",
+				Name:  flagLimit,
 				Usage: "Max results (0 = unlimited)",
 			},
 			&cli.IntFlag{
@@ -89,7 +84,7 @@ func searchAction(_ context.Context, cmd *cli.Command) error {
 			Errorf("--regex can only be used with --content")
 	}
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -123,7 +118,7 @@ func runMetadataSearch(
 ) error {
 	results, err := search.Metadata(m, search.MetadataOptions{
 		Query:      query,
-		Collection: cmd.String("collection"),
+		Collection: cmd.String(fieldCollection),
 		Limit:      limit,
 	})
 	if err != nil {
@@ -150,7 +145,7 @@ func runContentSearch(
 	results, err := search.Content(m, search.ContentOptions{
 		OutputDir:  cfg.Output,
 		Query:      query,
-		Collection: cmd.String("collection"),
+		Collection: cmd.String(fieldCollection),
 		UseRegex:   cmd.Bool("regex"),
 		Limit:      limit,
 	})
@@ -181,7 +176,7 @@ func outputMetadataCSV(results []search.MetadataResult) error {
 	w := csv.NewWriter(os.Stdout)
 	defer w.Flush()
 
-	header := []string{"collection", "path", "type", "match_field", "match_value", "score", "description"}
+	header := []string{fieldCollection, fieldPath, fieldType, "match_field", "match_value", "score", "description"}
 	if err := w.Write(header); err != nil {
 		return oops.Code("CSV_ERROR").Wrapf(err, "writing CSV header")
 	}
@@ -238,7 +233,7 @@ func outputContentCSV(results []search.ContentResult) error {
 	w := csv.NewWriter(os.Stdout)
 	defer w.Flush()
 
-	if err := w.Write([]string{"collection", "path", "line", "text"}); err != nil {
+	if err := w.Write([]string{fieldCollection, fieldPath, "line", "text"}); err != nil {
 		return oops.Code("CSV_ERROR").Wrapf(err, "writing CSV header")
 	}
 

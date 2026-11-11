@@ -200,7 +200,7 @@ func newSyncCommand() *cli.Command {
 		Usage:     "Sync configured documentation sources",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{
 				Name:    "force",
 				Aliases: []string{"f"},
@@ -222,7 +222,7 @@ func newListCommand() *cli.Command {
 		Name:  "list",
 		Usage: "List configured sources and status",
 		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "json", Usage: "Emit JSON output"},
+			&cli.BoolFlag{Name: formatJSON, Usage: "Emit JSON output"},
 			&cli.BoolFlag{
 				Name:    "verbose",
 				Aliases: []string{"v"},
@@ -232,7 +232,7 @@ func newListCommand() *cli.Command {
 				Name:  "files",
 				Usage: "Include file counts from local output directories",
 			},
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 		},
 		Action: listAction,
 	}
@@ -245,20 +245,20 @@ func newAddCommand() *cli.Command {
 		ArgsUsage: "<name>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "type",
+				Name:     fieldType,
 				Aliases:  []string{"t"},
 				Usage:    "Source type: github or url",
 				Required: true,
 			},
 			&cli.StringFlag{Name: "repo", Usage: "Repository in owner/repo format"},
-			&cli.StringFlag{Name: "path", Usage: "Path within repository"},
+			&cli.StringFlag{Name: fieldPath, Usage: "Path within repository"},
 			&cli.StringFlag{Name: "ref", Usage: "Branch, tag, or commit SHA"},
 			&cli.StringSliceFlag{Name: "patterns", Usage: "Include glob pattern (repeatable)"},
 			&cli.StringSliceFlag{Name: "exclude", Usage: "Exclude glob pattern (repeatable)"},
-			&cli.StringFlag{Name: "url", Usage: "Source URL"},
+			&cli.StringFlag{Name: fieldURL, Usage: "Source URL"},
 			&cli.StringFlag{Name: "filename", Usage: "Output filename for URL source"},
 			&cli.StringFlag{Name: "out", Usage: "Custom output subdirectory"},
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{Name: "force", Usage: "Overwrite an existing source with the same name"},
 		},
 		Action: addAction,
@@ -271,7 +271,7 @@ func newCleanCommand() *cli.Command {
 		Usage:     "Remove downloaded documentation output",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 		},
 		Action: cleanAction,
 	}
@@ -286,7 +286,7 @@ func newInitCommand() *cli.Command {
 }
 
 func syncAction(ctx context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := config.Load(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -317,7 +317,7 @@ func commandArgs(cmd *cli.Command) []string {
 }
 
 func listAction(_ context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := config.Load(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 			status.Status = "synced"
 			status.SyncedAt = lockEntry.SyncedAt
 			status.FileCount = len(lockEntry.Files)
-			if lockEntry.Type == "url" && status.FileCount == 0 {
+			if lockEntry.Type == fieldURL && status.FileCount == 0 {
 				status.FileCount = 1
 			}
 		}
@@ -371,7 +371,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return ui.RenderSourceList(statuses, ui.ListOptions{
-		JSON:    cmd.Bool("json"),
+		JSON:    cmd.Bool(formatJSON),
 		Verbose: cmd.Bool("verbose"),
 		Files:   includeFiles,
 	})
@@ -399,7 +399,7 @@ func countFiles(root string) (int, error) {
 
 		return 0, oops.
 			Code("WRITE_FAILED").
-			With("path", root).
+			With(fieldPath, root).
 			Wrapf(err, "counting files")
 	}
 
@@ -419,13 +419,13 @@ func initAction(_ context.Context, _ *cli.Command) error {
 		if _, err := os.Stat(configName); err == nil {
 			return oops.
 				Code("CONFIG_WRITE_ERROR").
-				With("path", configName).
+				With(fieldPath, configName).
 				Hint("Remove the existing file or edit it directly").
 				Errorf("config file already exists at %q", configName)
 		} else if !os.IsNotExist(err) {
 			return oops.
 				Code("CONFIG_WRITE_ERROR").
-				With("path", configName).
+				With(fieldPath, configName).
 				Wrapf(err, "checking config path")
 		}
 	}
@@ -433,7 +433,7 @@ func initAction(_ context.Context, _ *cli.Command) error {
 	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o600); err != nil {
 		return oops.
 			Code("CONFIG_WRITE_ERROR").
-			With("path", "dox.toml").
+			With(fieldPath, "dox.toml").
 			Wrapf(err, "writing starter config")
 	}
 
@@ -449,7 +449,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 			Errorf("source name is required")
 	}
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -469,13 +469,13 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	newSource := config.Source{
-		Type:     cmd.String("type"),
+		Type:     cmd.String(fieldType),
 		Repo:     cmd.String("repo"),
-		Path:     cmd.String("path"),
+		Path:     cmd.String(fieldPath),
 		Ref:      cmd.String("ref"),
 		Patterns: cmd.StringSlice("patterns"),
 		Exclude:  cmd.StringSlice("exclude"),
-		URL:      cmd.String("url"),
+		URL:      cmd.String(fieldURL),
 		Filename: cmd.String("filename"),
 		Out:      cmd.String("out"),
 	}
@@ -495,7 +495,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return oops.
 			Code("CONFIG_WRITE_ERROR").
-			With("path", configPath).
+			With(fieldPath, configPath).
 			Wrapf(err, "reading config file")
 	}
 
@@ -510,10 +510,10 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		updatedContent = appendSourceSection(fileContent, section)
 	}
 
-	if writeErr := os.WriteFile(configPath, []byte(updatedContent), 0o600); writeErr != nil {
+	if writeErr := writeConfig(configPath, updatedContent); writeErr != nil {
 		return oops.
 			Code("CONFIG_WRITE_ERROR").
-			With("path", configPath).
+			With(fieldPath, configPath).
 			Wrapf(writeErr, "writing config file")
 	}
 
@@ -526,7 +526,7 @@ func resolveConfigPath(configPath string) (string, error) {
 			if errors.Is(err, os.ErrNotExist) {
 				return "", oops.
 					Code("CONFIG_NOT_FOUND").
-					With("path", configPath).
+					With(fieldPath, configPath).
 					Hint("Create the file first or pass a valid --config path").
 					Errorf("config file %q does not exist", configPath)
 			}
@@ -567,7 +567,7 @@ func renderSourceSection(sourceName string, sourceCfg config.Source) string {
 		}
 	}
 
-	if sourceCfg.Type == "url" {
+	if sourceCfg.Type == fieldURL {
 		lines = append(lines, fmt.Sprintf("url = %q", sourceCfg.URL))
 		if sourceCfg.Filename != "" {
 			lines = append(lines, fmt.Sprintf("filename = %q", sourceCfg.Filename))
@@ -635,7 +635,7 @@ func replaceSourceSection(fileContent string, sourceName string, section string)
 }
 
 func cleanAction(_ context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := config.Load(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -646,7 +646,7 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 		if removeErr := os.RemoveAll(outputDir); removeErr != nil {
 			return oops.
 				Code("WRITE_FAILED").
-				With("path", outputDir).
+				With(fieldPath, outputDir).
 				Wrapf(removeErr, "removing output directory")
 		}
 
@@ -671,7 +671,7 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 		if removeErr := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); removeErr != nil {
 			return oops.
 				Code("WRITE_FAILED").
-				With("path", cfg.OutputDir(sourceName, sourceCfg)).
+				With(fieldPath, cfg.OutputDir(sourceName, sourceCfg)).
 				With("source", sourceName).
 				Wrapf(removeErr, "removing source output directory")
 		}

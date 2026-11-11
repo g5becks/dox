@@ -9,6 +9,8 @@ import (
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
+const sourceTypeURL = "url"
+
 // SyncResult reports what happened during a sync.
 type SyncResult struct {
 	Downloaded int
@@ -39,7 +41,7 @@ func New(name string, cfg config.Source, token string) (Source, error) {
 	switch cfg.Type {
 	case "github":
 		return NewGitHub(name, cfg, token)
-	case "url":
+	case sourceTypeURL:
 		return NewURL(name, cfg)
 	default:
 		return nil, oops.

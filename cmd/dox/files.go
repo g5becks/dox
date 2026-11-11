@@ -23,16 +23,16 @@ func newFilesCommand() *cli.Command {
 		ArgsUsage: "<collection>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output as JSON",
+				Name:  formatJSON,
+				Usage: helpJSON,
 			},
 			&cli.IntFlag{
-				Name:  "limit",
+				Name:  flagLimit,
 				Usage: "Show first N files (0 = use config default)",
 			},
 			&cli.BoolFlag{
@@ -66,7 +66,7 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 
 	collectionName := cmd.Args().First()
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 	if !ok {
 		return oops.
 			Code("COLLECTION_NOT_FOUND").
-			With("collection", collectionName).
+			With(fieldCollection, collectionName).
 			Hint("Run 'dox collections' to see available collections").
 			Errorf("collection %q not found", collectionName)
 	}
@@ -105,7 +105,7 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	switch format {
-	case "json":
+	case formatJSON:
 		return outputFilesJSON(files)
 	case "csv":
 		return outputFilesCSV(files, fields, descLength)
@@ -118,15 +118,15 @@ func resolveLimit(cmd *cli.Command, cfg *config.Config) int {
 	if cmd.Bool("all") {
 		return 0
 	}
-	if cmd.IsSet("limit") {
-		return cmd.Int("limit")
+	if cmd.IsSet(flagLimit) {
+		return cmd.Int(flagLimit)
 	}
 	return cfg.Display.DefaultLimit
 }
 
 func resolveFormat(cmd *cli.Command, cfg *config.Config) string {
-	if cmd.Bool("json") {
-		return "json"
+	if cmd.Bool(formatJSON) {
+		return formatJSON
 	}
 	if cmd.IsSet("format") {
 		return cmd.String("format")
@@ -224,9 +224,9 @@ func outputFilesTable(
 
 func getFieldValue(file manifest.FileInfo, field string, descLength int) string {
 	switch field {
-	case "path":
+	case fieldPath:
 		return file.Path
-	case "type":
+	case fieldType:
 		return file.Type
 	case "lines":
 		return strconv.Itoa(file.Lines)
