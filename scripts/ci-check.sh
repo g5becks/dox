@@ -15,7 +15,7 @@ tool() {
 
 project_go version
 if [[ "${1:-}" == windows-cross ]]; then
-  export GOOS=windows CGO_ENABLED=0
+  export GOOS=windows GOARCH=amd64 CGO_ENABLED=0
   project_go vet ./...
   scratch=$(mktemp -d)
   trap 'rm -rf "$scratch"' EXIT

@@ -2,6 +2,10 @@
 # Check a committed ref in clean clones; never include working-tree changes.
 set -euo pipefail
 
+# Parse the whole runner before executing jobs, so later workspace edits cannot
+# change the commands read by an already-running matrix.
+main() {
+
 if [[ "$(uname -s)" != Darwin ]]; then
   echo "ci-local requires macOS for its native macOS legs" >&2
   exit 1
@@ -68,9 +72,9 @@ while IFS= read -r version; do
   fi
   printf 'Running Windows cross-check (%s)\n' "$version"
   if (cd "$host_dir" && DOX_GO_TOOLCHAIN="$version" bash scripts/ci-check.sh windows-cross) >"$logs/windows-$line.log" 2>&1; then
-    record "Windows compile + vet / $version" PASS
+    record "Windows amd64 compile + vet / $version" PASS
   else
-    record "Windows compile + vet / $version" FAIL
+    record "Windows amd64 compile + vet / $version" FAIL
   fi
   linux_dir="$run_dir/linux-$line"
   clone_ref "$linux_dir"
@@ -98,3 +102,7 @@ done <<<"$versions"
   if [[ "$failed" == 0 ]]; then echo 'RESULT: PASS'; else echo 'RESULT: FAIL'; fi
 } | tee "$results"
 exit "$failed"
+
+}
+
+main "$@"
