@@ -85,9 +85,9 @@ go tool -modfile=tools/go.mod lefthook run pre-push
 host jobs, Linux Docker jobs, and Windows compilation/vet. Logs and result tables
 are saved under `/Users/takinprofit/Dev/dox-release/ci-local/<sha>/logs/`.
 It uses Colima when needed and never starts or stops it. All native checks are
-shared with GitHub in `scripts/ci-check.sh`; tool execution uses Go 1.27.3 while
-project build/vet/race/fix/tidy checks use the selected matrix Go version. Native Windows execution remains a
-GitHub-only check. GitHub Actions currently cannot run because of the account's
+shared with GitHub in `scripts/ci-check.sh`; tools are built with Go 1.27.3 through `go tool`.
+Analyzers and project build/vet/race/fix/tidy checks use the selected matrix Go
+version. Native Windows execution remains a GitHub-only check. GitHub Actions currently cannot run because of the account's
 billing lock; report local results honestly rather than claiming an Actions run.
 
 ## Test strategy

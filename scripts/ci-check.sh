@@ -5,7 +5,13 @@ set -euo pipefail
 DOX_GO_TOOLCHAIN="${DOX_GO_TOOLCHAIN:-$(GOTOOLCHAIN=local go env GOVERSION)}"
 export DOX_GO_TOOLCHAIN
 project_go() { GOTOOLCHAIN="$DOX_GO_TOOLCHAIN" go "$@"; }
-tool() { GOTOOLCHAIN=go1.27.3 go tool -modfile=tools/go.mod "$@"; }
+tool() {
+  local executable
+  # Build the pinned tool with its required Go, then inspect the matrix Go.
+  executable=$(GOTOOLCHAIN=go1.27.3 go tool -modfile=tools/go.mod -n "$1")
+  shift
+  GOTOOLCHAIN="$DOX_GO_TOOLCHAIN" "$executable" "$@"
+}
 
 project_go version
 if [[ "${1:-}" == windows-cross ]]; then
