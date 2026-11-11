@@ -1,308 +1,133 @@
 # Contributing to dox
 
-Thank you for your interest in contributing to dox! This guide will help you get started.
+Use Go 1.26 or newer to build dox. Development uses Go 1.27.3, selected by the
+root module's toolchain directive. Keep changes focused, preserve existing tests,
+and explain compatibility changes in the changelog with migration steps.
 
-## Code of Conduct
-
-Be respectful and constructive. We're here to build great software together.
-
-## Getting Started
-
-### Prerequisites
-
-Development tools are pinned in `tools/go.mod`; run them with
-`go tool -modfile=tools/go.mod <tool>`. Beads is isolated in
-`tools/beads/go.mod` and must run through `scripts/bd`. See
-[the tools guide](tools/README.md) for commands and module maintenance.
-
-Install the pinned Git hooks after cloning:
+## Setup
 
 ```sh
-go tool -modfile=tools/go.mod lefthook install
-```
-
-Pre-commit formats and restages staged Go files with goimports, then checks new
-lint findings against HEAD. Commit messages retain Conventional Commit checks.
-Pre-push runs race tests and full lint. Run these checks manually with
-`go tool -modfile=tools/go.mod lefthook run pre-push`.
-
-- **Go 1.25.7+** (check with `go version`)
-- **Task** (optional but recommended): `go install github.com/go-task/task/v3/cmd/task@latest`
-- **golangci-lint** (for linting): https://golangci-lint.run/usage/install/
-
-### Clone and Build
-
-```bash
 git clone https://github.com/g5becks/dox.git
 cd dox
 go mod download
-task build  # or: go build -o bin/dox ./cmd/dox
+go tool -modfile=tools/go.mod lefthook install
+go tool -modfile=tools/go.mod task build
+./bin/dox --help
 ```
 
-### Run Tests
+Task, golangci-lint, Lefthook, GoReleaser, and goimports are pinned in
+`tools/go.mod`. Invoke them as `go tool -modfile=tools/go.mod <tool>` from the
+repository root. No global installation is needed. Beads v0.49.6 is isolated in
+`tools/beads/go.mod`; always use `scripts/bd`. Its wrapper disables CGO and the
+daemon. [The tools guide](tools/README.md) explains the separate graphs.
 
-```bash
-# Run all tests
-go test ./...
+## Issues and commits
 
-# Run with coverage
-go test -cover ./...
+Read [AGENTS.md](AGENTS.md) and the relevant issue before implementing changes.
+The audit in `dox-audit.md` explains findings cited by the release issues.
 
-# Run specific package tests
-go test ./internal/sync/...
-
-# Using task
-task test
+```sh
+scripts/bd ready
+scripts/bd show <id>
+scripts/bd update <id> --claim
+scripts/bd update <id> --append-notes 'Plan: ...'
 ```
 
-### Lint
+Keep one issue in progress. Add the plan, decisions, verification evidence, and
+resume instructions to its notes. Mark acceptance checkboxes only after verifying
+them. Finish with `scripts/bd close <id>` and `scripts/bd sync`. This beads version
+only exports `.beads/issues.jsonl`; stage and commit the export with the code.
+Do not make standalone export commits or install a global beads version.
 
-```bash
-# Run all linters
-golangci-lint run ./...
+Use Conventional Commits, such as `fix(source): handle an empty response` or
+`test(cli): cover missing config`. Compatibility changes use `!`, such as
+`fix(config)!: reject unsafe output paths`, and need CHANGELOG Changed migration
+instructions. Do not bypass Git hooks or rewrite pushed commits. Push when the
+specific task calls for it.
 
-# Auto-fix issues where possible
-golangci-lint run --fix ./...
+## Local checks and hooks
 
-# Using task
-task lint
+```sh
+go build ./...
+go vet ./...
+go test -race ./...
+go tool -modfile=tools/go.mod task lint
+gofmt -l .
+go fix -diff ./...
+go mod tidy -diff
+(cd tools && go mod tidy -diff)
+(cd tools/beads && go mod tidy -diff)
 ```
 
-### Manual Testing
+Lint must report zero issues. Formatting, modernization, and tidy checks must
+produce no diff. Run tidy from each module's own directory: a root-level
+`-modfile` invocation scans root packages, not the tools module's packages.
 
-```bash
-# Build and test locally
-task build
-./bin/dox init
-./bin/dox sync --help
+Task targets include `build`, `dev`, `test` (race tests with coverage),
+`test:coverage`, `lint`, `lint:fix`, `fmt`, `deps`, `deps:tidy`, and `all`.
+List them with `go tool -modfile=tools/go.mod task --list`. To apply supported
+lint fixes, run `go tool -modfile=tools/go.mod task lint:fix`, then review the diff.
+Fix remaining findings by refactoring; do not lower lint thresholds or disable
+linters. Document any confirmed false-positive suppression in the issue notes.
+
+Pre-commit runs goimports on staged Go files, restages formatting fixes, then
+lints new findings against HEAD. Commit-msg validates the subject. Pre-push runs
+full lint and race tests. To run the push checks manually:
+
+```sh
+go tool -modfile=tools/go.mod lefthook run pre-push
 ```
 
-## Development Workflow
+The CI issue adds `scripts/ci-local.sh <ref>` as the local gate. Once present,
+require its final `RESULT: PASS`. It checks a clean clone, macOS host jobs, Linux
+Docker jobs, and Windows compilation/vet. Native Windows execution remains a
+GitHub-only check. GitHub Actions currently cannot run because of the account's
+billing lock; report local results honestly rather than claiming an Actions run.
 
-### 1. Create an Issue
+## Test strategy
 
-Before starting work, [create an issue](https://github.com/g5becks/dox/issues/new) describing:
-- The problem or feature
-- Proposed solution (for features)
-- Any breaking changes
+Unit tests live beside implementations. Use table-driven cases, `t.Parallel()`
+for independent tests, `t.TempDir()` for writes, and `t.Context()` for test-scoped
+operations. Never run destructive CLI repros outside a temporary directory.
 
-### 2. Fork and Branch
+Use `httptest` for deterministic HTTP behavior: conditional requests, failures,
+cancellation, pagination, and rate limits. The CLI-harness issue adds testscript
+coverage for command output, exit status, flags, and config files, plus a fake
+GitHub API. Until it lands, these are planned harnesses, not existing commands.
+From the regression-harness issue onward, register and first demonstrate each
+regression failing before fixing it. Keep all cases; never weaken assertions or
+add known failures just to pass the suite.
 
-```bash
-# Fork the repo on GitHub, then:
-git clone git@github.com:YOUR_USERNAME/dox.git
-cd dox
-git remote add upstream git@github.com:g5becks/dox.git
+Parser, manifest, and search benchmarks are alongside their packages. The
+benchmark-corpus issue adds a pinned corpus, `DOX_BENCH_CORPUS`, and the v0.3.0
+baseline. Compare relevant performance changes with that same corpus and machine
+using benchstat; record the commands, baseline, and results in issue notes. Live
+GitHub benchmarks require an explicit token in the process environment; never
+print credentials or embed them in output or fixtures.
 
-# Create a feature branch
-git checkout -b feat/my-feature
-# or
-git checkout -b fix/issue-123
-```
+## Structure and extensions
 
-### 3. Make Changes
+`cmd/dox/` contains CLI commands. `internal/config`, `lockfile`, `source`, `sync`,
+`parser`, `manifest`, `search`, and `ui` implement the corresponding core behavior.
 
-- Write clear, focused commits
-- Follow existing code style
-- Add tests for new functionality
-- Update documentation as needed
+For a source, add config/validation, implement `source.Source`, register it in the
+factory, and cover its behavior with fake HTTP tests. For a parser, implement
+`parser.Parser`, register it in the manifest generator, and add parser and
+integration cases. Update README examples and supported features together with
+the implementation. Use `samber/oops` error codes, useful context, and actionable
+hints consistently with the existing packages.
 
-### 4. Commit Messages
+## Release preparation
 
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
+Finish all release children and checks before preparing a release. Once the
+release tooling is implemented, `scripts/release-prep.sh X.Y.Z` rolls CHANGELOG,
+creates a local annotated tag, verifies local CI, builds a GoReleaser **snapshot**,
+and runs binary/container smoke tests. Store artifacts outside the source tree
+under `/Users/takinprofit/Dev/dox-release/` in this development environment.
 
-```
-feat: add support for GitLab repos
-fix: handle rate limit errors gracefully
-docs: update README with new examples
-test: add coverage for URL source
-chore: update dependencies
-refactor: simplify config validation
-```
+Use a release branch and a merge commit PR; do not squash, rebase, or use admin
+merge. Preserve the local tag as an ancestor of main. Tag publication, production
+GoReleaser, image pushes, and GitHub release publication are the maintainer's
+separate responsibility. Agents must never push release tags.
 
-Types:
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `test`: Test changes
-- `refactor`: Code restructuring
-- `chore`: Tooling, dependencies, etc.
-- `perf`: Performance improvements
-
-### 5. Test Your Changes
-
-```bash
-# Run full test suite
-go test ./...
-
-# Run linter
-golangci-lint run ./...
-
-# Test the binary manually
-task build
-./bin/dox sync --dry-run
-```
-
-### 6. Push and Create PR
-
-```bash
-git push origin feat/my-feature
-```
-
-Then [create a Pull Request](https://github.com/g5becks/dox/compare) on GitHub.
-
-**PR Guidelines:**
-- Title should follow conventional commits format
-- Describe what changed and why
-- Link to related issues with `Fixes #123` or `Closes #123`
-- Include screenshots for UI changes
-- Mark as draft if work-in-progress
-
-## Project Structure
-
-```
-dox/
-├── cmd/dox/          # CLI entry point
-├── internal/
-│   ├── config/       # Configuration parsing & validation
-│   ├── lockfile/     # Lock file management
-│   ├── manifest/     # Manifest generation & persistence
-│   ├── parser/       # File parsers (markdown, MDX, TypeScript, text)
-│   ├── source/       # Source implementations (GitHub, URL)
-│   ├── sync/         # Sync orchestration
-│   └── ui/           # Terminal UI (tables, colors)
-├── .goreleaser.yaml  # Release configuration
-├── Taskfile.yml      # Task automation
-└── README.md
-```
-
-## Code Style
-
-### General
-
-- Follow [Effective Go](https://golang.org/doc/effective_go.html)
-- Run `goimports` (or use your editor's format-on-save)
-- Keep functions focused and under 100 lines
-- Prefer clarity over cleverness
-
-### Error Handling
-
-We use [samber/oops](https://github.com/samber/oops) for rich errors:
-
-```go
-return nil, oops.
-    Code("CONFIG_INVALID").
-    With("path", configPath).
-    Hint("Check that the file exists and is valid TOML").
-    Wrapf(err, "loading config")
-```
-
-### Testing
-
-- Test files live alongside source: `foo.go` → `foo_test.go`
-- Use table-driven tests for multiple cases
-- Test both success and error paths
-- Use `t.Parallel()` for independent tests
-
-Example:
-```go
-func TestMyFunction(t *testing.T) {
-    t.Parallel()
-
-    tests := []struct {
-        name string
-        input string
-        want string
-        wantErr bool
-    }{
-        {name: "valid input", input: "foo", want: "FOO"},
-        {name: "empty input", input: "", wantErr: true},
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            t.Parallel()
-
-            got, err := MyFunction(tt.input)
-            if tt.wantErr {
-                if err == nil {
-                    t.Fatal("expected error, got nil")
-                }
-                return
-            }
-
-            if got != tt.want {
-                t.Errorf("got %q, want %q", got, tt.want)
-            }
-        })
-    }
-}
-```
-
-## Adding a New Source Type
-
-To add a new source (e.g., GitLab, BitBucket):
-
-1. **Add config struct** in `internal/config/config.go`
-2. **Implement `Source` interface** in `internal/source/newtype.go`
-3. **Register in factory** (`internal/source/source.go`)
-4. **Add tests** in `internal/source/newtype_test.go`
-5. **Update docs** (README.md, config examples)
-
-## Adding a New Parser
-
-To add support for a new file type in the query feature:
-
-1. **Implement `Parser` interface** in `internal/parser/newtype.go`:
-   ```go
-   type NewParser struct{}
-   
-   func (p *NewParser) CanParse(path string) bool {
-       return strings.HasSuffix(path, ".ext")
-   }
-   
-   func (p *NewParser) Parse(_ string, content []byte) (*ParseResult, error) {
-       // Extract headings, description, etc.
-       return &ParseResult{...}, nil
-   }
-   ```
-
-2. **Register parser** in `internal/manifest/generator.go` parsers list
-3. **Add tests** in `internal/parser/newtype_test.go`
-4. **Update docs** (README.md supported file types)
-
-Supported parsers: Markdown (.md), MDX (.mdx), TypeScript/TSX (.ts/.tsx), Text (.txt)
-
-## Release Process
-
-Releases are automated via GitHub Actions + goreleaser:
-
-1. **Ensure main branch is stable**
-   - All tests passing
-   - No known critical bugs
-
-2. **Tag a release**
-   ```bash
-   git tag -a v1.2.3 -m "Release v1.2.3"
-   git push origin v1.2.3
-   ```
-
-3. **GitHub Actions will:**
-   - Build binaries for all platforms
-   - Create GitHub release with changelog
-   - Publish to Homebrew tap
-   - Upload packages (deb, rpm, etc.)
-
-4. **Verify release**
-   - Check [releases page](https://github.com/g5becks/dox/releases)
-   - Test Homebrew install: `brew install g5becks/tap/dox`
-
-## Getting Help
-
-- **Questions?** [Open a discussion](https://github.com/g5becks/dox/discussions)
-- **Bug?** [File an issue](https://github.com/g5becks/dox/issues/new)
-- **PR feedback?** Comment on your PR or ping maintainers
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.
+Contributions are licensed under the [MIT license](LICENSE).
