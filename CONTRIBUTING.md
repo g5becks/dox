@@ -141,3 +141,16 @@ GoReleaser, image pushes, and GitHub release publication are the maintainer's
 separate responsibility. Agents must never push release tags.
 
 Contributions are licensed under the [MIT license](LICENSE).
+
+## Container HTTPS checks
+
+`bash scripts/container-smoke.sh` builds the same digest-pinned nonroot image as
+GoReleaser, syncs the public `https://hono.dev/llms.txt` source over verified
+HTTPS, and requires a nonempty result. It may also take an absolute path to an
+already-built Linux binary for the Docker daemon's architecture. No image is
+pushed. The smoke runs for each supported Go version in ci-local and the Ubuntu
+workflow legs. On macOS it creates owned temporary fixtures under
+`DOX_RELEASE_ROOT` (default `/Users/takinprofit/Dev/dox-release`) so Colima can
+share the bind mount; other platforms use the normal temporary directory.
+The container uses the bind mount owner's UID/GID during the test, and its
+configured default nonroot user is checked separately.

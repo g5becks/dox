@@ -92,6 +92,12 @@ while IFS= read -r version; do
   else
     record "Linux / golang:$line" FAIL
   fi
+  printf 'Running HTTPS container smoke (%s)\n' "$version"
+  if DOX_GO_TOOLCHAIN="$version" bash "$host_dir/scripts/container-smoke.sh" >"$logs/container-$line.log" 2>&1; then
+    record "Container HTTPS / $version" PASS
+  else
+    record "Container HTTPS / $version" FAIL
+  fi
 done <<<"$versions"
 
 {

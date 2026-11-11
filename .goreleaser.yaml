@@ -98,6 +98,7 @@ brews:
     test: |-
       system "#{bin}/dox", "--version"
 
+# Both architectures use the same digest-pinned CA-bearing nonroot Dockerfile.
 dockers:
   - image_templates:
       - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"

@@ -37,3 +37,6 @@ jobs:
             tools/actionlint/go.sum
       - name: Vet, lint, race/coverage, vulnerabilities, fix, format, and tidy
         run: bash scripts/ci-check.sh
+      - name: Build image and sync an HTTPS documentation source
+        if: matrix.os == 'ubuntu-latest'
+        run: DOX_GO_TOOLCHAIN=$(GOTOOLCHAIN=local go env GOVERSION) bash scripts/container-smoke.sh

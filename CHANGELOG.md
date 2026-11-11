@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- The Docker image now uses a digest-pinned Distroless base with CA certificates and default nonroot UID 65532. HTTPS syncs work inside the image. For project bind mounts, migrate root-dependent setups to `--user "$(id -u):$(id -g)"` or grant UID 65532 access to the mounted directory.
+
 - `cat --line N` and `file:N` now accept the same 1-based locations reported by search and outlines; JSON adds a 1-based `line` while retaining `offset`. Migrate `--offset N` to `--line N+1`: the old 0-based flag warns and is scheduled for removal in v0.6.0. Conflicting and nonpositive locations are rejected.
 
 - Sync parallelism now uses flag > config > computed default. An omitted `--parallel` honors `max_parallel`; the computed fallback is `min(max(4 × CPU cores, 10), 16)`. Pass `--parallel 3` to retain the previous accidental default limit. Explicit positive flag/config values are not capped at 16.

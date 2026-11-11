@@ -50,6 +50,18 @@ docker pull ghcr.io/g5becks/dox:latest
 docker run --rm ghcr.io/g5becks/dox:latest --version
 ```
 
+The image includes CA certificates and defaults to a nonroot user (UID 65532).
+For a local project bind mount, use your own UID/GID so downloaded files remain
+writable by your account (macOS/Linux):
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspace" -w /workspace ghcr.io/g5becks/dox:latest sync
+```
+
+Existing setups that relied on root-owned bind-mount writes should switch to
+that explicit user or grant the image user access to the mounted directory.
+
+
 ### Go Install
 
 ```bash
