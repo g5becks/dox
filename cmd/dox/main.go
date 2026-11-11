@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
@@ -397,10 +397,11 @@ func countFiles(root string) (int, error) {
 			return 0, nil
 		}
 
-		return 0, oops.
-			Code("WRITE_FAILED").
-			With(fieldPath, root).
-			Wrapf(err, "counting files")
+		return 0, errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("counting files: %w", err),
+			errs.WithFields(map[string]any{fieldPath: root, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+		)
 	}
 
 	return count, nil
@@ -417,24 +418,31 @@ func resolveOutputRoot(cfg *config.Config) string {
 func initAction(_ context.Context, _ *cli.Command) error {
 	for _, configName := range []string{"dox.toml", ".dox.toml"} {
 		if _, err := os.Stat(configName); err == nil {
-			return oops.
-				Code("CONFIG_WRITE_ERROR").
-				With(fieldPath, configName).
-				Hint("Remove the existing file or edit it directly").
-				Errorf("config file already exists at %q", configName)
+			return errs.New(
+				errs.Config,
+				fmt.Sprintf("config file already exists at %q", configName),
+				errs.WithHint("Remove the existing file or edit it directly"),
+				errs.WithFields(
+					map[string]any{fieldPath: configName, errs.LegacyCodeField: errs.LegacyConfigWriteError},
+				),
+			)
 		} else if !os.IsNotExist(err) {
-			return oops.
-				Code("CONFIG_WRITE_ERROR").
-				With(fieldPath, configName).
-				Wrapf(err, "checking config path")
+			return errs.Wrap(
+				errs.Config,
+				fmt.Errorf("checking config path: %w", err),
+				errs.WithFields(
+					map[string]any{fieldPath: configName, errs.LegacyCodeField: errs.LegacyConfigWriteError},
+				),
+			)
 		}
 	}
 
 	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o600); err != nil {
-		return oops.
-			Code("CONFIG_WRITE_ERROR").
-			With(fieldPath, "dox.toml").
-			Wrapf(err, "writing starter config")
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("writing starter config: %w", err),
+			errs.WithFields(map[string]any{fieldPath: "dox.toml", errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+		)
 	}
 
 	return nil
@@ -443,10 +451,12 @@ func initAction(_ context.Context, _ *cli.Command) error {
 func addAction(_ context.Context, cmd *cli.Command) error {
 	sourceName := strings.TrimSpace(cmd.Args().First())
 	if sourceName == "" {
-		return oops.
-			Code("CONFIG_INVALID").
-			Hint("Usage: dox add <name> --type <github|url> ...").
-			Errorf("source name is required")
+		return errs.New(
+			errs.Config,
+			"source name is required",
+			errs.WithHint("Usage: dox add <name> --type <github|url> ..."),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	configPath, err := resolveConfigPath(cmd.String(flagConfig))
@@ -461,11 +471,12 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 
 	_, exists := cfg.Sources[sourceName]
 	if exists && !cmd.Bool("force") {
-		return oops.
-			Code("SOURCE_EXISTS").
-			With("source", sourceName).
-			Hint("Use --force to overwrite the existing source definition").
-			Errorf("source %q already exists", sourceName)
+		return errs.New(
+			errs.Usage,
+			fmt.Sprintf("source %q already exists", sourceName),
+			errs.WithHint("Use --force to overwrite the existing source definition"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacySourceExists}),
+		)
 	}
 
 	newSource := config.Source{
@@ -493,10 +504,11 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	section := renderSourceSection(sourceName, newSource)
 	fileData, err := os.ReadFile(configPath)
 	if err != nil {
-		return oops.
-			Code("CONFIG_WRITE_ERROR").
-			With(fieldPath, configPath).
-			Wrapf(err, "reading config file")
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("reading config file: %w", err),
+			errs.WithFields(map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+		)
 	}
 
 	fileContent := string(fileData)
@@ -511,10 +523,11 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	if writeErr := writeConfig(configPath, updatedContent); writeErr != nil {
-		return oops.
-			Code("CONFIG_WRITE_ERROR").
-			With(fieldPath, configPath).
-			Wrapf(writeErr, "writing config file")
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("writing config file: %w", writeErr),
+			errs.WithFields(map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+		)
 	}
 
 	return nil
@@ -524,14 +537,17 @@ func resolveConfigPath(configPath string) (string, error) {
 	if configPath != "" {
 		if _, err := os.Stat(configPath); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				return "", oops.
-					Code("CONFIG_NOT_FOUND").
-					With(fieldPath, configPath).
-					Hint("Create the file first or pass a valid --config path").
-					Errorf("config file %q does not exist", configPath)
+				return "", errs.New(
+					errs.NotFound,
+					fmt.Sprintf("config file %q does not exist", configPath),
+					errs.WithHint("Create the file first or pass a valid --config path"),
+					errs.WithFields(
+						map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigNotFound},
+					),
+				)
 			}
 
-			return "", oops.Wrapf(err, "checking config file %q", configPath)
+			return "", fmt.Errorf("checking config file %q: %w", configPath, err)
 		}
 
 		return configPath, nil
@@ -612,10 +628,12 @@ func replaceSourceSection(fileContent string, sourceName string, section string)
 	}
 
 	if start == -1 {
-		return "", oops.
-			Code("SOURCE_NOT_FOUND").
-			With("source", sourceName).
-			Errorf("source %q section not found in config", sourceName)
+		return "", errs.New(
+			errs.NotFound,
+			fmt.Sprintf("source %q section not found in config", sourceName),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacySourceNotFound}),
+			errs.WithCause(errs.ErrSourceNotFound),
+		)
 	}
 
 	end := len(lines)
@@ -644,10 +662,11 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 	outputDir := resolveOutputRoot(cfg)
 	if len(selectedSources) == 0 {
 		if removeErr := os.RemoveAll(outputDir); removeErr != nil {
-			return oops.
-				Code("WRITE_FAILED").
-				With(fieldPath, outputDir).
-				Wrapf(removeErr, "removing output directory")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("removing output directory: %w", removeErr),
+				errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+			)
 		}
 
 		return nil
@@ -661,19 +680,29 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 	for _, sourceName := range selectedSources {
 		sourceCfg, ok := cfg.Sources[sourceName]
 		if !ok {
-			return oops.
-				Code("SOURCE_NOT_FOUND").
-				With("source", sourceName).
-				Hint("Run 'dox list' to view configured sources").
-				Errorf("source %q not found in config", sourceName)
+			return errs.New(
+				errs.NotFound,
+				fmt.Sprintf("source %q not found in config", sourceName),
+				errs.WithHint("Run 'dox list' to view configured sources"),
+				errs.WithFields(
+					map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacySourceNotFound},
+				),
+				errs.WithCause(errs.ErrSourceNotFound),
+			)
 		}
 
 		if removeErr := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); removeErr != nil {
-			return oops.
-				Code("WRITE_FAILED").
-				With(fieldPath, cfg.OutputDir(sourceName, sourceCfg)).
-				With("source", sourceName).
-				Wrapf(removeErr, "removing source output directory")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("removing source output directory: %w", removeErr),
+				errs.WithFields(
+					map[string]any{
+						fieldPath:            cfg.OutputDir(sourceName, sourceCfg),
+						fieldSource:          sourceName,
+						errs.LegacyCodeField: errs.LegacyWriteFailed,
+					},
+				),
+			)
 		}
 
 		lock.RemoveEntry(sourceName)

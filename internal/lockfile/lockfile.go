@@ -3,11 +3,12 @@ package lockfile
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/samber/oops"
+	"github.com/g5becks/dox/internal/errs"
 )
 
 const (
@@ -38,19 +39,21 @@ func Load(outputDir string) (*LockFile, error) {
 			return New(), nil
 		}
 
-		return nil, oops.
-			Code("LOCK_ERROR").
-			With("path", lockPath).
-			Wrapf(err, "reading lock file")
+		return nil, errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("reading lock file: %w", err),
+			errs.WithFields(map[string]any{fieldPath: lockPath, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	lock := &LockFile{}
 	if unmarshalErr := json.Unmarshal(data, lock); unmarshalErr != nil {
-		return nil, oops.
-			Code("LOCK_ERROR").
-			With("path", lockPath).
-			Hint("Delete the lock file and run 'dox sync' to regenerate it").
-			Wrapf(unmarshalErr, "parsing lock file")
+		return nil, errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("parsing lock file: %w", unmarshalErr),
+			errs.WithHint("Delete the lock file and run 'dox sync' to regenerate it"),
+			errs.WithFields(map[string]any{fieldPath: lockPath, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	if lock.Version == 0 {
@@ -73,10 +76,12 @@ func New() *LockFile {
 
 func (l *LockFile) Save(outputDir string) error {
 	if l == nil {
-		return oops.
-			Code("LOCK_ERROR").
-			Hint("Initialize lock file state before saving").
-			Errorf("cannot save nil lock file")
+		return errs.New(
+			errs.Internal,
+			"cannot save nil lock file",
+			errs.WithHint("Initialize lock file state before saving"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	if l.Version == 0 {
@@ -88,17 +93,20 @@ func (l *LockFile) Save(outputDir string) error {
 	}
 
 	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return oops.
-			Code("LOCK_ERROR").
-			With("path", outputDir).
-			Wrapf(err, "creating lock directory")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("creating lock directory: %w", err),
+			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	data, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
-		return oops.
-			Code("LOCK_ERROR").
-			Wrapf(err, "encoding lock file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding lock file: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	data = append(data, '\n')
@@ -106,10 +114,11 @@ func (l *LockFile) Save(outputDir string) error {
 
 	tempFile, err := os.CreateTemp(outputDir, fileName+".*.tmp")
 	if err != nil {
-		return oops.
-			Code("LOCK_ERROR").
-			With("path", outputDir).
-			Wrapf(err, "creating temporary lock file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("creating temporary lock file: %w", err),
+			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	tempPath := tempFile.Name()
@@ -119,25 +128,29 @@ func (l *LockFile) Save(outputDir string) error {
 
 	if _, writeErr := tempFile.Write(data); writeErr != nil {
 		_ = tempFile.Close()
-		return oops.
-			Code("LOCK_ERROR").
-			With("path", tempPath).
-			Wrapf(writeErr, "writing temporary lock file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("writing temporary lock file: %w", writeErr),
+			errs.WithFields(map[string]any{fieldPath: tempPath, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	if closeErr := tempFile.Close(); closeErr != nil {
-		return oops.
-			Code("LOCK_ERROR").
-			With("path", tempPath).
-			Wrapf(closeErr, "closing temporary lock file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("closing temporary lock file: %w", closeErr),
+			errs.WithFields(map[string]any{fieldPath: tempPath, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
 	}
 
 	if renameErr := os.Rename(tempPath, lockPath); renameErr != nil {
-		return oops.
-			Code("LOCK_ERROR").
-			With("from", tempPath).
-			With("to", lockPath).
-			Wrapf(renameErr, "replacing lock file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("replacing lock file: %w", renameErr),
+			errs.WithFields(
+				map[string]any{"from": tempPath, "to": lockPath, errs.LegacyCodeField: errs.LegacyLockError},
+			),
+		)
 	}
 
 	return nil

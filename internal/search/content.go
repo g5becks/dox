@@ -1,14 +1,14 @@
 package search
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/samber/oops"
-
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/parser"
 )
@@ -38,19 +38,24 @@ type matcher func(string) bool
 func Content(m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error) {
 	query := strings.TrimSpace(opts.Query)
 	if query == "" {
-		return nil, oops.
-			Code("INVALID_ARGS").
-			Hint("Provide a non-empty search query").
-			Errorf("search query cannot be empty")
+		return nil, errs.New(
+			errs.Usage,
+			"search query cannot be empty",
+			errs.WithHint("Provide a non-empty search query"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	if opts.Collection != "" {
 		if _, exists := m.Collections[opts.Collection]; !exists {
-			return nil, oops.
-				Code("COLLECTION_NOT_FOUND").
-				With("collection", opts.Collection).
-				Hint("Run 'dox collections' to see available collections").
-				Errorf("collection %q not found", opts.Collection)
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("collection %q not found", opts.Collection),
+				errs.WithHint("Run 'dox collections' to see available collections"),
+				errs.WithFields(
+					map[string]any{"collection": opts.Collection, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
+				),
+			)
 		}
 	}
 
@@ -96,11 +101,12 @@ func buildMatcher(query string, useRegex bool) (matcher, error) {
 		pattern := "(?i)" + query
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			return nil, oops.
-				Code("SEARCH_ERROR").
-				With("pattern", query).
-				Hint("Check regex syntax").
-				Wrapf(err, "invalid regex pattern")
+			return nil, errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("invalid regex pattern: %w", err),
+				errs.WithHint("Check regex syntax"),
+				errs.WithFields(map[string]any{"pattern": query, errs.LegacyCodeField: errs.LegacySearchError}),
+			)
 		}
 		return re.MatchString, nil
 	}

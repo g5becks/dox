@@ -1,10 +1,12 @@
 package sync_test
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/sync"
 )
 
@@ -50,6 +52,9 @@ func TestResolveSourceNamesValidatesRequested(t *testing.T) {
 	_, err := sync.ResolveSourceNames(sources, []string{"missing"})
 	if err == nil {
 		t.Fatal("ResolveSourceNames() with invalid source: got nil error, want non-nil")
+	}
+	if !errors.Is(err, errs.ErrSourceNotFound) {
+		t.Fatalf("source sentinel missing: %v", err)
 	}
 }
 

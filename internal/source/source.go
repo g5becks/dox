@@ -2,10 +2,10 @@ package source
 
 import (
 	"context"
-
-	"github.com/samber/oops"
+	"fmt"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -44,11 +44,12 @@ func New(name string, cfg config.Source, token string) (Source, error) {
 	case sourceTypeURL:
 		return NewURL(name, cfg)
 	default:
-		return nil, oops.
-			Code("UNKNOWN_SOURCE_TYPE").
-			With("type", cfg.Type).
-			Hint("Supported types: github, url").
-			Errorf("unknown source type %q for source %q", cfg.Type, name)
+		return nil, errs.New(
+			errs.Config,
+			fmt.Sprintf("unknown source type %q for source %q", cfg.Type, name),
+			errs.WithHint("Supported types: github, url"),
+			errs.WithFields(map[string]any{"type": cfg.Type, errs.LegacyCodeField: errs.LegacyUnknownSourceType}),
+		)
 	}
 }
 

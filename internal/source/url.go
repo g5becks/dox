@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -11,10 +12,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/samber/oops"
 	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -51,23 +52,21 @@ func (s *urlSource) Sync(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	request := s.client.R().SetContext(ctx)
-	if !opts.Force && prevLock != nil {
-		if prevLock.ETag != "" {
-			request.SetHeader("If-None-Match", prevLock.ETag)
-		}
-		if prevLock.LastMod != "" {
-			request.SetHeader("If-Modified-Since", prevLock.LastMod)
-		}
-	}
+	request := s.syncRequest(ctx, prevLock, opts)
 
 	response, err := request.Get(s.source.URL)
 	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("source", s.name).
-			With(sourceTypeURL, s.source.URL).
-			Wrapf(err, "downloading url source")
+		return nil, errs.Wrap(
+			errs.Network,
+			fmt.Errorf("downloading url source: %w", err),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          s.name,
+					sourceTypeURL:        s.source.URL,
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+		)
 	}
 
 	if response.StatusCode() == http.StatusNotModified {
@@ -88,31 +87,50 @@ func (s *urlSource) Sync(
 	}
 
 	if response.StatusCode() < http.StatusOK || response.StatusCode() >= http.StatusMultipleChoices {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("source", s.name).
-			With(sourceTypeURL, s.source.URL).
-			With("status", response.StatusCode()).
-			Errorf("url source returned non-success status %d", response.StatusCode())
+		return nil, errs.New(
+			errs.Network,
+			fmt.Sprintf("url source returned non-success status %d", response.StatusCode()),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          s.name,
+					sourceTypeURL:        s.source.URL,
+					fieldStatus:          response.StatusCode(),
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode()}),
+		)
 	}
 
 	filePath := filepath.Join(destDir, s.filename)
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("source", s.name).
-			With(sourceTypeURL, s.source.URL).
-			Wrapf(err, "reading response body")
+		return nil, errs.Wrap(
+			errs.Network,
+			fmt.Errorf("reading response body: %w", err),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          s.name,
+					sourceTypeURL:        s.source.URL,
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+		)
 	}
 
 	if !opts.DryRun {
 		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", destDir).
-				Wrapf(mkdirErr, "creating destination directory")
+			return nil, errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("creating destination directory: %w", mkdirErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						fieldPath:            destDir,
+						errs.LegacyCodeField: errs.LegacyWriteFailed,
+					},
+				),
+			)
 		}
 
 		if writeErr := writeFileAtomic(filePath, content); writeErr != nil {
@@ -147,10 +165,11 @@ func writeFileAtomic(path string, content []byte) error {
 	dir := filepath.Dir(path)
 	tempFile, err := os.CreateTemp(dir, ".dox-url-*.tmp")
 	if err != nil {
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(err, "creating temporary file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("creating temporary file: %w", err),
+			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+		)
 	}
 
 	tempPath := tempFile.Name()
@@ -160,24 +179,27 @@ func writeFileAtomic(path string, content []byte) error {
 
 	if _, writeErr := tempFile.Write(content); writeErr != nil {
 		_ = tempFile.Close()
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(writeErr, "writing temporary file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("writing temporary file: %w", writeErr),
+			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+		)
 	}
 
 	if closeErr := tempFile.Close(); closeErr != nil {
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(closeErr, "closing temporary file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("closing temporary file: %w", closeErr),
+			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+		)
 	}
 
 	if renameErr := os.Rename(tempPath, path); renameErr != nil {
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(renameErr, "replacing destination file")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("replacing destination file: %w", renameErr),
+			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+		)
 	}
 
 	return nil
@@ -195,4 +217,18 @@ func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {
 	}
 
 	return &cloned
+}
+
+func (s *urlSource) syncRequest(ctx context.Context, prevLock *lockfile.LockEntry, opts SyncOptions) *resty.Request {
+	request := s.client.R().SetContext(ctx)
+	if !opts.Force && prevLock != nil {
+		if prevLock.ETag != "" {
+			request.SetHeader("If-None-Match", prevLock.ETag)
+		}
+		if prevLock.LastMod != "" {
+			request.SetHeader("If-Modified-Since", prevLock.LastMod)
+		}
+	}
+
+	return request
 }

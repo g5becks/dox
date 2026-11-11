@@ -1,6 +1,7 @@
 package source_test
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,10 +11,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/samber/oops"
 	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/source"
 	"github.com/g5becks/dox/internal/testutil/fakegithub"
 	"github.com/g5becks/dox/internal/testutil/regression"
@@ -87,9 +88,9 @@ func auditRateHint(t *testing.T, status int) error {
 	if err == nil {
 		t.Fatal("rate-limit response unexpectedly succeeded")
 	}
-	detailed, ok := oops.AsOops(err)
+	detailed, ok := errors.AsType[*errs.Error](err)
 	if !ok ||
-		(!strings.Contains(detailed.Hint(), "GITHUB_TOKEN") && !strings.Contains(detailed.Hint(), "github_token")) {
+		(!strings.Contains(detailed.Hint, "GITHUB_TOKEN") && !strings.Contains(detailed.Hint, "github_token")) {
 		return fmt.Errorf("R3 token hint missing for %d: %w", status, err)
 	}
 	return nil

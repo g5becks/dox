@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/parser"
 )
@@ -38,10 +38,12 @@ func newOutlineCommand() *cli.Command {
 func outlineAction(_ context.Context, cmd *cli.Command) error {
 	const requiredArgs = 2
 	if cmd.Args().Len() != requiredArgs {
-		return oops.
-			Code("INVALID_ARGS").
-			Hint("Usage: dox outline <collection> <file>").
-			Errorf("expected %d arguments, got %d", requiredArgs, cmd.Args().Len())
+		return errs.New(
+			errs.Usage,
+			fmt.Sprintf("expected %d arguments, got %d", requiredArgs, cmd.Args().Len()),
+			errs.WithHint("Usage: dox outline <collection> <file>"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	collectionName := cmd.Args().Get(0)
@@ -64,11 +66,14 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 
 	collection, ok := m.Collections[collectionName]
 	if !ok {
-		return oops.
-			Code("COLLECTION_NOT_FOUND").
-			With(fieldCollection, collectionName).
-			Hint("Run 'dox collections' to see available collections").
-			Errorf("collection %q not found", collectionName)
+		return errs.New(
+			errs.NotFound,
+			fmt.Sprintf("collection %q not found", collectionName),
+			errs.WithHint("Run 'dox collections' to see available collections"),
+			errs.WithFields(
+				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
+			),
+		)
 	}
 
 	var fileInfo *manifest.FileInfo
@@ -80,12 +85,18 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	if fileInfo == nil {
-		return oops.
-			Code("FILE_NOT_FOUND").
-			With("file", filePath).
-			With(fieldCollection, collectionName).
-			Hint("Run 'dox files' to see available files").
-			Errorf("file %q not found in collection %q", filePath, collectionName)
+		return errs.New(
+			errs.NotFound,
+			fmt.Sprintf("file %q not found in collection %q", filePath, collectionName),
+			errs.WithHint("Run 'dox files' to see available files"),
+			errs.WithFields(
+				map[string]any{
+					"file":               filePath,
+					fieldCollection:      collectionName,
+					errs.LegacyCodeField: errs.LegacyFileNotFound,
+				},
+			),
+		)
 	}
 
 	if cmd.Bool(formatJSON) {
@@ -98,9 +109,11 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 func outputOutlineJSON(fileInfo *manifest.FileInfo) error {
 	data, err := json.MarshalIndent(fileInfo.Outline, "", "  ")
 	if err != nil {
-		return oops.
-			Code("JSON_ERROR").
-			Wrapf(err, "encoding outline")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding outline: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
+		)
 	}
 
 	fmt.Fprintln(os.Stdout, string(data))

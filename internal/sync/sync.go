@@ -2,16 +2,17 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	stdsync "sync"
 
-	"github.com/samber/oops"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/source"
@@ -71,18 +72,21 @@ type runState struct {
 
 func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
 	if cfg == nil {
-		return nil, oops.
-			Code("CONFIG_INVALID").
-			Errorf("config is required")
+		return nil, errs.New(
+			errs.Config,
+			"config is required",
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	outputDir := resolveOutputRoot(cfg)
 	if opts.Clean && !opts.DryRun {
 		if err := os.RemoveAll(outputDir); err != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("path", outputDir).
-				Wrapf(err, "cleaning output directory")
+			return nil, errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("cleaning output directory: %w", err),
+				errs.WithFields(map[string]any{"path": outputDir, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+			)
 		}
 	}
 
@@ -127,10 +131,13 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	if errorCount > 0 {
-		return runResult, oops.
-			Code("DOWNLOAD_FAILED").
-			With("failed_sources", errorCount).
-			Errorf("%d source(s) failed during sync", errorCount)
+		return runResult, errs.New(
+			errs.PartialFailure,
+			fmt.Sprintf("%d source(s) failed during sync", errorCount),
+			errs.WithFields(
+				map[string]any{"failed_sources": errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+			),
+		)
 	}
 
 	return runResult, nil
@@ -180,7 +187,7 @@ func executeSources(
 	}
 
 	if waitErr := group.Wait(); waitErr != nil {
-		return nil, oops.Wrapf(waitErr, "waiting for source sync workers")
+		return nil, fmt.Errorf("waiting for source sync workers: %w", waitErr)
 	}
 
 	return results, nil
@@ -262,11 +269,13 @@ func resolveSourceNames(
 
 	for _, sourceName := range requestedNames {
 		if _, ok := sourceConfigs[sourceName]; !ok {
-			return nil, oops.
-				Code("SOURCE_NOT_FOUND").
-				With("source", sourceName).
-				Hint("Run 'dox list' to see configured sources").
-				Errorf("source %q not found in config", sourceName)
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("source %q not found in config", sourceName),
+				errs.WithHint("Run 'dox list' to see configured sources"),
+				errs.WithFields(map[string]any{"source": sourceName, errs.LegacyCodeField: errs.LegacySourceNotFound}),
+				errs.WithCause(errs.ErrSourceNotFound),
+			)
 		}
 
 		if _, exists := seen[sourceName]; exists {

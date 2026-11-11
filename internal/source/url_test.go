@@ -1,6 +1,7 @@
 package source_test
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/source"
 )
@@ -174,5 +176,9 @@ func TestURLSyncReturnsErrorOnFailureStatus(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "non-success status") {
 		t.Fatalf("Sync() error = %q, expected status error", err.Error())
+	}
+	status, ok := errors.AsType[*errs.HTTPStatusError](err)
+	if !ok || status.Code != http.StatusBadGateway {
+		t.Fatalf("status cause missing: %+v", status)
 	}
 }

@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/search"
 )
@@ -63,25 +64,31 @@ func newSearchCommand() *cli.Command {
 
 func searchAction(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() != 1 {
-		return oops.
-			Code("INVALID_ARGS").
-			Hint("Usage: dox search <query>").
-			Errorf("expected 1 argument, got %d", cmd.Args().Len())
+		return errs.New(
+			errs.Usage,
+			fmt.Sprintf("expected 1 argument, got %d", cmd.Args().Len()),
+			errs.WithHint("Usage: dox search <query>"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	query := strings.TrimSpace(cmd.Args().First())
 	if query == "" {
-		return oops.
-			Code("INVALID_ARGS").
-			Hint("Provide a non-empty search query").
-			Errorf("search query cannot be empty")
+		return errs.New(
+			errs.Usage,
+			"search query cannot be empty",
+			errs.WithHint("Provide a non-empty search query"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	if cmd.Bool("regex") && !cmd.Bool("content") {
-		return oops.
-			Code("INVALID_ARGS").
-			Hint("--regex requires --content flag").
-			Errorf("--regex can only be used with --content")
+		return errs.New(
+			errs.Usage,
+			"--regex can only be used with --content",
+			errs.WithHint("--regex requires --content flag"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	configPath, err := resolveConfigPath(cmd.String(flagConfig))
@@ -167,7 +174,11 @@ func outputMetadataJSON(results []search.MetadataResult) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(results); err != nil {
-		return oops.Code("JSON_ERROR").Wrapf(err, "encoding results")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding results: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
+		)
 	}
 	return nil
 }
@@ -178,7 +189,11 @@ func outputMetadataCSV(results []search.MetadataResult) error {
 
 	header := []string{fieldCollection, fieldPath, fieldType, "match_field", "match_value", "score", "description"}
 	if err := w.Write(header); err != nil {
-		return oops.Code("CSV_ERROR").Wrapf(err, "writing CSV header")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("writing CSV header: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
+		)
 	}
 
 	for _, r := range results {
@@ -191,7 +206,11 @@ func outputMetadataCSV(results []search.MetadataResult) error {
 			strconv.Itoa(r.Score),
 			r.Description,
 		}); err != nil {
-			return oops.Code("CSV_ERROR").Wrapf(err, "writing CSV row")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("writing CSV row: %w", err),
+				errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
+			)
 		}
 	}
 
@@ -224,7 +243,11 @@ func outputContentJSON(results []search.ContentResult) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(results); err != nil {
-		return oops.Code("JSON_ERROR").Wrapf(err, "encoding results")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding results: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
+		)
 	}
 	return nil
 }
@@ -234,7 +257,11 @@ func outputContentCSV(results []search.ContentResult) error {
 	defer w.Flush()
 
 	if err := w.Write([]string{fieldCollection, fieldPath, "line", "text"}); err != nil {
-		return oops.Code("CSV_ERROR").Wrapf(err, "writing CSV header")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("writing CSV header: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
+		)
 	}
 
 	for _, r := range results {
@@ -244,7 +271,11 @@ func outputContentCSV(results []search.ContentResult) error {
 			strconv.Itoa(r.Line),
 			r.Text,
 		}); err != nil {
-			return oops.Code("CSV_ERROR").Wrapf(err, "writing CSV row")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("writing CSV row: %w", err),
+				errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
+			)
 		}
 	}
 

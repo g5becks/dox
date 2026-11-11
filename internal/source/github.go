@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/samber/oops"
 	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -146,11 +146,17 @@ func (s *githubSource) syncSingleFile(
 
 		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
 		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", filepath.Dir(localPath)).
-				Wrapf(mkdirErr, "creating destination directory")
+			return nil, errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("creating destination directory: %w", mkdirErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						fieldPath:            filepath.Dir(localPath),
+						errs.LegacyCodeField: errs.LegacyWriteFailed,
+					},
+				),
+			)
 		}
 
 		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
@@ -218,11 +224,17 @@ func (s *githubSource) syncDirectory(
 
 	if !opts.DryRun {
 		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", destDir).
-				Wrapf(mkdirErr, "creating destination directory")
+			return nil, errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("creating destination directory: %w", mkdirErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						fieldPath:            destDir,
+						errs.LegacyCodeField: errs.LegacyWriteFailed,
+					},
+				),
+			)
 		}
 
 		if downloadErr := s.downloadFiles(ctx, destDir, toDownload); downloadErr != nil {
@@ -257,11 +269,17 @@ func (s *githubSource) downloadFiles(ctx context.Context, destDir string, toDown
 
 		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
 		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
-			return oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", filepath.Dir(localPath)).
-				Wrapf(mkdirErr, "creating destination directory")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("creating destination directory: %w", mkdirErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						fieldPath:            filepath.Dir(localPath),
+						errs.LegacyCodeField: errs.LegacyWriteFailed,
+					},
+				),
+			)
 		}
 
 		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
@@ -276,11 +294,17 @@ func (s *githubSource) deleteStaleFiles(destDir string, toDelete map[string]stru
 	for _, relativePath := range slices.Sorted(maps.Keys(toDelete)) {
 		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
 		if removeErr := os.Remove(localPath); removeErr != nil && !os.IsNotExist(removeErr) {
-			return oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", localPath).
-				Wrapf(removeErr, "deleting stale file")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("deleting stale file: %w", removeErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						fieldPath:            localPath,
+						errs.LegacyCodeField: errs.LegacyWriteFailed,
+					},
+				),
+			)
 		}
 
 		cleanupEmptyDirs(filepath.Dir(localPath), destDir)
@@ -307,19 +331,27 @@ func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
 		SetResult(result).
 		Get(endpoint)
 	if err != nil {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			Wrapf(err, "fetching repository metadata")
+		return "", errs.Wrap(
+			errs.Network,
+			fmt.Errorf("fetching repository metadata: %w", err),
+			errs.WithFields(map[string]any{fieldRepo: s.source.Repo, errs.LegacyCodeField: errs.LegacyGithubAPIError}),
+		)
 	}
 
 	if !response.IsSuccess() {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("status", response.StatusCode()).
-			Hint("Check that the repository exists and is accessible").
-			Errorf("github API returned status %d for repository metadata", response.StatusCode())
+		return "", errs.New(
+			errs.Network,
+			fmt.Sprintf("github API returned status %d for repository metadata", response.StatusCode()),
+			errs.WithHint("Check that the repository exists and is accessible"),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldStatus:          response.StatusCode(),
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode()}),
+		)
 	}
 
 	if rlErr := s.checkRateLimit(response); rlErr != nil {
@@ -327,10 +359,11 @@ func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
 	}
 
 	if result.DefaultBranch == "" {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			Errorf("github repository metadata did not include default branch")
+		return "", errs.New(
+			errs.Network,
+			"github repository metadata did not include default branch",
+			errs.WithFields(map[string]any{fieldRepo: s.source.Repo, errs.LegacyCodeField: errs.LegacyGithubAPIError}),
+		)
 	}
 
 	s.resolvedRef = result.DefaultBranch
@@ -347,21 +380,34 @@ func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeRe
 		SetResult(result).
 		Get(endpoint)
 	if err != nil {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("ref", ref).
-			Wrapf(err, "fetching tree")
+		return nil, errs.Wrap(
+			errs.Network,
+			fmt.Errorf("fetching tree: %w", err),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldRef:             ref,
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+		)
 	}
 
 	if !response.IsSuccess() {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("ref", ref).
-			With("status", response.StatusCode()).
-			Hint("Check repository, path, and ref in your config").
-			Errorf("github API returned status %d for tree", response.StatusCode())
+		return nil, errs.New(
+			errs.Network,
+			fmt.Sprintf("github API returned status %d for tree", response.StatusCode()),
+			errs.WithHint("Check repository, path, and ref in your config"),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldRef:             ref,
+					fieldStatus:          response.StatusCode(),
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode()}),
+		)
 	}
 
 	if rlErr := s.checkRateLimit(response); rlErr != nil {
@@ -369,12 +415,18 @@ func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeRe
 	}
 
 	if result.Truncated {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("ref", ref).
-			Hint("Narrow the configured path to reduce tree size").
-			Errorf("github returned a truncated tree; contents fallback is not implemented")
+		return nil, errs.New(
+			errs.Network,
+			"github returned a truncated tree; contents fallback is not implemented",
+			errs.WithHint("Narrow the configured path to reduce tree size"),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldRef:             ref,
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+		)
 	}
 
 	return result, nil
@@ -386,25 +438,38 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 
 	response, err := s.client.R().
 		SetContext(ctx).
-		SetQueryParam("ref", ref).
+		SetQueryParam(fieldRef, ref).
 		SetResult(result).
 		Get(endpoint)
 	if err != nil {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("path", filePath).
-			Wrapf(err, "fetching content metadata")
+		return "", errs.Wrap(
+			errs.Network,
+			fmt.Errorf("fetching content metadata: %w", err),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldPath:            filePath,
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+		)
 	}
 
 	if !response.IsSuccess() {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("path", filePath).
-			With("status", response.StatusCode()).
-			Hint("Check repository path and ref in your config").
-			Errorf("github API returned status %d for content metadata", response.StatusCode())
+		return "", errs.New(
+			errs.Network,
+			fmt.Sprintf("github API returned status %d for content metadata", response.StatusCode()),
+			errs.WithHint("Check repository path and ref in your config"),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldPath:            filePath,
+					fieldStatus:          response.StatusCode(),
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode()}),
+		)
 	}
 
 	if rlErr := s.checkRateLimit(response); rlErr != nil {
@@ -412,11 +477,17 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 	}
 
 	if result.Type != "file" || result.SHA == "" {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("path", filePath).
-			Errorf("expected file metadata for %q", filePath)
+		return "", errs.New(
+			errs.Network,
+			fmt.Sprintf("expected file metadata for %q", filePath),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldPath:            filePath,
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+		)
 	}
 
 	return result.SHA, nil
@@ -431,20 +502,33 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 		SetResult(result).
 		Get(endpoint)
 	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			Wrapf(err, "downloading blob")
+		return nil, errs.Wrap(
+			errs.Network,
+			fmt.Errorf("downloading blob: %w", err),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldSHA:             sha,
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+		)
 	}
 
 	if !response.IsSuccess() {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			With("status", response.StatusCode()).
-			Errorf("github API returned status %d for blob", response.StatusCode())
+		return nil, errs.New(
+			errs.Network,
+			fmt.Sprintf("github API returned status %d for blob", response.StatusCode()),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldSHA:             sha,
+					fieldStatus:          response.StatusCode(),
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode()}),
+		)
 	}
 
 	if rlErr := s.checkRateLimit(response); rlErr != nil {
@@ -452,21 +536,33 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 	}
 
 	if result.Encoding != "base64" {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			Errorf("unsupported blob encoding %q", result.Encoding)
+		return nil, errs.New(
+			errs.Network,
+			fmt.Sprintf("unsupported blob encoding %q", result.Encoding),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldSHA:             sha,
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+		)
 	}
 
 	normalized := strings.ReplaceAll(result.Content, "\n", "")
 	content, err := base64.StdEncoding.DecodeString(normalized)
 	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			Wrapf(err, "decoding blob content")
+		return nil, errs.Wrap(
+			errs.Network,
+			fmt.Errorf("decoding blob content: %w", err),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldSHA:             sha,
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+		)
 	}
 
 	return content, nil
@@ -569,11 +665,17 @@ func matchesAny(patterns []string, candidate string) (bool, error) {
 	for _, pattern := range patterns {
 		matched, err := doublestar.PathMatch(pattern, candidate)
 		if err != nil {
-			return false, oops.
-				Code("CONFIG_INVALID").
-				With("pattern", pattern).
-				With("path", candidate).
-				Wrapf(err, "invalid glob pattern")
+			return false, errs.Wrap(
+				errs.Config,
+				fmt.Errorf("invalid glob pattern: %w", err),
+				errs.WithFields(
+					map[string]any{
+						"pattern":            pattern,
+						fieldPath:            candidate,
+						errs.LegacyCodeField: errs.LegacyConfigInvalid,
+					},
+				),
+			)
 		}
 
 		if matched {
@@ -649,11 +751,12 @@ func escapeRepoPath(repoPath string) string {
 func parseRepo(repo string) (string, string, error) {
 	parts := strings.Split(repo, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", oops.
-			Code("CONFIG_INVALID").
-			With("repo", repo).
-			Hint("Expected repo format: owner/repo").
-			Errorf("invalid github repo format %q", repo)
+		return "", "", errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid github repo format %q", repo),
+			errs.WithHint("Expected repo format: owner/repo"),
+			errs.WithFields(map[string]any{fieldRepo: repo, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	return parts[0], parts[1], nil
@@ -688,12 +791,23 @@ func (s *githubSource) checkRateLimit(response *resty.Response) error {
 
 	if remaining == 0 {
 		reset := response.Header().Get("X-Ratelimit-Reset")
-		return oops.
-			Code("GITHUB_RATE_LIMIT").
-			With("repo", s.source.Repo).
-			With("reset", reset).
-			Hint("Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits").
-			Errorf("github API rate limit exhausted")
+		var resetTime time.Time
+		if unix, parseErr := strconv.ParseInt(reset, 10, 64); parseErr == nil {
+			resetTime = time.Unix(unix, 0)
+		}
+		return errs.New(
+			errs.RateLimited,
+			"github API rate limit exhausted",
+			errs.WithCause(&errs.RateLimitError{Reset: resetTime}),
+			errs.WithHint("Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits"),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					"reset":              reset,
+					errs.LegacyCodeField: errs.LegacyGithubRateLimit,
+				},
+			),
+		)
 	}
 
 	if remaining <= rateLimitWarnThresh && !s.warnedLowRL {

@@ -2,11 +2,13 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/samber/oops"
+
+	"github.com/g5becks/dox/internal/errs"
 )
 
 const (
@@ -167,7 +169,7 @@ func (c *Config) ApplyDefaults() {
 		c.Display.Format = "table"
 	}
 	if len(c.Display.ListFields) == 0 {
-		c.Display.ListFields = []string{"path", "type", "lines", "size", "description"}
+		c.Display.ListFields = []string{fieldPath, fieldType, "lines", "size", "description"}
 	}
 
 	for sourceName, sourceCfg := range c.Sources {
@@ -264,18 +266,26 @@ func validateDisplay(v *validator.Validate, display Display) error {
 			for _, fe := range validationErrors {
 				field := strings.ToLower(fe.Field())
 				if fe.Tag() == "oneof" && field == "format" {
-					return oops.
-						Code("CONFIG_INVALID").
-						With("field", "display.format").
-						With("value", display.Format).
-						Hint("Supported formats: table, json, csv").
-						Errorf("invalid display format %q", display.Format)
+					return errs.New(
+						errs.Config,
+						fmt.Sprintf("invalid display format %q", display.Format),
+						errs.WithHint("Supported formats: table, json, csv"),
+						errs.WithFields(
+							map[string]any{
+								fieldName:            "display.format",
+								fieldValue:           display.Format,
+								errs.LegacyCodeField: errs.LegacyConfigInvalid,
+							},
+						),
+					)
 				}
 			}
 		}
-		return oops.
-			Code("CONFIG_INVALID").
-			Wrapf(err, "validating display config")
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("validating display config: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	return nil
@@ -287,29 +297,37 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 	hasURL := sourceCfg.URL != ""
 
 	if !hasRepo && !hasURL {
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			Hint("Each source must have either 'repo' (for git hosting) or 'url' (for direct downloads)").
-			Errorf("source %q has neither 'repo' nor 'url'", sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("source %q has neither 'repo' nor 'url'", sourceName),
+			errs.WithHint("Each source must have either 'repo' (for git hosting) or 'url' (for direct downloads)"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	if hasRepo && hasURL {
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			Hint("Use 'repo' for git hosting OR 'url' for direct downloads, not both").
-			Errorf("source %q has both 'repo' and 'url'", sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("source %q has both 'repo' and 'url'", sourceName),
+			errs.WithHint("Use 'repo' for git hosting OR 'url' for direct downloads, not both"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	// For git hosting sources, require path
 	if hasRepo && sourceCfg.Path == "" {
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", "path").
-			Hint("Set path to a file or directory in the repository").
-			Errorf("missing 'path' for source %q", sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("missing 'path' for source %q", sourceName),
+			errs.WithHint("Set path to a file or directory in the repository"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            fieldPath,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 	}
 
 	// Struct validation for URL format, repo format, etc.
@@ -320,10 +338,11 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 
 	var validationErrors validator.ValidationErrors
 	if !errors.As(valErr, &validationErrors) {
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			Wrapf(valErr, "validating source %q", sourceName)
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("validating source %q: %w", sourceName, valErr),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	for _, fe := range validationErrors {
@@ -336,39 +355,63 @@ func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldE
 	field := strings.ToLower(fe.Field())
 
 	switch {
-	case fe.Tag() == "oneof" && field == "type":
-		return oops.
-			Code("UNKNOWN_SOURCE_TYPE").
-			With("source", sourceName).
-			With("type", sourceCfg.Type).
-			Hint("Supported types: github, gitlab, codeberg, git, url (or omit 'type' to infer)").
-			Errorf("unknown source type %q for source %q", sourceCfg.Type, sourceName)
+	case fe.Tag() == "oneof" && field == fieldType:
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("unknown source type %q for source %q", sourceCfg.Type, sourceName),
+			errs.WithHint("Supported types: github, gitlab, codeberg, git, url (or omit 'type' to infer)"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldType:            sourceCfg.Type,
+					errs.LegacyCodeField: errs.LegacyUnknownSourceType,
+				},
+			),
+		)
 
 	case fe.Tag() == "github_repo":
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", "repo").
-			With("value", sourceCfg.Repo).
-			Hint("Expected repo format: owner/repo").
-			Errorf("invalid repo format %q for source %q", sourceCfg.Repo, sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid repo format %q for source %q", sourceCfg.Repo, sourceName),
+			errs.WithHint("Expected repo format: owner/repo"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            "repo",
+					fieldValue:           sourceCfg.Repo,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 
-	case fe.Tag() == "url" && field == "url":
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", "url").
-			With("value", sourceCfg.URL).
-			Hint("URL must be a valid HTTP/HTTPS URL").
-			Errorf("invalid url %q for source %q", sourceCfg.URL, sourceName)
+	case fe.Tag() == sourceTypeURL && field == sourceTypeURL:
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid url %q for source %q", sourceCfg.URL, sourceName),
+			errs.WithHint("URL must be a valid HTTP/HTTPS URL"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            sourceTypeURL,
+					fieldValue:           sourceCfg.URL,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 
 	default:
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", field).
-			With("tag", fe.Tag()).
-			Errorf("validation failed for field %q in source %q", field, sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("validation failed for field %q in source %q", field, sourceName),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            field,
+					"tag":                fe.Tag(),
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 	}
 }
 

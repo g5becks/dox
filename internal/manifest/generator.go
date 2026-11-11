@@ -2,13 +2,13 @@ package manifest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/samber/oops"
-
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/parser"
 )
@@ -76,10 +76,13 @@ func Generate(_ context.Context, cfg *config.Config, lock *lockfile.LockFile) er
 		})
 
 		if err != nil {
-			return oops.
-				Code("MANIFEST_GENERATION_ERROR").
-				With("source", sourceName).
-				Wrapf(err, "walking source directory")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("walking source directory: %w", err),
+				errs.WithFields(
+					map[string]any{"source": sourceName, errs.LegacyCodeField: errs.LegacyManifestGenerationError},
+				),
+			)
 		}
 
 		collection.FileCount = len(collection.Files)
@@ -114,7 +117,7 @@ func parseFile(absPath string, relPath string, parsers []parser.Parser) (*FileIn
 	}
 
 	if parser.IsBinary(content) {
-		return nil, oops.Errorf("binary file")
+		return nil, errs.New(errs.Internal, "binary file")
 	}
 
 	var matchedParser parser.Parser
