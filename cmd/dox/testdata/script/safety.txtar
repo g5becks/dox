@@ -1,0 +1,40 @@
+httpserve guide.txt
+mkdir .dox
+cp sentinel .dox/sentinel
+envsubst config.in dox.toml
+! dox clean
+stderr 'unowned output directory'
+cmp .dox/sentinel sentinel
+! dox sync --clean
+stderr 'unowned output directory'
+cmp .dox/sentinel sentinel
+# A normal first sync marks ownership; subsequent cleanup is confined.
+dox sync
+exists .dox/.dox-root .dox/.dox.lock
+cmp .dox/docs/guide.txt guide.txt
+dox clean docs
+! exists .dox/docs
+exists .dox/sentinel .dox/.dox-root
+dox sync
+dox clean
+! exists .dox/docs .dox/manifest.json .dox/.dox.lock .dox/sentinel
+exists .dox/.dox-root
+# Existing lockfiles also authorize legacy output cleanup.
+cp legacy.lock .dox/.dox.lock
+rm .dox/.dox-root
+dox clean
+exists .dox/.dox-root
+! exists .dox/.dox.lock
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+-- guide.txt --
+Safe documentation
+-- sentinel --
+keep me
+-- legacy.lock --
+{"version":1,"sources":{}}

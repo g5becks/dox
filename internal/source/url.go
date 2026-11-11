@@ -7,15 +7,14 @@ import (
 	"maps"
 	"net/http"
 	neturl "net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"time"
 
 	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -32,6 +31,9 @@ func NewURL(name string, cfg config.Source) (Source, error) {
 		filename = filenameFromURL(name, cfg.URL)
 	}
 
+	if err := config.ValidatePath(filename); err != nil {
+		return nil, err
+	}
 	client := resty.New()
 
 	return &urlSource{
@@ -102,7 +104,6 @@ func (s *urlSource) Sync(
 		)
 	}
 
-	filePath := filepath.Join(destDir, s.filename)
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, errs.Wrap(
@@ -119,22 +120,13 @@ func (s *urlSource) Sync(
 	}
 
 	if !opts.DryRun {
-		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
-			return nil, errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("creating destination directory: %w", mkdirErr),
-				errs.WithFields(
-					map[string]any{
-						fieldSource:          s.name,
-						fieldPath:            destDir,
-						errs.LegacyCodeField: errs.LegacyWriteFailed,
-					},
-				),
-			)
+		root, rootErr := destinationRoot(destDir, opts)
+		if rootErr != nil {
+			return nil, rootErr
 		}
-
-		if writeErr := writeFileAtomic(filePath, content); writeErr != nil {
-			return nil, writeErr
+		defer root.Close()
+		if writeErr := fsutil.AtomicWrite(root, s.filename, content); writeErr != nil {
+			return nil, fmt.Errorf("writing URL source: %w", writeErr)
 		}
 	}
 
@@ -159,50 +151,6 @@ func filenameFromURL(sourceName string, rawURL string) string {
 	}
 
 	return sourceName + ".txt"
-}
-
-func writeFileAtomic(path string, content []byte) error {
-	dir := filepath.Dir(path)
-	tempFile, err := os.CreateTemp(dir, ".dox-url-*.tmp")
-	if err != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("creating temporary file: %w", err),
-			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
-		)
-	}
-
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = os.Remove(tempPath)
-	}()
-
-	if _, writeErr := tempFile.Write(content); writeErr != nil {
-		_ = tempFile.Close()
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("writing temporary file: %w", writeErr),
-			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
-		)
-	}
-
-	if closeErr := tempFile.Close(); closeErr != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("closing temporary file: %w", closeErr),
-			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
-		)
-	}
-
-	if renameErr := os.Rename(tempPath, path); renameErr != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("replacing destination file: %w", renameErr),
-			errs.WithFields(map[string]any{fieldPath: path, errs.LegacyCodeField: errs.LegacyWriteFailed}),
-		)
-	}
-
-	return nil
 }
 
 func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {

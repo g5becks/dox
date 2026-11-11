@@ -27,7 +27,9 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # GLOBAL SETTINGS
 # ============================================================================
 
-# Directory where docs will be downloaded (relative to this file)
+# Directory below this config where docs will be downloaded (relative path)
+# Use a dedicated directory, never ".", "..", or a filesystem root.
+# A separate external directory requires: dox --allow-external-output <command>
 # Default: ".dox"
 # output = ".dox"
 
@@ -179,6 +181,12 @@ func newRootCommand() *cli.Command {
 		Name:    "dox",
 		Usage:   "Sync framework and library docs to local files",
 		Version: versionString(),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  flagAllowExternalOutput,
+				Usage: "Allow output outside the config directory (never the config directory or filesystem root)",
+			},
+		},
 		Commands: []*cli.Command{
 			newSyncCommand(),
 			newListCommand(),
@@ -206,7 +214,7 @@ func newSyncCommand() *cli.Command {
 				Aliases: []string{"f"},
 				Usage:   "Force refresh and skip freshness checks",
 			},
-			&cli.BoolFlag{Name: "clean", Usage: "Delete output directory before syncing"},
+			&cli.BoolFlag{Name: "clean", Usage: "Clear owned output contents before syncing"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
 			&cli.IntFlag{
 				Name: "parallel", Aliases: []string{"p"},
@@ -286,7 +294,7 @@ func newInitCommand() *cli.Command {
 }
 
 func syncAction(ctx context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String(flagConfig))
+	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
@@ -317,12 +325,16 @@ func commandArgs(cmd *cli.Command) []string {
 }
 
 func listAction(_ context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String(flagConfig))
+	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
 
-	lock, err := lockfile.Load(resolveOutputRoot(cfg))
+	paths, pathErr := cfg.Paths()
+	if pathErr != nil {
+		return pathErr
+	}
+	lock, err := lockfile.Load(paths.Output())
 	if err != nil {
 		return err
 	}
@@ -337,6 +349,10 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	statuses := make([]ui.SourceStatus, 0, len(sourceNames))
 	for _, sourceName := range sourceNames {
 		sourceCfg := cfg.Sources[sourceName]
+		sourceOutput, sourceErr := paths.Source(sourceName, sourceCfg)
+		if sourceErr != nil {
+			return sourceErr
+		}
 		status := ui.SourceStatus{
 			Name:      sourceName,
 			Type:      sourceCfg.Type,
@@ -345,7 +361,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 			URL:       sourceCfg.URL,
 			Ref:       sourceCfg.Ref,
 			Patterns:  sourceCfg.Patterns,
-			OutputDir: cfg.OutputDir(sourceName, sourceCfg),
+			OutputDir: sourceOutput,
 			Status:    "not synced",
 		}
 
@@ -407,14 +423,6 @@ func countFiles(root string) (int, error) {
 	return count, nil
 }
 
-func resolveOutputRoot(cfg *config.Config) string {
-	if filepath.IsAbs(cfg.Output) {
-		return cfg.Output
-	}
-
-	return filepath.Join(cfg.ConfigDir, cfg.Output)
-}
-
 func initAction(_ context.Context, _ *cli.Command) error {
 	for _, configName := range []string{"dox.toml", ".dox.toml"} {
 		if _, err := os.Stat(configName); err == nil {
@@ -464,7 +472,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadCommandConfig(cmd, configPath)
 	if err != nil {
 		return err
 	}
@@ -653,64 +661,68 @@ func replaceSourceSection(fileContent string, sourceName string, section string)
 }
 
 func cleanAction(_ context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String(flagConfig))
+	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
-
-	selectedSources := commandArgs(cmd)
-	outputDir := resolveOutputRoot(cfg)
-	if len(selectedSources) == 0 {
-		if removeErr := os.RemoveAll(outputDir); removeErr != nil {
-			return errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("removing output directory: %w", removeErr),
-				errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyWriteFailed}),
-			)
-		}
-
-		return nil
-	}
-
-	lock, err := lockfile.Load(outputDir)
+	paths, err := cfg.Paths()
 	if err != nil {
 		return err
 	}
-
-	for _, sourceName := range selectedSources {
-		sourceCfg, ok := cfg.Sources[sourceName]
+	root, err := paths.OpenOutput(false)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if requireOwnedErr := config.RequireOwned(root); requireOwnedErr != nil {
+		return requireOwnedErr
+	}
+	selected := commandArgs(cmd)
+	if len(selected) == 0 {
+		return config.CleanOutput(root)
+	}
+	lock, err := lockfile.Load(paths.Output())
+	if err != nil {
+		return err
+	}
+	// Validate the complete selection before deleting any collection.
+	directories := make([]string, len(selected))
+	wholeOutput := false
+	for index, name := range selected {
+		sourceCfg, ok := cfg.Sources[name]
 		if !ok {
 			return errs.New(
 				errs.NotFound,
-				fmt.Sprintf("source %q not found in config", sourceName),
+				fmt.Sprintf("source %q not found in config", name),
 				errs.WithHint("Run 'dox list' to view configured sources"),
-				errs.WithFields(
-					map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacySourceNotFound},
-				),
 				errs.WithCause(errs.ErrSourceNotFound),
 			)
 		}
-
-		if removeErr := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); removeErr != nil {
-			return errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("removing source output directory: %w", removeErr),
-				errs.WithFields(
-					map[string]any{
-						fieldPath:            cfg.OutputDir(sourceName, sourceCfg),
-						fieldSource:          sourceName,
-						errs.LegacyCodeField: errs.LegacyWriteFailed,
-					},
-				),
-			)
+		directory, pathErr := paths.SourceDir(name, sourceCfg)
+		if pathErr != nil {
+			return pathErr
 		}
-
-		lock.RemoveEntry(sourceName)
+		if directory == "." {
+			wholeOutput = true
+		}
+		directories[index] = directory
 	}
-
-	return lock.Save(outputDir)
+	if wholeOutput {
+		return config.CleanOutput(root)
+	}
+	for index, directory := range directories {
+		if removeAllErr := root.RemoveAll(directory); removeAllErr != nil {
+			return fmt.Errorf("removing source output directory: %w", removeAllErr)
+		}
+		lock.RemoveEntry(selected[index])
+	}
+	return lock.SaveRoot(root)
 }
 
 func versionString() string {
 	return fmt.Sprintf("%s (commit %s, built %s)", version, commit, buildTime)
+}
+
+func loadCommandConfig(cmd *cli.Command, path string) (*config.Config, error) {
+	return config.LoadWithOptions(path, config.LoadOptions{AllowExternalOutput: cmd.Bool(flagAllowExternalOutput)})
 }

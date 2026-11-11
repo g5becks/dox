@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 	"github.com/g5becks/dox/internal/parser"
 )
 
@@ -102,19 +103,28 @@ func Load(outputDir string) (*Manifest, error) {
 
 func (m *Manifest) Save(outputDir string) error {
 	if m == nil {
+		return m.SaveRoot(nil)
+	}
+	root, err := fsutil.OpenDir(outputDir)
+	if err != nil {
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("creating manifest directory: %w", err),
+			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyManifestWriteError}),
+		)
+	}
+	defer root.Close()
+	return m.SaveRoot(root)
+}
+
+// SaveRoot writes state through an already anchored output directory.
+func (m *Manifest) SaveRoot(root *os.Root) error {
+	if m == nil {
 		return errs.New(
 			errs.Internal,
 			"cannot save nil manifest",
 			errs.WithHint("Initialize manifest before saving"),
 			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyManifestWriteError}),
-		)
-	}
-
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("creating manifest directory: %w", err),
-			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyManifestWriteError}),
 		)
 	}
 
@@ -126,55 +136,14 @@ func (m *Manifest) Save(outputDir string) error {
 			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyManifestWriteError}),
 		)
 	}
-
 	data = append(data, '\n')
-	manifestPath := Path(outputDir)
-
-	tempFile, err := os.CreateTemp(outputDir, ManifestFile+".*.tmp")
-	if err != nil {
+	if atomicWriteErr := fsutil.AtomicWrite(root, ManifestFile, data); atomicWriteErr != nil {
 		return errs.Wrap(
 			errs.Internal,
-			fmt.Errorf("creating temporary manifest file: %w", err),
-			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyManifestWriteError}),
+			fmt.Errorf("writing manifest: %w", atomicWriteErr),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyManifestWriteError}),
 		)
 	}
-
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = os.Remove(tempPath)
-	}()
-
-	if _, writeErr := tempFile.Write(data); writeErr != nil {
-		_ = tempFile.Close()
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("writing temporary manifest file: %w", writeErr),
-			errs.WithFields(map[string]any{fieldPath: tempPath, errs.LegacyCodeField: errs.LegacyManifestWriteError}),
-		)
-	}
-
-	if closeErr := tempFile.Close(); closeErr != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("closing temporary manifest file: %w", closeErr),
-			errs.WithFields(map[string]any{fieldPath: tempPath, errs.LegacyCodeField: errs.LegacyManifestWriteError}),
-		)
-	}
-
-	if renameErr := os.Rename(tempPath, manifestPath); renameErr != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("replacing manifest file: %w", renameErr),
-			errs.WithFields(
-				map[string]any{
-					"from":               tempPath,
-					"to":                 manifestPath,
-					errs.LegacyCodeField: errs.LegacyManifestWriteError,
-				},
-			),
-		)
-	}
-
 	return nil
 }
 

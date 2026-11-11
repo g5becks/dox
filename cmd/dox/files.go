@@ -74,7 +74,7 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadCommandConfig(cmd, configPath)
 	if err != nil {
 		return err
 	}

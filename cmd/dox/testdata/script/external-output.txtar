@@ -1,0 +1,29 @@
+httpserve guide.txt
+mkdir project outside
+cp sentinel outside/sentinel
+cd project
+envsubst ../config.in dox.toml
+! dox sync
+stderr 'unsafe local path'
+cmp ../outside/sentinel ../sentinel
+# The explicit global flag permits a separate external directory.
+dox --allow-external-output sync
+cmp ../outside/docs/guide.txt ../guide.txt
+exists ../outside/.dox-root
+! dox clean
+stderr 'unsafe local path'
+exists ../outside/docs/guide.txt
+dox --allow-external-output clean
+! exists ../outside/docs ../outside/sentinel
+exists ../outside/.dox-root
+
+-- config.in --
+output = "../outside"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+-- guide.txt --
+External documentation
+-- sentinel --
+keep me

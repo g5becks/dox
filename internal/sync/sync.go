@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	stdsync "sync"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/source"
@@ -57,6 +57,8 @@ type RunResult struct {
 }
 
 type Options struct {
+	outputRoot  *os.Root
+	sourceDir   string
 	SourceNames []string
 	Force       bool
 	DryRun      bool
@@ -79,15 +81,23 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		)
 	}
 
-	outputDir := resolveOutputRoot(cfg)
-	if opts.Clean && !opts.DryRun {
-		if err := os.RemoveAll(outputDir); err != nil {
-			return nil, errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("cleaning output directory: %w", err),
-				errs.WithFields(map[string]any{"path": outputDir, errs.LegacyCodeField: errs.LegacyWriteFailed}),
-			)
+	paths, err := cfg.Paths()
+	if err != nil {
+		return nil, err
+	}
+	for name, sourceCfg := range cfg.Sources {
+		if _, pathErr := paths.SourceDir(name, sourceCfg); pathErr != nil {
+			return nil, pathErr
 		}
+	}
+	outputDir := paths.Output()
+	if !opts.DryRun {
+		root, rootErr := prepareOutput(paths, opts)
+		if rootErr != nil {
+			return nil, rootErr
+		}
+		defer root.Close()
+		opts.outputRoot = root
 	}
 
 	lock, err := lockfile.Load(outputDir)
@@ -104,7 +114,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	if emit == nil {
 		emit = func(Event) {}
 	}
-	results, err := executeSources(ctx, cfg, opts, outputDir, sourceNames, lock, emit)
+	results, err := executeSources(ctx, cfg, opts, sourceNames, lock, emit)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +127,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	)
 
 	if !opts.DryRun {
-		if commitErr := commitSync(ctx, cfg, lock, outputDir, emit); commitErr != nil {
+		if commitErr := commitSync(ctx, cfg, lock, opts.outputRoot, emit); commitErr != nil {
 			return nil, commitErr
 		}
 	}
@@ -161,7 +171,6 @@ func executeSources(
 	ctx context.Context,
 	cfg *config.Config,
 	opts Options,
-	outputDir string,
 	sourceNames []string,
 	lock *lockfile.LockFile,
 	emit func(Event),
@@ -172,13 +181,26 @@ func executeSources(
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(resolveMaxParallel(cfg, opts))
 
+	paths, pathErr := cfg.Paths()
+	if pathErr != nil {
+		return nil, pathErr
+	}
 	for _, sourceName := range sourceNames {
 		sourceCfg := cfg.Sources[sourceName]
-		destinationDir := resolveSourceOutputDir(outputDir, sourceName, sourceCfg)
+		destinationDir, sourceErr := paths.Source(sourceName, sourceCfg)
+		if sourceErr != nil {
+			return nil, sourceErr
+		}
+		sourceDir, sourceErr := paths.SourceDir(sourceName, sourceCfg)
+		if sourceErr != nil {
+			return nil, sourceErr
+		}
+		sourceOpts := opts
+		sourceOpts.sourceDir = sourceDir
 		previousLock := lock.GetEntry(sourceName)
 
 		group.Go(func() error {
-			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, opts, emit)
+			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, sourceOpts, emit)
 			resultsMu.Lock()
 			results[sourceName] = state
 			resultsMu.Unlock()
@@ -197,14 +219,14 @@ func commitSync(
 	ctx context.Context,
 	cfg *config.Config,
 	lock *lockfile.LockFile,
-	outputDir string,
+	root *os.Root,
 	emit func(Event),
 ) error {
-	if err := lock.Save(outputDir); err != nil {
+	if err := lock.SaveRoot(root); err != nil {
 		return err
 	}
 	// Manifest failures are reported but do not fail the sync.
-	if err := manifest.Generate(ctx, cfg, lock); err != nil {
+	if err := manifest.GenerateRoot(ctx, cfg, lock, root); err != nil {
 		emit(Event{Kind: EventManifestError, Err: err})
 	}
 	return nil
@@ -229,15 +251,7 @@ func syncSource(
 		state.err = newErr
 	} else {
 		defer src.Close()
-		state.result, state.err = src.Sync(
-			ctx,
-			destinationDir,
-			previousLock,
-			source.SyncOptions{
-				Force:  opts.Force,
-				DryRun: opts.DryRun,
-			},
-		)
+		state.result, state.err = syncPreparedSource(ctx, src, destinationDir, previousLock, opts)
 	}
 
 	emit(Event{
@@ -301,20 +315,31 @@ func resolveGitHubToken(cfg *config.Config) string {
 	return os.Getenv("GH_TOKEN")
 }
 
-func resolveOutputRoot(cfg *config.Config) string {
-	if filepath.IsAbs(cfg.Output) {
-		return cfg.Output
+func syncPreparedSource(
+	ctx context.Context,
+	src source.Source,
+	destinationDir string,
+	previousLock *lockfile.LockEntry,
+	opts Options,
+) (*source.SyncResult, error) {
+	var sourceRoot *os.Root
+	if !opts.DryRun {
+		if err := opts.outputRoot.MkdirAll(opts.sourceDir, fsutil.DirMode); err != nil {
+			return nil, err
+		}
+		root, err := opts.outputRoot.OpenRoot(opts.sourceDir)
+		if err != nil {
+			return nil, err
+		}
+		defer root.Close()
+		sourceRoot = root
 	}
-
-	return filepath.Join(cfg.ConfigDir, cfg.Output)
-}
-
-func resolveSourceOutputDir(outputRoot string, sourceName string, sourceCfg config.Source) string {
-	if sourceCfg.Out != "" {
-		return filepath.Join(outputRoot, sourceCfg.Out)
-	}
-
-	return filepath.Join(outputRoot, sourceName)
+	return src.Sync(
+		ctx,
+		destinationDir,
+		previousLock,
+		source.SyncOptions{Force: opts.Force, DryRun: opts.DryRun, Root: sourceRoot},
+	)
 }
 
 func processResults(
@@ -351,4 +376,22 @@ func processResults(
 	}
 
 	return errorCount, downloadedCount, deletedCount, skippedCount
+}
+
+func prepareOutput(paths *config.Paths, opts Options) (*os.Root, error) {
+	root, err := paths.OpenOutput(!opts.Clean)
+	if err != nil {
+		return nil, err
+	}
+	if opts.Clean {
+		if cleanErr := config.CleanOutput(root); cleanErr != nil {
+			_ = root.Close()
+			return nil, cleanErr
+		}
+	}
+	if markErr := config.MarkOutput(root); markErr != nil {
+		_ = root.Close()
+		return nil, markErr
+	}
+	return root, nil
 }

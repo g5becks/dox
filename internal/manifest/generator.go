@@ -3,6 +3,7 @@ package manifest
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,8 +20,25 @@ const (
 )
 
 // Generate creates a manifest by walking the output directory and parsing files.
-func Generate(_ context.Context, cfg *config.Config, lock *lockfile.LockFile) error {
-	outputDir := cfg.Output
+func Generate(ctx context.Context, cfg *config.Config, lock *lockfile.LockFile) error {
+	paths, err := cfg.Paths()
+	if err != nil {
+		return err
+	}
+	root, err := paths.OpenOutput(true)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return GenerateRoot(ctx, cfg, lock, root)
+}
+
+// GenerateRoot reads and writes a manifest inside an already anchored output.
+func GenerateRoot(_ context.Context, cfg *config.Config, lock *lockfile.LockFile, root *os.Root) error {
+	paths, err := cfg.Paths()
+	if err != nil {
+		return err
+	}
 	m := New()
 
 	parsers := []parser.Parser{
@@ -31,20 +49,18 @@ func Generate(_ context.Context, cfg *config.Config, lock *lockfile.LockFile) er
 	}
 
 	for sourceName, sourceCfg := range cfg.Sources {
-		sourceDir := resolveSourceDir(outputDir, sourceName, sourceCfg)
-
-		if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
-			continue
+		sourceDir, pathErr := paths.SourceDir(sourceName, sourceCfg)
+		if pathErr != nil {
+			return pathErr
 		}
 
-		dirName := sourceName
-		if sourceCfg.Out != "" {
-			dirName = sourceCfg.Out
+		if _, statErr := root.Stat(sourceDir); os.IsNotExist(statErr) {
+			continue
 		}
 
 		collection := &Collection{
 			Name:     sourceName,
-			Dir:      dirName,
+			Dir:      filepath.ToSlash(sourceDir),
 			Type:     sourceCfg.Type,
 			Source:   resolveSourceLocation(sourceCfg),
 			Path:     sourceCfg.Path,
@@ -54,31 +70,35 @@ func Generate(_ context.Context, cfg *config.Config, lock *lockfile.LockFile) er
 
 		var skipped int
 
-		err := filepath.WalkDir(sourceDir, func(path string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil || d.IsDir() {
-				return walkErr
-			}
+		walkDirErr := fs.WalkDir(
+			root.FS(),
+			filepath.ToSlash(sourceDir),
+			func(path string, d fs.DirEntry, walkErr error) error {
+				if walkErr != nil || d.IsDir() {
+					return walkErr
+				}
 
-			if d.Name() == ManifestFile || d.Name() == ".dox.lock" {
+				if d.Name() == ManifestFile || d.Name() == ".dox.lock" {
+					return nil
+				}
+
+				relPath, _ := filepath.Rel(sourceDir, path)
+				fileInfo, parseErr := parseFile(root, path, relPath, parsers)
+				if parseErr != nil {
+					skipped++
+					return nil //nolint:nilerr // intentionally skip unparseable files (binary, etc.)
+				}
+
+				collection.Files = append(collection.Files, *fileInfo)
+				collection.TotalSize += fileInfo.Size
 				return nil
-			}
+			},
+		)
 
-			relPath, _ := filepath.Rel(sourceDir, path)
-			fileInfo, parseErr := parseFile(path, relPath, parsers)
-			if parseErr != nil {
-				skipped++
-				return nil //nolint:nilerr // intentionally skip unparseable files (binary, etc.)
-			}
-
-			collection.Files = append(collection.Files, *fileInfo)
-			collection.TotalSize += fileInfo.Size
-			return nil
-		})
-
-		if err != nil {
+		if walkDirErr != nil {
 			return errs.Wrap(
 				errs.Internal,
-				fmt.Errorf("walking source directory: %w", err),
+				fmt.Errorf("walking source directory: %w", walkDirErr),
 				errs.WithFields(
 					map[string]any{"source": sourceName, errs.LegacyCodeField: errs.LegacyManifestGenerationError},
 				),
@@ -90,11 +110,11 @@ func Generate(_ context.Context, cfg *config.Config, lock *lockfile.LockFile) er
 		m.Collections[sourceName] = collection
 	}
 
-	return m.Save(outputDir)
+	return m.SaveRoot(root)
 }
 
-func parseFile(absPath string, relPath string, parsers []parser.Parser) (*FileInfo, error) {
-	stat, err := os.Stat(absPath)
+func parseFile(root *os.Root, absPath string, relPath string, parsers []parser.Parser) (*FileInfo, error) {
+	stat, err := root.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +131,7 @@ func parseFile(absPath string, relPath string, parsers []parser.Parser) (*FileIn
 		return fileInfo, nil
 	}
 
-	content, err := os.ReadFile(absPath)
+	content, err := root.ReadFile(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -146,13 +166,6 @@ func parseFile(absPath string, relPath string, parsers []parser.Parser) (*FileIn
 	fileInfo.Outline = result.Outline
 
 	return fileInfo, nil
-}
-
-func resolveSourceDir(outputDir string, name string, src config.Source) string {
-	if src.Out != "" {
-		return filepath.Join(outputDir, src.Out)
-	}
-	return filepath.Join(outputDir, name)
 }
 
 func resolveSourceLocation(src config.Source) string {

@@ -12,13 +12,7 @@ import (
 // KnownFailing returns a fresh copy of the fixed audit registry. Later fixes
 // remove entries here; new entries must not be added to hide regressions.
 func KnownFailing() map[string]string {
-	const containmentIssue = "dox-deb.11: path containment"
 	knownFailing := map[string]string{
-		"R1_output_dot":           containmentIssue,
-		"R1_output_parent":        containmentIssue,
-		"R1_output_root":          containmentIssue,
-		"R1_out_escape":           containmentIssue,
-		"R1_filename_escape":      containmentIssue,
 		"R2_timeout":              "dox-deb.14: request timeouts",
 		"R3_forbidden":            "dox-deb.15: rate-limit classification",
 		"R3_too_many":             "dox-deb.15: rate-limit classification",

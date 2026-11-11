@@ -12,3 +12,5 @@ const (
 	fieldCollection = "collection"
 	helpJSON        = "Output as JSON"
 )
+
+const flagAllowExternalOutput = "allow-external-output"

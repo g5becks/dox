@@ -171,7 +171,12 @@ func TestResolveOutputRoot(t *testing.T) {
 				ConfigDir: tc.configDir,
 			}
 
-			result := sync.ResolveOutputRoot(cfg)
+			cfg.AllowExternalOutput = tc.wantAbs
+			paths, err := cfg.Paths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := paths.Output()
 
 			if tc.wantAbs {
 				if result != tc.output {
@@ -217,7 +222,14 @@ func TestResolveSourceOutputDir(t *testing.T) {
 				Out: tc.sourceOut,
 			}
 
-			result := sync.ResolveSourceOutputDir(tc.outputRoot, tc.sourceName, sourceCfg)
+			paths, err := config.NewPaths(filepath.Dir(tc.outputRoot), filepath.Base(tc.outputRoot), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := paths.Source(tc.sourceName, sourceCfg)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if result != tc.want {
 				t.Errorf("ResolveSourceOutputDir() = %q, want %q", result, tc.want)
 			}

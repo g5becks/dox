@@ -9,7 +9,6 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/parser"
@@ -54,7 +53,7 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadCommandConfig(cmd, configPath)
 	if err != nil {
 		return err
 	}

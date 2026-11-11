@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 )
 
 const (
@@ -76,28 +77,35 @@ func New() *LockFile {
 
 func (l *LockFile) Save(outputDir string) error {
 	if l == nil {
+		return l.SaveRoot(nil)
+	}
+	root, err := fsutil.OpenDir(outputDir)
+	if err != nil {
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("creating lock file directory: %w", err),
+			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyLockError}),
+		)
+	}
+	defer root.Close()
+	return l.SaveRoot(root)
+}
+
+// SaveRoot writes state through an already anchored output directory.
+func (l *LockFile) SaveRoot(root *os.Root) error {
+	if l == nil {
 		return errs.New(
 			errs.Internal,
 			"cannot save nil lock file",
-			errs.WithHint("Initialize lock file state before saving"),
+			errs.WithHint("Initialize lock file before saving"),
 			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyLockError}),
 		)
 	}
-
 	if l.Version == 0 {
 		l.Version = currentVersion
 	}
-
 	if l.Sources == nil {
 		l.Sources = map[string]*LockEntry{}
-	}
-
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("creating lock directory: %w", err),
-			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyLockError}),
-		)
 	}
 
 	data, err := json.MarshalIndent(l, "", "  ")
@@ -108,51 +116,14 @@ func (l *LockFile) Save(outputDir string) error {
 			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyLockError}),
 		)
 	}
-
 	data = append(data, '\n')
-	lockPath := filepath.Join(outputDir, fileName)
-
-	tempFile, err := os.CreateTemp(outputDir, fileName+".*.tmp")
-	if err != nil {
+	if atomicWriteErr := fsutil.AtomicWrite(root, fileName, data); atomicWriteErr != nil {
 		return errs.Wrap(
 			errs.Internal,
-			fmt.Errorf("creating temporary lock file: %w", err),
-			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyLockError}),
+			fmt.Errorf("writing lock file: %w", atomicWriteErr),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyLockError}),
 		)
 	}
-
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = os.Remove(tempPath)
-	}()
-
-	if _, writeErr := tempFile.Write(data); writeErr != nil {
-		_ = tempFile.Close()
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("writing temporary lock file: %w", writeErr),
-			errs.WithFields(map[string]any{fieldPath: tempPath, errs.LegacyCodeField: errs.LegacyLockError}),
-		)
-	}
-
-	if closeErr := tempFile.Close(); closeErr != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("closing temporary lock file: %w", closeErr),
-			errs.WithFields(map[string]any{fieldPath: tempPath, errs.LegacyCodeField: errs.LegacyLockError}),
-		)
-	}
-
-	if renameErr := os.Rename(tempPath, lockPath); renameErr != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("replacing lock file: %w", renameErr),
-			errs.WithFields(
-				map[string]any{"from": tempPath, "to": lockPath, errs.LegacyCodeField: errs.LegacyLockError},
-			),
-		)
-	}
-
 	return nil
 }
 

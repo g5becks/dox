@@ -36,7 +36,8 @@ func TestFullWorkflowIntegration(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"test-collection": {
 				Type: "github",
@@ -99,7 +100,8 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"docs": {
 				Type: "github",
@@ -180,7 +182,8 @@ func TestMixedFileTypes(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"mixed": {
 				Type: "github",
@@ -234,7 +237,8 @@ func TestEmptyCollection(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"empty": {
 				Type: "github",
@@ -289,7 +293,8 @@ Content here.
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"meta": {
 				Type: "github",

@@ -17,7 +17,13 @@ func configFilenames() []string {
 	return []string{"dox.toml", ".dox.toml"}
 }
 
-func Load(configPath string) (*Config, error) {
+// LoadOptions controls explicit opt-ins to configuration behavior.
+type LoadOptions struct{ AllowExternalOutput bool }
+
+func Load(configPath string) (*Config, error) { return LoadWithOptions(configPath, LoadOptions{}) }
+
+// LoadWithOptions validates raw paths before normalizing them.
+func LoadWithOptions(configPath string, opts LoadOptions) (*Config, error) {
 	resolvedPath, err := resolveConfigPath(configPath)
 	if err != nil {
 		return nil, err
@@ -50,10 +56,15 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	cfg.ConfigDir = filepath.Dir(absConfigPath)
+	cfg.AllowExternalOutput = opts.AllowExternalOutput
 	cfg.ApplyDefaults()
 
 	if valErr := cfg.Validate(); valErr != nil {
 		return nil, valErr
+	}
+
+	if _, pathErr := NewPaths(cfg.ConfigDir, cfg.Output, opts.AllowExternalOutput); pathErr != nil {
+		return nil, pathErr
 	}
 
 	if !filepath.IsAbs(cfg.Output) {

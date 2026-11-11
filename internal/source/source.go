@@ -3,9 +3,11 @@ package source
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -21,6 +23,8 @@ type SyncResult struct {
 
 // SyncOptions controls behavior for source sync operations.
 type SyncOptions struct {
+	// Root is the caller-owned, already confined source directory.
+	Root   *os.Root
 	Force  bool
 	DryRun bool
 }
@@ -55,4 +59,12 @@ func New(name string, cfg config.Source, token string) (Source, error) {
 
 func NewGitHub(name string, cfg config.Source, token string) (Source, error) {
 	return newGitHubSource(name, cfg, token)
+}
+
+// destinationRoot duplicates the caller root or creates a trusted standalone destination.
+func destinationRoot(path string, opts SyncOptions) (*os.Root, error) {
+	if opts.Root != nil {
+		return opts.Root.OpenRoot(".")
+	}
+	return fsutil.OpenDir(path)
 }

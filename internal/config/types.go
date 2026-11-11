@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -96,13 +95,14 @@ type Display struct {
 }
 
 type Config struct {
-	Output      string            `koanf:"output"       validate:"omitempty,dirpath"`
-	GitHubToken string            `koanf:"github_token"`
-	MaxParallel int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
-	Excludes    []string          `koanf:"excludes"`
-	Display     Display           `koanf:"display"`
-	Sources     map[string]Source `koanf:"sources"      validate:"required,dive"`
-	ConfigDir   string            `koanf:"-"`
+	AllowExternalOutput bool              `koanf:"-"`
+	Output              string            `koanf:"output"       validate:"omitempty,dirpath"`
+	GitHubToken         string            `koanf:"github_token"`
+	MaxParallel         int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
+	Excludes            []string          `koanf:"excludes"`
+	Display             Display           `koanf:"display"`
+	Sources             map[string]Source `koanf:"sources"      validate:"required,dive"`
+	ConfigDir           string            `koanf:"-"`
 }
 
 type Source struct {
@@ -292,6 +292,9 @@ func validateDisplay(v *validator.Validate, display Display) error {
 }
 
 func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) error {
+	if err := validateSourcePaths(sourceName, sourceCfg); err != nil {
+		return err
+	}
 	// Validate that source has either repo or url (not both, not neither)
 	hasRepo := sourceCfg.Repo != ""
 	hasURL := sourceCfg.URL != ""
@@ -413,19 +416,6 @@ func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldE
 			),
 		)
 	}
-}
-
-func (c *Config) OutputDir(sourceName string, sourceCfg Source) string {
-	baseOutputDir := c.Output
-	if !filepath.IsAbs(baseOutputDir) {
-		baseOutputDir = filepath.Join(c.ConfigDir, c.Output)
-	}
-
-	if sourceCfg.Out != "" {
-		return filepath.Join(baseOutputDir, sourceCfg.Out)
-	}
-
-	return filepath.Join(baseOutputDir, sourceName)
 }
 
 func isValidRepo(repo string) bool {

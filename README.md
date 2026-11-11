@@ -126,7 +126,7 @@ All commands accept `--config path/to/dox.toml` (`-c`) to override config discov
 dox sync                    # Sync all sources
 dox sync goreleaser hono    # Sync specific sources
 dox sync --force            # Force re-download
-dox sync --clean            # Remove stale files after sync
+dox sync --clean            # Clear owned output before syncing
 dox sync --dry-run          # Preview without downloading
 dox sync --parallel 5       # Override parallelism
 ```
@@ -155,6 +155,27 @@ dox add myproject --repo owner/repo --path docs --host gitlab.com
 # Overwrite existing source
 dox add goreleaser --repo goreleaser/goreleaser --path www/docs --force
 ```
+
+### Output safety
+
+`output` must be a relative directory below the directory containing `dox.toml`.
+Use `.dox` or `docs/generated`; migrate `output = "."`, `".."`, and absolute
+paths to a dedicated relative directory. Source `out` and URL `filename` paths
+must stay inside that output. Symlinks cannot redirect writes outside it.
+
+For an intentional separate external directory, opt in on each invocation:
+
+```sh
+dox --allow-external-output sync
+dox --allow-external-output clean
+```
+
+The config directory, its ancestors, and the filesystem root remain protected,
+including aliases through symlinks. The first non-dry sync writes `.dox-root`.
+`clean` and `sync --clean` require that marker or an existing `.dox.lock`; they
+refuse unowned directories. Migrate existing output by running a normal
+`dox sync` first. Whole-output cleanup leaves the output directory and its
+ownership marker in place. Selected-source cleanup removes only those sources.
 
 ### clean
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -144,22 +145,12 @@ func (s *githubSource) syncSingleFile(
 			return nil, fetchErr
 		}
 
-		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
-			return nil, errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("creating destination directory: %w", mkdirErr),
-				errs.WithFields(
-					map[string]any{
-						fieldSource:          s.name,
-						fieldPath:            filepath.Dir(localPath),
-						errs.LegacyCodeField: errs.LegacyWriteFailed,
-					},
-				),
-			)
+		root, rootErr := destinationRoot(destDir, opts)
+		if rootErr != nil {
+			return nil, rootErr
 		}
-
-		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
+		defer root.Close()
+		if writeErr := fsutil.AtomicWrite(root, filepath.FromSlash(relativePath), content); writeErr != nil {
 			return nil, writeErr
 		}
 	}
@@ -223,25 +214,15 @@ func (s *githubSource) syncDirectory(
 	toDelete := diffDeletes(oldFiles, newFiles)
 
 	if !opts.DryRun {
-		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
-			return nil, errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("creating destination directory: %w", mkdirErr),
-				errs.WithFields(
-					map[string]any{
-						fieldSource:          s.name,
-						fieldPath:            destDir,
-						errs.LegacyCodeField: errs.LegacyWriteFailed,
-					},
-				),
-			)
+		root, rootErr := destinationRoot(destDir, opts)
+		if rootErr != nil {
+			return nil, rootErr
 		}
-
-		if downloadErr := s.downloadFiles(ctx, destDir, toDownload); downloadErr != nil {
+		defer root.Close()
+		if downloadErr := s.downloadFiles(ctx, root, toDownload); downloadErr != nil {
 			return nil, downloadErr
 		}
-
-		if deleteErr := s.deleteStaleFiles(destDir, toDelete); deleteErr != nil {
+		if deleteErr := s.deleteStaleFiles(root, toDelete); deleteErr != nil {
 			return nil, deleteErr
 		}
 	}
@@ -259,57 +240,37 @@ func (s *githubSource) syncDirectory(
 	}, nil
 }
 
-func (s *githubSource) downloadFiles(ctx context.Context, destDir string, toDownload map[string]string) error {
+func (s *githubSource) downloadFiles(ctx context.Context, root *os.Root, toDownload map[string]string) error {
 	for _, relativePath := range slices.Sorted(maps.Keys(toDownload)) {
-		sha := toDownload[relativePath]
-		content, fetchErr := s.fetchBlobContent(ctx, sha)
-		if fetchErr != nil {
-			return fetchErr
+		if err := config.ValidatePath(filepath.FromSlash(relativePath)); err != nil {
+			return err
 		}
-
-		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
-			return errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("creating destination directory: %w", mkdirErr),
-				errs.WithFields(
-					map[string]any{
-						fieldSource:          s.name,
-						fieldPath:            filepath.Dir(localPath),
-						errs.LegacyCodeField: errs.LegacyWriteFailed,
-					},
-				),
-			)
+		content, err := s.fetchBlobContent(ctx, toDownload[relativePath])
+		if err != nil {
+			return err
 		}
-
-		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
-			return writeErr
+		if atomicWriteErr := fsutil.AtomicWrite(
+			root,
+			filepath.FromSlash(relativePath),
+			content,
+		); atomicWriteErr != nil {
+			return atomicWriteErr
 		}
 	}
-
 	return nil
 }
 
-func (s *githubSource) deleteStaleFiles(destDir string, toDelete map[string]struct{}) error {
+func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struct{}) error {
 	for _, relativePath := range slices.Sorted(maps.Keys(toDelete)) {
-		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if removeErr := os.Remove(localPath); removeErr != nil && !os.IsNotExist(removeErr) {
-			return errs.Wrap(
-				errs.Internal,
-				fmt.Errorf("deleting stale file: %w", removeErr),
-				errs.WithFields(
-					map[string]any{
-						fieldSource:          s.name,
-						fieldPath:            localPath,
-						errs.LegacyCodeField: errs.LegacyWriteFailed,
-					},
-				),
-			)
+		local := filepath.FromSlash(relativePath)
+		if err := config.ValidatePath(local); err != nil {
+			return err
 		}
-
-		cleanupEmptyDirs(filepath.Dir(localPath), destDir)
+		if err := root.Remove(local); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("deleting stale file: %w", err)
+		}
+		cleanupEmptyDirs(root, filepath.Dir(local))
 	}
-
 	return nil
 }
 
@@ -686,21 +647,12 @@ func matchesAny(patterns []string, candidate string) (bool, error) {
 	return false, nil
 }
 
-func cleanupEmptyDirs(startDir string, stopDir string) {
-	current := startDir
-	cleanStop := filepath.Clean(stopDir)
-
-	for current != cleanStop && current != "." && current != string(filepath.Separator) {
-		entries, err := os.ReadDir(current)
-		if err != nil || len(entries) != 0 {
+func cleanupEmptyDirs(root *os.Root, directory string) {
+	for directory != "." && filepath.IsLocal(directory) {
+		if err := root.Remove(directory); err != nil {
 			return
 		}
-
-		if removeErr := os.Remove(current); removeErr != nil {
-			return
-		}
-
-		current = filepath.Dir(current)
+		directory = filepath.Dir(directory)
 	}
 }
 

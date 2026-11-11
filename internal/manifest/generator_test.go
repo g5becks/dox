@@ -13,8 +13,9 @@ func TestGenerate_EmptyDirectory(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg := &config.Config{
-		Output:  dir,
-		Sources: map[string]config.Source{},
+		ConfigDir: filepath.Dir(dir),
+		Output:    dir,
+		Sources:   map[string]config.Source{},
 	}
 
 	err := manifest.Generate(t.Context(), cfg, nil)
@@ -46,7 +47,8 @@ func TestGenerate_WithMarkdownFiles(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: dir,
+		ConfigDir: filepath.Dir(dir),
+		Output:    dir,
 		Sources: map[string]config.Source{
 			"test-source": {
 				Type: "github",
@@ -118,7 +120,8 @@ func TestGenerate_MixedFileTypes(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: dir,
+		ConfigDir: filepath.Dir(dir),
+		Output:    dir,
 		Sources: map[string]config.Source{
 			"mixed": {
 				Type: "github",

@@ -162,13 +162,23 @@ func TestConfigOutputDir(t *testing.T) {
 		Output:    ".dox",
 	}
 
-	gotDefaultOut := cfg.OutputDir("goreleaser", config.Source{})
+	paths, err := cfg.Paths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotDefaultOut, err := paths.Source("goreleaser", config.Source{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	wantDefaultOut := filepath.Join("/tmp/project", ".dox", "goreleaser")
 	if gotDefaultOut != wantDefaultOut {
 		t.Fatalf("OutputDir() default = %q, want %q", gotDefaultOut, wantDefaultOut)
 	}
 
-	gotCustomOut := cfg.OutputDir("goreleaser", config.Source{Out: "go/goreleaser"})
+	gotCustomOut, err := paths.Source("goreleaser", config.Source{Out: "go/goreleaser"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	wantCustomOut := filepath.Join("/tmp/project", ".dox", "go/goreleaser")
 	if gotCustomOut != wantCustomOut {
 		t.Fatalf("OutputDir() custom = %q, want %q", gotCustomOut, wantCustomOut)
