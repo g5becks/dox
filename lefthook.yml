@@ -1,5 +1,21 @@
 # lefthook.yml
+lefthook: go tool -modfile=tools/go.mod lefthook
+assert_lefthook_installed: true
+
 pre-commit:
+  piped: true
+  commands:
+    format:
+      priority: 1
+      glob: '*.go'
+      run: go tool -modfile=tools/go.mod goimports -local github.com/g5becks/dox -w {staged_files}
+      stage_fixed: true
+    lint:
+      priority: 2
+      glob: '*.go'
+      run: CGO_ENABLED=0 go tool -modfile=tools/go.mod golangci-lint run --new-from-rev=HEAD
+
+pre-push:
   parallel: true
   commands:
     lint:

@@ -15,6 +15,17 @@ Development tools are pinned in `tools/go.mod`; run them with
 `tools/beads/go.mod` and must run through `scripts/bd`. See
 [the tools guide](tools/README.md) for commands and module maintenance.
 
+Install the pinned Git hooks after cloning:
+
+```sh
+go tool -modfile=tools/go.mod lefthook install
+```
+
+Pre-commit formats and restages staged Go files with goimports, then checks new
+lint findings against HEAD. Commit messages retain Conventional Commit checks.
+Pre-push runs race tests and full lint. Run these checks manually with
+`go tool -modfile=tools/go.mod lefthook run pre-push`.
+
 - **Go 1.25.7+** (check with `go version`)
 - **Task** (optional but recommended): `go install github.com/go-task/task/v3/cmd/task@latest`
 - **golangci-lint** (for linting): https://golangci-lint.run/usage/install/
