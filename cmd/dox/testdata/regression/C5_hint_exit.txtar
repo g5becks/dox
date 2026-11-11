@@ -1,0 +1,7 @@
+audit C5_hint_exit exit 4 sync nope
+
+-- dox.toml --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "https://example.invalid/guide.txt"

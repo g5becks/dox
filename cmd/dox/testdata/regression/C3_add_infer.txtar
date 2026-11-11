@@ -1,0 +1,5 @@
+audit C3_add_infer success add x --repo acme/docs --path docs
+# The baseline stops at the known failure; grep only runs on a real pass.
+
+-- dox.toml --
+output = ".dox"

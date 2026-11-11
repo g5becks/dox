@@ -17,6 +17,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- Audit regression cases with an explicit known-failure registry; unexpected successes require removing the corresponding entries before release.
+
 - End-to-end CLI testscript coverage and reusable fake GitHub fault-injection and JSON-golden helpers.
 
 - A commit-pinned documentation corpus, reproducible v0.3.0 performance baselines, a generated pathological Markdown fixture, and latency/counting GitHub API/raw/archive benchmark fixtures. See `testdata/bench/README.md`.

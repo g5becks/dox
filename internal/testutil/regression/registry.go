@@ -1,0 +1,99 @@
+// Package regression tracks the audited baseline failures until their fixes land.
+package regression
+
+import (
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// KnownFailing returns a fresh copy of the fixed audit registry. Later fixes
+// remove entries here; new entries must not be added to hide regressions.
+func KnownFailing() map[string]string {
+	const containmentIssue = "dox-deb.11: path containment"
+	knownFailing := map[string]string{
+		"R1_output_dot":           containmentIssue,
+		"R1_output_parent":        containmentIssue,
+		"R1_output_root":          containmentIssue,
+		"R1_out_escape":           containmentIssue,
+		"R1_filename_escape":      containmentIssue,
+		"R2_timeout":              "dox-deb.14: request timeouts",
+		"R3_forbidden":            "dox-deb.15: rate-limit classification",
+		"R3_too_many":             "dox-deb.15: rate-limit classification",
+		"R3_success_last_request": "dox-deb.15: successful last quota request",
+		"P2_parallel_config":      "dox-deb.16: concurrency precedence",
+		"C3_add_infer":            "dox-deb.18: add type inference",
+		"C3_add_aliases":          "dox-deb.18: add aliases",
+		"C4_non_github_host":      "dox-deb.17: unsupported host rejection",
+		"C5_hint_exit":            "dox-deb.13: hints and exit codes",
+		"C6_line_roundtrip":       "dox-deb.19: 1-based cat line",
+		"P9_dry_run_body":         "dox-deb.27: HEAD dry-run",
+	}
+	return knownFailing
+}
+
+// Classify inverts only registered failures, preserving ordinary new failures.
+func Classify(registry map[string]string, id string, failure error) error {
+	issue, known := registry[id]
+	if !known {
+		return failure
+	}
+	if failure == nil {
+		return fmt.Errorf("%s passed: remove from knownFailing (%s)", id, issue)
+	}
+	return nil
+}
+
+// Verify also checks that an expected failure matches the documented repro.
+// DOX_AUDIT_ENFORCE=1 exposes raw failures for baseline verification.
+func Verify(id string, failure error) error {
+	registry := KnownFailing()
+	if _, known := registry[id]; known && failure != nil {
+		pattern := evidencePattern(id)
+		if !regexp.MustCompile(pattern).MatchString(failure.Error()) {
+			return fmt.Errorf("%s failed for an unrelated reason: %w", id, failure)
+		}
+	}
+	if os.Getenv("DOX_AUDIT_ENFORCE") == "1" {
+		return failure
+	}
+	return Classify(registry, id, failure)
+}
+
+func evidencePattern(id string) string {
+	switch {
+	case strings.HasPrefix(id, "R1_"):
+		return `^R1 (unsafe|accepted|filename)`
+	case strings.HasPrefix(id, "R2_"):
+		return `^R2 request exceeded`
+	case strings.HasPrefix(id, "R3_"):
+		return `^R3 (token hint missing|successful request rejected)`
+	case strings.HasPrefix(id, "P2_"):
+		return `^P2 concurrency =`
+	case strings.HasPrefix(id, "C3_"):
+		return `(?s)(Required flag "type" not set|flag provided but not defined: -[rp])`
+	case strings.HasPrefix(id, "C4_"):
+		return `^C4 non-GitHub host contacted GitHub`
+	case strings.HasPrefix(id, "C5_"):
+		return `^C5 (exit code|missing hint)`
+	case strings.HasPrefix(id, "C6_"):
+		return `(?s)(flag provided but not defined: -line|^C6 line mismatch)`
+	case strings.HasPrefix(id, "P9_"):
+		return `^P9 dry-run read`
+	default:
+		return `a^` // Unknown expected-failure evidence must never match.
+	}
+}
+
+// Check reports the raw evidence while leaving the Go test result to Verify.
+func Check(tb testing.TB, id string, failure error) {
+	tb.Helper()
+	if err := Verify(id, failure); err != nil {
+		tb.Fatal(err)
+	}
+	if failure != nil {
+		tb.Logf("KNOWN FAILING %s: %v", id, failure)
+	}
+}

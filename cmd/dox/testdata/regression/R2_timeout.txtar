@@ -1,0 +1,11 @@
+hangserve
+envsubst dox.in dox.toml
+audit R2_timeout timeout
+
+-- dox.in --
+output = ".dox"
+timeout = "250ms"
+[sources.docs]
+type = "url"
+url = "$SERVER/never"
+filename = "guide.txt"

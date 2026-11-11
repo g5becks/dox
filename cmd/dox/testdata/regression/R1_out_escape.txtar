@@ -1,0 +1,14 @@
+mkdir project victim
+cp dox.in project/dox.toml
+cp sentinel victim/sentinel
+cd project
+audit R1_out_escape refuse ../victim/sentinel clean docs
+
+-- dox.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "https://example.invalid/guide.txt"
+out = "../../victim"
+-- sentinel --
+keep me
