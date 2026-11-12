@@ -98,7 +98,7 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 		)
 	}
 
-	if cmd.Bool(formatJSON) {
+	if jsonEnabled(cmd) {
 		return outputOutlineJSON(fileInfo)
 	}
 

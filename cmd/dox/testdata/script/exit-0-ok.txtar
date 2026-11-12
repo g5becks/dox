@@ -1,0 +1,22 @@
+# Exit code 0 (ok) and documented exit codes in --help.
+doxexit 0 --help
+stdout 'Exit codes:'
+stdout '0 +ok'
+stdout '1 +runtime/network'
+stdout '2 +usage/config'
+stdout '3 +partial sync failure'
+stdout '4 +not found'
+stdout '130 +interrupted'
+
+httpserve guide.txt
+envsubst config.in dox.toml
+doxexit 0 sync
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+-- guide.txt --
+ok fixture

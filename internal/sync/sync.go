@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -120,7 +121,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
-	errorCount, downloadedCount, deletedCount, skippedCount := processResults(
+	errorCount, downloadedCount, deletedCount, skippedCount, firstErr := processResults(
 		lock,
 		sourceNames,
 		results,
@@ -142,16 +143,44 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	if errorCount > 0 {
-		return runResult, errs.New(
-			errs.PartialFailure,
-			fmt.Sprintf("%d source(s) failed during sync", errorCount),
+		return runResult, buildSyncFailure(ctx, errorCount, len(sourceNames), firstErr)
+	}
+
+	return runResult, nil
+}
+
+func buildSyncFailure(ctx context.Context, errorCount, totalSources int, firstErr error) error {
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(firstErr, context.Canceled) {
+		return errs.Wrap(
+			errs.Interrupted,
+			fmt.Errorf("sync interrupted: %w", context.Canceled),
 			errs.WithFields(
 				map[string]any{"failed_sources": errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
 			),
 		)
 	}
 
-	return runResult, nil
+	code := errs.Network
+	var hint string
+	if detail, ok := errors.AsType[*errs.Error](firstErr); ok {
+		hint = detail.Hint
+		if detail.Code != "" {
+			code = detail.Code
+		}
+	}
+	if errorCount < totalSources {
+		code = errs.PartialFailure
+	}
+
+	return errs.New(
+		code,
+		fmt.Sprintf("%d source(s) failed during sync", errorCount),
+		errs.WithHint(hint),
+		errs.WithFields(
+			map[string]any{"failed_sources": errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+		),
+		errs.WithCause(firstErr),
+	)
 }
 
 func resolveMaxParallel(cfg *config.Config, opts Options) int {
@@ -348,16 +377,20 @@ func processResults(
 	sourceNames []string,
 	results map[string]runState,
 	dryRun bool,
-) (int, int, int, int) {
+) (int, int, int, int, error) {
 	errorCount := 0
 	downloadedCount := 0
 	deletedCount := 0
 	skippedCount := 0
+	var firstErr error
 
 	for _, sourceName := range sourceNames {
 		state := results[sourceName]
 		if state.err != nil {
 			errorCount++
+			if firstErr == nil {
+				firstErr = state.err
+			}
 			continue
 		}
 
@@ -376,7 +409,7 @@ func processResults(
 		}
 	}
 
-	return errorCount, downloadedCount, deletedCount, skippedCount
+	return errorCount, downloadedCount, deletedCount, skippedCount, firstErr
 }
 
 func prepareOutput(paths *config.Paths, opts Options) (*os.Root, error) {

@@ -136,7 +136,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if cmd.Bool(formatJSON) {
+	if jsonEnabled(cmd) {
 		return outputCatJSON(collectionName, fileInfo, strings.Join(lines, "\n"), offset, limit)
 	}
 

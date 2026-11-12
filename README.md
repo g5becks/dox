@@ -303,6 +303,36 @@ dox files react --json --limit 100          # Browse collection files
 dox cat react docs/hooks.md                 # Read specific content
 ```
 
+### Error output and exit codes
+
+Errors print their message and an actionable `hint:` line to `stderr` when
+available. Passing `--verbose` appends context `fields:` and the unwrapped
+`cause:` chain. Passing `--json` on any command emits a structured error
+envelope to `stderr`:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "source \"nope\" not found in config",
+    "hint": "Run 'dox list' to see configured sources",
+    "fields": {
+      "legacy_code": "SOURCE_NOT_FOUND",
+      "source": "nope"
+    }
+  }
+}
+```
+
+| Code | Meaning |
+|---|---|
+| 0 | ok |
+| 1 | runtime/network |
+| 2 | usage/config |
+| 3 | partial sync failure |
+| 4 | not found |
+| 130 | interrupted |
+
 ## Config Reference
 
 ### Global

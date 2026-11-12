@@ -12,6 +12,8 @@ Custom commands:
 
 - `httpserve file`: serve one fixture file and export its base URL as `$SERVER`;
   the server closes when the script ends.
+- `httpfail status`: serve a loopback HTTP endpoint that responds with `status`
+  and export its base URL as `$FAIL_SERVER`.
 - `envsubst input output`: expand script environment variables into a fixture,
   useful for generated `dox.toml` URLs.
 - `pathenv KEY parts...`: join path components with the native separator and
@@ -20,6 +22,10 @@ Custom commands:
   the last command's output. Object-key order and whitespace are ignored; array
   order and exact numeric values are preserved. Environment placeholders inside
   expected JSON strings are escaped, including Windows backslashes.
+- `doxexit code [args...]`: run `dox` with `args` and assert its exit status
+  equals `code` while preserving `stdout` and `stderr` for subsequent checks.
+- `doxinterrupt code args...`: start `dox` against a blocking loopback URL
+  source, send `SIGINT` once connected, and assert it exits with `code`.
 
 Use ordinary testscript commands to check stdout/stderr, command failure, and
 files. Add each audit regression as a case before implementing its fix; the next

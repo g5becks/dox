@@ -16,3 +16,5 @@ const (
 const flagAllowExternalOutput = "allow-external-output"
 
 const flagLine = "line"
+
+const flagVerbose = "verbose"

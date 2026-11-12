@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- CLI errors now print actionable `hint:` lines to `stderr`, include `fields:` and `cause:` chains with `--verbose`, emit `{"error":{"code":"…","message":"…","hint":"…","fields":{…}}}` to `stderr` when `--json` is passed on any command, and exit with distinct status codes (`0` ok, `1` runtime/network, `2` usage/config, `3` partial sync failure, `4` not found, `130` interrupted). Scripts that previously checked specifically for exit status `1` on any failure should check for non-zero exit status or match the specific code (`2`, `3`, `4`, `130`), and JSON consumers should parse error envelopes from `stderr`.
+
 - Release packaging uses current GoReleaser archive, cask and Docker configuration. Homebrew retains macOS universal and Linux amd64/arm64 coverage through a cask: run `brew update`, remove an existing formula with `brew uninstall --formula dox`, then `brew install --cask g5becks/tap/dox`. Existing archive/package names and multi-platform plus architecture-specific image tags remain supported. Custom Docker build contexts must place the binary at `linux/<arch>/dox`; pass `--build-arg TARGETPLATFORM=linux/<arch>` with a legacy builder.
 
 - Manifest generation reuses unchanged entries, parses changes in parallel, honors cancellation, and avoids rewriting unchanged snapshots. JSON is now compact with additive parser/SHA cache metadata. `generated` derives from input timestamps; without a lock timestamp, `last_sync` uses file mtime. Consumers should parse JSON and use source/lock timestamps for freshness rather than treat generation time or file rewrites as a clock. Existing manifests regenerate automatically.

@@ -131,7 +131,7 @@ func resolveLimit(cmd *cli.Command, cfg *config.Config) int {
 }
 
 func resolveFormat(cmd *cli.Command, cfg *config.Config) string {
-	if cmd.Bool(formatJSON) {
+	if jsonEnabled(cmd) {
 		return formatJSON
 	}
 	if cmd.IsSet("format") {

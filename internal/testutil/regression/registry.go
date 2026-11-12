@@ -20,7 +20,6 @@ func KnownFailing() map[string]string {
 		"C3_add_infer":            "dox-deb.18: add type inference",
 		"C3_add_aliases":          "dox-deb.18: add aliases",
 		"C4_non_github_host":      "dox-deb.17: unsupported host rejection",
-		"C5_hint_exit":            "dox-deb.13: hints and exit codes",
 		"P9_dry_run_body":         "dox-deb.27: HEAD dry-run",
 	}
 	return knownFailing

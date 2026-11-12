@@ -1,0 +1,16 @@
+# Exit code 130 (interrupted) on SIGINT during sync.
+doxinterrupt 130 sync --json
+jsoncmp interrupt.stderr want-interrupt.json
+
+-- want-interrupt.json --
+{
+  "error": {
+    "code": "interrupted",
+    "message": "sync interrupted: context canceled",
+    "hint": "",
+    "fields": {
+      "failed_sources": 1,
+      "legacy_code": "DOWNLOAD_FAILED"
+    }
+  }
+}

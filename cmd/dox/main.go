@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/urfave/cli/v3"
 
@@ -164,25 +166,36 @@ var (
 )
 
 func main() {
-	if err := run(os.Args); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := run(ctx, os.Args)
+	stop()
+	if err != nil {
+		os.Exit(renderError(os.Stderr, err, os.Args))
 	}
 }
 
-func run(args []string) error {
-	return newRootCommand().Run(context.Background(), args)
+func run(ctx context.Context, args []string) error {
+	return newRootCommand().Run(ctx, args)
 }
 
 func newRootCommand() *cli.Command {
-	return &cli.Command{
-		Name:    "dox",
-		Usage:   "Sync framework and library docs to local files",
-		Version: versionString(),
+	root := &cli.Command{
+		Name:        "dox",
+		Usage:       "Sync framework and library docs to local files",
+		Description: rootDescription,
+		Version:     versionString(),
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  flagAllowExternalOutput,
 				Usage: "Allow output outside the config directory (never the config directory or filesystem root)",
+			},
+			&cli.BoolFlag{
+				Name:  formatJSON,
+				Usage: helpJSON,
+			},
+			&cli.BoolFlag{
+				Name:  flagVerbose,
+				Usage: "Show error context fields and cause chain",
 			},
 		},
 		Commands: []*cli.Command{
@@ -199,6 +212,8 @@ func newRootCommand() *cli.Command {
 			newVersionCommand(),
 		},
 	}
+	attachUsageHandlers(root)
+	return root
 }
 
 func newVersionCommand() *cli.Command {
@@ -309,7 +324,12 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	printer := ui.NewSyncPrinter(cmd.Bool("dry-run"))
+	var onEvent func(doxsync.Event)
+	var printer *ui.SyncPrinter
+	if !jsonEnabled(cmd) {
+		printer = ui.NewSyncPrinter(cmd.Bool("dry-run"))
+		onEvent = printer.HandleEvent
+	}
 
 	result, runErr := doxsync.Run(ctx, cfg, doxsync.Options{
 		SourceNames: commandArgs(cmd),
@@ -317,10 +337,12 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		DryRun:      cmd.Bool("dry-run"),
 		MaxParallel: cmd.Int("parallel"),
 		Clean:       cmd.Bool("clean"),
-		OnEvent:     printer.HandleEvent,
+		OnEvent:     onEvent,
 	})
 
-	printer.PrintSummary(result)
+	if printer != nil {
+		printer.PrintSummary(result)
+	}
 
 	return runErr
 }
@@ -397,8 +419,8 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return ui.RenderSourceList(statuses, ui.ListOptions{
-		JSON:    cmd.Bool(formatJSON),
-		Verbose: cmd.Bool("verbose"),
+		JSON:    jsonEnabled(cmd),
+		Verbose: verboseEnabled(cmd),
 		Files:   includeFiles,
 	})
 }
