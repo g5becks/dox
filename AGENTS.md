@@ -44,7 +44,7 @@ resume in the issue notes. Do not use `git stash`.
 
 ## Tools and checks
 
-The CLI module requires Go 1.26; development uses Go 1.27.3. Development
+The CLI module requires Go 1.26; development uses Go 1.27.4. Development
 tools are pinned in `tools/go.mod`; beads has a separate compatible dependency
 graph in `tools/beads/`. See [tools/README.md](tools/README.md).
 

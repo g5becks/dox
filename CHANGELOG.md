@@ -25,7 +25,7 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 - Refreshed CLI, config, validation, globbing, table, and fuzzy-search dependencies. Command help is unchanged; updated x/net, x/text, and OpenTelemetry remove their reported dependency advisories.
 
-- Building from source requires Go 1.26 or newer; development uses Go 1.27.3. Upgrade older Go installations before building. Go 1.26 retains compatibility with the oldest supported Go line while enabling the standard library modernizations.
+- Building from source requires Go 1.26 or newer; development uses Go 1.27.4. Upgrade older Go installations before building. Go 1.26 retains compatibility with the oldest supported Go line while enabling the standard library modernizations.
 
 - Applied Go modernizers and simplified sorted map iteration and test contexts without changing CLI behavior.
 - Git hooks now format staged Go files and check new lint findings before commits; full lint and race tests run before pushes. Install with `go tool -modfile=tools/go.mod lefthook install`.
@@ -42,6 +42,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 - A shared CI quality gate, a three-OS/two-Go GitHub matrix, and `scripts/ci-local.sh` for clean-ref macOS/Linux checks plus Windows vet/test compilation while GitHub Actions is unavailable. Release publication requires the CI gate.
 
 ### Fixed
+
+- Default builds and development tools use Go 1.27.4, addressing reachable standard-library advisory GO-2026-6859. The Go 1.26 minimum remains unchanged.
 
 - The binary ignore rule now applies only at the repository root, and commit-message hooks accept standard breaking-change subjects with `!`.
 

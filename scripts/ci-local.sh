@@ -87,7 +87,7 @@ while IFS= read -r version; do
       -e GOLANGCI_LINT_CACHE=/cache/golangci-lint \
       -v "$linux_dir:/w" -v "$HOME/go/pkg/mod:/go/pkg/mod" \
       -v "$build_cache:/cache" -w /w "golang:$line" \
-      bash scripts/ci-check.sh >"$logs/linux-$line.log" 2>&1; then
+      bash -c 'DOX_GO_TOOLCHAIN=$(GOTOOLCHAIN=local go env GOVERSION) bash scripts/ci-check.sh' >"$logs/linux-$line.log" 2>&1; then
     record "Linux / golang:$line" PASS
   else
     record "Linux / golang:$line" FAIL

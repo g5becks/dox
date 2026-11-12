@@ -70,7 +70,7 @@ go install github.com/g5becks/dox/cmd/dox@latest
 
 ### Build from Source
 
-Requires Go 1.26 or newer. Development uses the pinned Go 1.27.3 toolchain.
+Requires Go 1.26 or newer. Development uses the pinned Go 1.27.4 toolchain.
 
 ```bash
 git clone https://github.com/g5becks/dox.git

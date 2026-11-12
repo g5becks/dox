@@ -1,6 +1,6 @@
 module github.com/g5becks/dox/tools/beads
 
-go 1.27.3
+go 1.27.4
 
 tool github.com/steveyegge/beads/cmd/bd
 

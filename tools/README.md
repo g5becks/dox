@@ -1,5 +1,8 @@
 # Development tools
 
+Development and isolated tool modules use Go 1.27.4. The CLI retains its Go 1.26
+minimum; the root toolchain directive selects the patched development release.
+
 The root module contains CLI dependencies. `tools/go.mod` pins Task,
 golangci-lint, Lefthook, GoReleaser, goimports, govulncheck, and benchstat. Run them from the
 repository root, for example:

@@ -1,6 +1,6 @@
 # Contributing to dox
 
-Use Go 1.26 or newer to build dox. Development uses Go 1.27.3, selected by the
+Use Go 1.26 or newer to build dox. Development uses Go 1.27.4, selected by the
 root module's toolchain directive. Keep changes focused, preserve existing tests,
 and explain compatibility changes in the changelog with migration steps.
 
@@ -86,7 +86,7 @@ host jobs, Linux Docker jobs, and Windows amd64 compilation/vet. Logs and result
 are saved under `/Users/takinprofit/Dev/dox-release/ci-local/<sha>/logs/`.
 The local runner requires Python 3, curl, and an already-running Docker daemon.
 It detects Colima when needed and never starts or stops it. All native checks are
-shared with GitHub in `scripts/ci-check.sh`; tools are built with Go 1.27.3 through `go tool`.
+shared with GitHub in `scripts/ci-check.sh`; tools are built with Go 1.27.4 through `go tool`.
 Analyzers and project build/vet/race/fix/tidy checks use the selected matrix Go
 version. Native Windows execution remains a GitHub-only check. GitHub Actions currently cannot run because of the account's
 billing lock; report local results honestly rather than claiming an Actions run.

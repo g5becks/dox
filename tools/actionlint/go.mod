@@ -1,6 +1,6 @@
 module github.com/g5becks/dox/tools/actionlint
 
-go 1.27.3
+go 1.27.4
 
 tool github.com/rhysd/actionlint/cmd/actionlint
 

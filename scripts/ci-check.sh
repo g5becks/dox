@@ -2,13 +2,13 @@
 # Shared checks for native CI jobs and ci-local clean clones.
 set -euo pipefail
 
-DOX_GO_TOOLCHAIN="${DOX_GO_TOOLCHAIN:-$(GOTOOLCHAIN=local go env GOVERSION)}"
+DOX_GO_TOOLCHAIN="${DOX_GO_TOOLCHAIN:-$(go env GOVERSION)}"
 export DOX_GO_TOOLCHAIN
 project_go() { GOTOOLCHAIN="$DOX_GO_TOOLCHAIN" go "$@"; }
 tool() {
   local executable
   # Build the pinned tool with its required Go, then inspect the matrix Go.
-  executable=$(GOTOOLCHAIN=go1.27.3 go tool -modfile=tools/go.mod -n "$1")
+  executable=$(GOTOOLCHAIN=go1.27.4 go tool -modfile=tools/go.mod -n "$1")
   shift
   GOTOOLCHAIN="$DOX_GO_TOOLCHAIN" "$executable" "$@"
 }
@@ -28,7 +28,7 @@ if [[ "${1:-}" == windows-cross ]]; then
   exit 0
 fi
 
-GOTOOLCHAIN=go1.27.3 go tool -modfile=tools/actionlint/go.mod actionlint
+GOTOOLCHAIN=go1.27.4 go tool -modfile=tools/actionlint/go.mod actionlint
 project_go build ./...
 project_go vet ./...
 CGO_ENABLED=0 tool golangci-lint run
@@ -51,7 +51,7 @@ if [[ -n "$format_files" ]]; then
   exit 1
 fi
 project_go mod tidy -diff
-(cd tools && GOTOOLCHAIN=go1.27.3 go mod tidy -diff)
-(cd tools/beads && GOTOOLCHAIN=go1.27.3 go mod tidy -diff)
-(cd tools/actionlint && GOTOOLCHAIN=go1.27.3 go mod tidy -diff)
+(cd tools && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
+(cd tools/beads && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
+(cd tools/actionlint && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
 echo 'Native quality checks: PASS'
