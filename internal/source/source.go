@@ -68,13 +68,15 @@ func NewWithHTTPClient(name string, cfg config.Source, token string, httpClient 
 		return newGitHubSourceWithHTTP(name, cfg, token, httpClient)
 	case sourceTypeGitLab:
 		return newGitLabSource(name, cfg, token, httpClient)
+	case sourceTypeGitea:
+		return newGiteaSource(name, cfg, token, httpClient)
 	case sourceTypeURL:
 		return newURLSourceWithHTTP(name, cfg, httpClient)
 	default:
 		return nil, errs.New(
 			errs.Config,
 			fmt.Sprintf("unknown source type %q for source %q", cfg.Type, name),
-			errs.WithHint("Supported types: github, gitlab, url"),
+			errs.WithHint("Supported types: github, gitlab, gitea, url"),
 			errs.WithFields(map[string]any{"type": cfg.Type, errs.LegacyCodeField: errs.LegacyUnknownSourceType}),
 		)
 	}

@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- Gitea, Forgejo and Codeberg sources (`type = "gitea"`, alias `"codeberg"`; inferred for hosts containing codeberg, gitea or forgejo; default host `codeberg.org`). They are commit-pinned, find the folder's tree with non-recursive `git/trees` listings (2 calls for a top-level folder), and list changes with paginated recursive trees, then download raw files or one repository archive. Tokens come from `tokens.<host>` or `GITEA_TOKEN`. Only `type = "git"` and unknown hosts without a type remain unsupported.
+
 - GitLab sources (gitlab.com and self-managed, API v4), with subgroup project paths (`repo = "group/subgroup/project"`). They are commit-pinned and use 2 API calls to detect an unchanged folder (commit plus parent listing). Changed folders get paginated listings, then raw files or a single folder archive. GitLab `RateLimit-*` headers and 429 responses are classified like GitHub's. Tokens come from `tokens.<host>` or `GITLAB_TOKEN` (sent as `PRIVATE-TOKEN`). `type = "gitlab"` now defaults its host to `gitlab.com`, and `dox add --host gitlab.com` writes a complete GitLab source.
 
 - GitHub Enterprise Server sources: set `host` to the instance (with `type = "github"` when the host name lacks "github"). dox uses `https://<host>/api/v3` and fetches content and archives through the API. Per-host tokens come from `tokens = { "<host>" = "..." }` or `GH_ENTERPRISE_TOKEN`. A source with a host and no `type` now infers its type from the host, so a `gitlab.com` or unknown host is reported as not supported rather than treated as GitHub. Internally, GitHub sources run through a provider interface that GitLab and Gitea will implement.

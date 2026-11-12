@@ -490,8 +490,11 @@ func resolveToken(cfg *config.Config, sourceCfg config.Source) string {
 	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
 	if host == "" {
 		host = "github.com"
-		if sourceCfg.Type == "gitlab" {
+		switch sourceCfg.Type {
+		case "gitlab":
 			host = "gitlab.com"
+		case "gitea":
+			host = "codeberg.org"
 		}
 	}
 	if token := cfg.Tokens[host]; token != "" {
@@ -500,6 +503,8 @@ func resolveToken(cfg *config.Config, sourceCfg config.Source) string {
 	switch {
 	case sourceCfg.Type == "gitlab":
 		return os.Getenv("GITLAB_TOKEN")
+	case sourceCfg.Type == "gitea":
+		return os.Getenv("GITEA_TOKEN")
 	case host != "github.com":
 		if sourceCfg.Type == "github" {
 			return os.Getenv("GH_ENTERPRISE_TOKEN")

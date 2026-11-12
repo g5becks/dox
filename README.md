@@ -414,9 +414,9 @@ envelope to `stderr`:
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `type` | No | Inferred from `repo` and `host` | `github` (github.com or GitHub Enterprise) or `gitlab`; Gitea is planned |
+| `type` | No | Inferred from `repo` and `host` | `github` (github.com or GitHub Enterprise), `gitlab`, or `gitea` (Gitea, Forgejo, Codeberg; alias `codeberg`) |
 | `repo` | Yes | — | Repository in `owner/repo` format (GitLab: `group/subgroup/project` allowed) |
-| `host` | No | `github.com` (`gitlab.com` for `type = "gitlab"`) | Git hosting domain: github.com, GitHub Enterprise, gitlab.com or self-managed GitLab |
+| `host` | No | `github.com` (`gitlab.com` for `gitlab`, `codeberg.org` for `gitea`) | Git hosting domain |
 | `path` | Yes | — | Path to directory or file in repo |
 | `ref` | No | Default branch (`HEAD`) | Branch, tag, or commit SHA; pinned to a commit at each sync |
 | `patterns` | No | `["**/*.md", "**/*.mdx", "**/*.txt"]` | Glob patterns for files to include |
@@ -477,9 +477,36 @@ folder archive. GitLab counts every API request, including raw files, toward
 its rate limit. Tokens come from `tokens.<host>`, then `GITLAB_TOKEN`, and are
 sent as `PRIVATE-TOKEN`.
 
-**Planned:** Codeberg/Gitea/Forgejo. Until it lands, `type = "codeberg"` or
-`"git"`, and hosts that infer those types (such as `codeberg.org`), fail
-validation with "not supported yet" (exit code 2).
+**Gitea, Forgejo and Codeberg:** hosts containing `codeberg`, `gitea` or
+`forgejo` infer `type = "gitea"`; for other self-hosted instances set it
+(`"codeberg"` is accepted as an alias):
+
+<!-- doxtest: config -->
+
+```toml
+[sources.codeberg-docs]
+repo = "Codeberg/Documentation"
+host = "codeberg.org"
+path = "content"
+
+[sources.wiki]
+type = "gitea"
+host = "git.example.org"
+repo = "team/wiki"
+path = "pages"
+```
+
+dox calls `https://<host>/api/v1`: one call pins the ref, a non-recursive tree
+listing per path component finds the folder's tree (2 calls for a top-level
+folder), and changed folders are listed (paginated) and downloaded as raw files
+or one repository archive. Tokens come from `tokens.<host>`, then
+`GITEA_TOKEN`, sent as `Authorization: token …`. Gitea reports no stable tree
+id for the repository root, so a root-path source compares a digest of its
+listing instead.
+
+Any other host without an explicit `type`, and `type = "git"`, fail
+validation with "not supported yet" (exit code 2) rather than guessing a
+provider.
 
 ### URL Sources
 
@@ -559,7 +586,8 @@ excludes = [
 - Relative config paths resolve from the config file directory.
 - Token resolution: `tokens.<host>` in config first; for github.com then
   `github_token` → `GITHUB_TOKEN` → `GH_TOKEN`; for GitHub Enterprise hosts then
-  `GH_ENTERPRISE_TOKEN`; for GitLab then `GITLAB_TOKEN`.
+  `GH_ENTERPRISE_TOKEN`; for GitLab then `GITLAB_TOKEN`; for Gitea then
+  `GITEA_TOKEN`.
   A token is needed for private repositories and for many GitHub sources per hour.
 - Parallelism uses an explicit `--parallel` value first, then config `max_parallel`, then `min(max(4 × CPU cores, 10), 16)`. An omitted flag (or `--parallel 0`) uses the fallback; explicit positive flag/config values can exceed 16. Pass `--parallel 3` to keep the previous accidental limit.
 

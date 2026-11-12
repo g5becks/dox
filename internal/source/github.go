@@ -24,16 +24,19 @@ import (
 )
 
 const (
-	sourceTypeGitHub    = "github"
-	githubAPIBaseURL    = "https://api.github.com"
-	githubAPIVersion    = "2022-11-28"
-	githubJSONMediaType = "application/vnd.github+json"
-	githubRawMediaType  = "application/vnd.github.raw"
-	gitObjectBlob       = "blob"
-	gitObjectTree       = "tree"
-	userAgent           = "dox"
-	httpRetryCount      = 3
-	rateLimitWarnThresh = 10
+	sourceTypeGitHub     = "github"
+	githubAPIBaseURL     = "https://api.github.com"
+	githubAPIVersion     = "2022-11-28"
+	githubJSONMediaType  = "application/vnd.github+json"
+	githubRawMediaType   = "application/vnd.github.raw"
+	gitObjectBlob        = "blob"
+	gitObjectTree        = "tree"
+	gitObjectFile        = "file"
+	errResolvingRef      = "resolving ref"
+	hintCheckRepoPathRef = "Check repository, path, and ref in your config"
+	userAgent            = "dox"
+	httpRetryCount       = 3
+	rateLimitWarnThresh  = 10
 )
 
 type githubSource struct {
@@ -368,7 +371,7 @@ func (p *githubProvider) fetchTree(ctx context.Context, ref string, recursive bo
 		result:     result,
 		errContext: "fetching tree",
 		statusDesc: gitObjectTree,
-		statusHint: "Check repository, path, and ref in your config",
+		statusHint: hintCheckRepoPathRef,
 		legacyCode: errs.LegacyGithubAPIError,
 		fields: map[string]any{
 			fieldRepo:            s.source.Repo,
@@ -404,7 +407,7 @@ func (p *githubProvider) fileSHA(ctx context.Context, ref string, filePath strin
 		return "", err
 	}
 
-	if result.Type != "file" || result.SHA == "" {
+	if result.Type != gitObjectFile || result.SHA == "" {
 		return "", errs.New(
 			errs.Network,
 			fmt.Sprintf("expected file metadata for %q", filePath),

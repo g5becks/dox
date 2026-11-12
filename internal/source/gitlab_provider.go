@@ -125,7 +125,7 @@ func (p *gitlabProvider) resolveCommit(ctx context.Context, ref string) (string,
 	if err := p.s.doGitHubGet(ctx, githubRequestSpec{
 		endpoint:   p.project() + "/repository/commits/" + neturl.PathEscape(ref),
 		result:     &commit,
-		errContext: "resolving ref",
+		errContext: errResolvingRef,
 		statusDesc: "commit " + ref,
 		statusHint: "Check that the project exists and 'ref' names a branch, tag, or commit SHA",
 		fields:     p.fields(map[string]any{fieldRef: ref}),
@@ -170,7 +170,7 @@ func (p *gitlabProvider) listTree(
 			header:     &header,
 			errContext: "listing tree",
 			statusDesc: "tree",
-			statusHint: "Check repository, path, and ref in your config",
+			statusHint: hintCheckRepoPathRef,
 			fields:     p.fields(map[string]any{fieldPath: folder}),
 		}); err != nil {
 			return nil, p.notFound(err, folder, commit)
@@ -312,7 +312,7 @@ func (p *gitlabProvider) fileContent(ctx context.Context, commit, filePath, _ st
 		accept:     "*/*",
 		raw:        &content,
 		errContext: "downloading file",
-		statusDesc: "file",
+		statusDesc: gitObjectFile,
 		fields:     p.fields(map[string]any{fieldPath: filePath}),
 	}); err != nil {
 		return nil, err

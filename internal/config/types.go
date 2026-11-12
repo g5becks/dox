@@ -31,6 +31,8 @@ const (
 	sourceTypeGitHub   = "github"
 	sourceTypeGitLab   = "gitlab"
 	sourceTypeCodeberg = "codeberg"
+	sourceTypeGitea    = "gitea"
+	codebergHost       = "codeberg.org"
 	sourceTypeGit      = "git"
 	githubHost         = "github.com"
 	gitlabHost         = "gitlab.com"
@@ -126,7 +128,7 @@ type Config struct {
 }
 
 type Source struct {
-	Type     string   `koanf:"type"     validate:"omitempty,oneof=github url git gitlab codeberg"`
+	Type     string   `koanf:"type"     validate:"omitempty,oneof=github url git gitlab gitea codeberg"`
 	Repo     string   `koanf:"repo"     validate:"omitempty,github_repo"`
 	Host     string   `koanf:"host"`
 	Path     string   `koanf:"path"`
@@ -261,6 +263,7 @@ func isGitSource(sourceType string) bool {
 	return sourceType == sourceTypeGitHub ||
 		sourceType == sourceTypeGit ||
 		sourceType == sourceTypeGitLab ||
+		sourceType == sourceTypeGitea ||
 		sourceType == sourceTypeCodeberg
 }
 
@@ -268,14 +271,21 @@ func applyGitSourceDefaults(src Source, globalExcludes []string) Source {
 	// Default host to github.com if not specified
 	if src.Host == "" {
 		src.Host = githubHost
-		if src.Type == sourceTypeGitLab {
+		switch src.Type {
+		case sourceTypeGitLab:
 			src.Host = gitlabHost
+		case sourceTypeGitea, sourceTypeCodeberg:
+			src.Host = codebergHost
 		}
 	}
 
 	// Normalize type based on host if type is generic "git"
 	if src.Type == sourceTypeGit {
 		src.Type = normalizeGitType(src.Host)
+	}
+	// "codeberg" is an alias of the Gitea API type (Gitea, Forgejo, Codeberg).
+	if src.Type == sourceTypeCodeberg {
+		src.Type = sourceTypeGitea
 	}
 
 	// Apply patterns if not set
@@ -297,8 +307,8 @@ func normalizeGitType(host string) string {
 		return sourceTypeGitHub
 	case strings.Contains(host, "gitlab"):
 		return sourceTypeGitLab
-	case strings.Contains(host, "codeberg"):
-		return sourceTypeCodeberg
+	case strings.Contains(host, "codeberg"), strings.Contains(host, "gitea"), strings.Contains(host, "forgejo"):
+		return sourceTypeGitea
 	default:
 		return sourceTypeGit
 	}
@@ -477,16 +487,16 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 // sync yet. Before v0.5.0 every repo source is fetched from api.github.com,
 // so accepting another host would query (or sync) the wrong repository.
 func validateSupportedProvider(sourceName string, sourceCfg Source) error {
-	switch sourceCfg.Type {
-	case sourceTypeCodeberg, sourceTypeGit:
-		what := fmt.Sprintf("source type %q", sourceCfg.Type)
-		if host := strings.TrimSpace(sourceCfg.Host); host != "" && !strings.EqualFold(host, githubHost) {
-			what += fmt.Sprintf(" (host %q)", host)
-		}
-		return unsupportedProviderError(sourceName, what, map[string]any{fieldType: sourceCfg.Type})
+	// Only the generic "git" type (an unknown host) has no provider: github,
+	// gitlab and gitea sources, including self-hosted ones, are supported.
+	if sourceCfg.Type != sourceTypeGit {
+		return nil
 	}
-	// A github-type source may name a GitHub Enterprise Server host.
-	return nil
+	what := fmt.Sprintf("source type %q", sourceCfg.Type)
+	if host := strings.TrimSpace(sourceCfg.Host); host != "" && !strings.EqualFold(host, githubHost) {
+		what += fmt.Sprintf(" (host %q)", host)
+	}
+	return unsupportedProviderError(sourceName, what, map[string]any{fieldType: sourceCfg.Type})
 }
 
 func unsupportedProviderError(sourceName, what string, fields map[string]any) error {
@@ -496,8 +506,8 @@ func unsupportedProviderError(sourceName, what string, fields map[string]any) er
 		errs.Config,
 		fmt.Sprintf("%s for source %q is not supported yet (planned for v0.5.0)", what, sourceName),
 		errs.WithHint(
-			"dox currently syncs GitHub repositories (github.com, or Enterprise with type = \"github\") "+
-				"and direct URLs; fix 'host'/'type' or use a 'url' source",
+			"Set type to github (github.com or Enterprise), gitlab or gitea (Gitea, Forgejo, Codeberg) "+
+				"for this host, or use a 'url' source",
 		),
 		errs.WithFields(fields),
 	)
@@ -511,7 +521,7 @@ func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldE
 		return errs.New(
 			errs.Config,
 			fmt.Sprintf("unknown source type %q for source %q", sourceCfg.Type, sourceName),
-			errs.WithHint("Supported types: github, url (or omit 'type' to infer)"),
+			errs.WithHint("Supported types: github, gitlab, gitea (alias codeberg), url (or omit 'type' to infer)"),
 			errs.WithFields(
 				map[string]any{
 					fieldSource:          sourceName,

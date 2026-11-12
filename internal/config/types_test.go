@@ -200,7 +200,7 @@ func TestApplyDefaultsTypeInference(t *testing.T) {
 				Path: "docs",
 				Host: "codeberg.org",
 			},
-			wantType: "codeberg",
+			wantType: "gitea",
 			wantHost: "codeberg.org",
 		},
 		{

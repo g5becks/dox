@@ -225,7 +225,7 @@ func TestConfigValidate(t *testing.T) {
 			wantErrContains: `invalid repo format "group/subgroup/project"`,
 		},
 		{
-			name: "codeberg source not supported yet",
+			name: "codeberg alias accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
@@ -235,7 +235,15 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
-			wantErrContains: "not supported yet (planned for v0.5.0)",
+		},
+		{
+			name: "gitea subgroup path rejected",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "gitea", Repo: "org/sub/repo", Path: "docs"},
+				},
+			},
+			wantErrContains: `invalid repo format "org/sub/repo"`,
 		},
 		{
 			name: "valid url source",

@@ -2,10 +2,13 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	neturl "net/url"
 	"strings"
+
+	"github.com/g5becks/dox/internal/errs"
 )
 
 // provider is one git hosting API. githubSource orchestrates a sync (ref
@@ -117,4 +120,12 @@ func (p *githubProvider) archiveRequest(ctx context.Context, commit string) (*ht
 		target = fmt.Sprintf("%s/repos/%s/%s/tarball/%s", strings.TrimRight(s.apiBase, "/"), s.owner, s.repo, commit)
 	}
 	return http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+}
+
+// asHTTPStatus extracts the HTTP status of a failed API request.
+func asHTTPStatus(err error) (int, bool) {
+	if status, ok := errors.AsType[*errs.HTTPStatusError](err); ok {
+		return status.Code, true
+	}
+	return 0, false
 }

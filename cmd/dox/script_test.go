@@ -99,8 +99,11 @@ func scriptJSONCompare(ts *testscript.TestScript, neg bool, args []string) {
 	if neg || len(args) != 2 {
 		ts.Fatalf("usage: jsoncmp actual expected")
 	}
-	actual, err := jsongolden.Canonical([]byte(ts.ReadFile(args[0])))
-	ts.Check(err)
+	raw := ts.ReadFile(args[0])
+	actual, err := jsongolden.Canonical([]byte(raw))
+	if err != nil {
+		ts.Fatalf("%s is not one JSON value: %v\ncontent:\n%s", args[0], err, raw)
+	}
 	// Placeholders occur inside JSON strings; escape Windows paths correctly.
 	wantText := os.Expand(ts.ReadFile(args[1]), func(key string) string {
 		quoted, quoteErr := json.Marshal(ts.Getenv(key))

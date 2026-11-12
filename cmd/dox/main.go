@@ -165,7 +165,11 @@ excludes = [
 # host = "gitlab.com"                                # hosts containing "gitlab" infer type gitlab
 # path = "docs"
 
-# --- Planned: Codeberg/Gitea/Forgejo ---
+# --- Gitea, Forgejo, Codeberg (token: tokens.<host> or GITEA_TOKEN) ---
+# [sources.codeberg-docs]
+# repo = "owner/repo"
+# host = "codeberg.org"                              # codeberg/gitea/forgejo hosts infer type gitea
+# path = "docs"
 
 # --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]
