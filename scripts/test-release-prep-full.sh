@@ -21,7 +21,7 @@ git clone -q --branch "release/v$version" "$fixture/origin.git" "$fixture/repo"
 [[ $(git -C "$fixture/repo" rev-parse HEAD) == "$sha" ]]
 git -C "$fixture/repo" config user.name 'Release integration test'
 git -C "$fixture/repo" config user.email 'release-test@example.invalid'
-origin_refs=$(git -C "$fixture/origin.git" show-ref)
+origin_refs=$(git --git-dir="$fixture/origin.git" show-ref)
 mkdir "$fixture/bin"
 cat >"$fixture/bin/git" <<'GUARD'
 #!/bin/bash
@@ -69,7 +69,7 @@ bash scripts/release-prep.sh "$version" 2>&1 | tee "$fixture/preparation.log"
 [[ $(git log -1 --format=%s) == "chore(release): prepare v$version" ]]
 [[ $(git diff --name-only "$sha" HEAD) == CHANGELOG.md ]]
 [[ -z $(git status --porcelain) ]]
-[[ $origin_refs == "$(git -C "$fixture/origin.git" show-ref)" ]]
+[[ $origin_refs == "$(git --git-dir="$fixture/origin.git" show-ref)" ]]
 [[ $root_tags == "$(git -C "$root" show-ref --tags)" ]]
 [[ -s $RELEASE_TEST_TRACE ]]
 grep -qx 'RESULT: PASS (local preparation only; nothing published)' "$fixture/preparation.log"
