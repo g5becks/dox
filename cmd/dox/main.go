@@ -10,11 +10,13 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
@@ -40,6 +42,10 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Max parallel source syncs (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
+
+# Per-source sync and HTTP request timeout (default: "30s")
+# Override per-command with: dox sync --timeout 30s
+# timeout = "30s"
 
 # ============================================================================
 # GLOBAL EXCLUDES (applied to all git hosting sources)
@@ -245,6 +251,10 @@ func newSyncCommand() *cli.Command {
 				Name: "parallel", Aliases: []string{"p"},
 				Usage: "Maximum parallel source syncs (0 uses config or computed default)",
 			},
+			&cli.StringFlag{
+				Name:  "timeout",
+				Usage: "Per-source sync and request timeout (for example, 30s; overrides config timeout)",
+			},
 		},
 		Action: syncAction,
 	}
@@ -324,6 +334,15 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	var timeout time.Duration
+	if rawTimeout := cmd.String("timeout"); rawTimeout != "" {
+		parsedTimeout, parseErr := httpx.ParseTimeout(errs.Usage, rawTimeout)
+		if parseErr != nil {
+			return parseErr
+		}
+		timeout = parsedTimeout
+	}
+
 	var onEvent func(doxsync.Event)
 	var printer *ui.SyncPrinter
 	if !jsonEnabled(cmd) {
@@ -336,6 +355,7 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		Force:       cmd.Bool("force"),
 		DryRun:      cmd.Bool("dry-run"),
 		MaxParallel: cmd.Int("parallel"),
+		Timeout:     timeout,
 		Clean:       cmd.Bool("clean"),
 		OnEvent:     onEvent,
 	})

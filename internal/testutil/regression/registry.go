@@ -13,7 +13,6 @@ import (
 // remove entries here; new entries must not be added to hide regressions.
 func KnownFailing() map[string]string {
 	knownFailing := map[string]string{
-		"R2_timeout":              "dox-deb.14: request timeouts",
 		"R3_forbidden":            "dox-deb.15: rate-limit classification",
 		"R3_too_many":             "dox-deb.15: rate-limit classification",
 		"R3_success_last_request": "dox-deb.15: successful last quota request",

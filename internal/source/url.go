@@ -15,6 +15,7 @@ import (
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -23,9 +24,14 @@ type urlSource struct {
 	source   config.Source
 	filename string
 	client   *resty.Client
+	timeout  time.Duration
 }
 
 func NewURL(name string, cfg config.Source) (Source, error) {
+	return newURLSourceWithHTTP(name, cfg, httpx.NewClient(httpx.DefaultTimeout))
+}
+
+func newURLSourceWithHTTP(name string, cfg config.Source, httpClient *http.Client) (Source, error) {
 	filename := cfg.Filename
 	if filename == "" {
 		filename = filenameFromURL(name, cfg.URL)
@@ -34,13 +40,17 @@ func NewURL(name string, cfg config.Source) (Source, error) {
 	if err := config.ValidatePath(filename); err != nil {
 		return nil, err
 	}
-	client := resty.New()
+	if httpClient == nil {
+		httpClient = httpx.NewClient(httpx.DefaultTimeout)
+	}
+	client := resty.NewWithClient(httpClient)
 
 	return &urlSource{
 		name:     name,
 		source:   cfg,
 		filename: filename,
 		client:   client,
+		timeout:  httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
@@ -54,7 +64,10 @@ func (s *urlSource) Sync(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	request := s.syncRequest(ctx, prevLock, opts)
+	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
+	defer cancel()
+
+	request := s.syncRequest(sourceCtx, prevLock, opts)
 
 	response, err := request.Get(s.source.URL)
 	if err != nil {

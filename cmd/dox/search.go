@@ -62,7 +62,7 @@ func newSearchCommand() *cli.Command {
 	}
 }
 
-func searchAction(_ context.Context, cmd *cli.Command) error {
+func searchAction(ctx context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() != 1 {
 		return errs.New(
 			errs.Usage,
@@ -111,19 +111,20 @@ func searchAction(_ context.Context, cmd *cli.Command) error {
 	descLength := resolveDescLength(cmd, cfg)
 
 	if cmd.Bool("content") {
-		return runContentSearch(m, cfg, cmd, query, format, limit, descLength)
+		return runContentSearch(ctx, m, cfg, cmd, query, format, limit, descLength)
 	}
 
-	return runMetadataSearch(m, cmd, query, format, limit, descLength)
+	return runMetadataSearch(ctx, m, cmd, query, format, limit, descLength)
 }
 
 func runMetadataSearch(
+	ctx context.Context,
 	m *manifest.Manifest,
 	cmd *cli.Command,
 	query, format string,
 	limit, descLength int,
 ) error {
-	results, err := search.Metadata(m, search.MetadataOptions{
+	results, err := search.MetadataContext(ctx, m, search.MetadataOptions{
 		Query:      query,
 		Collection: cmd.String(fieldCollection),
 		Limit:      limit,
@@ -143,13 +144,14 @@ func runMetadataSearch(
 }
 
 func runContentSearch(
+	ctx context.Context,
 	m *manifest.Manifest,
 	cfg *config.Config,
 	cmd *cli.Command,
 	query, format string,
 	limit, descLength int,
 ) error {
-	results, err := search.Content(m, search.ContentOptions{
+	results, err := search.ContentContext(ctx, m, search.ContentOptions{
 		OutputDir:  cfg.Output,
 		Query:      query,
 		Collection: cmd.String(fieldCollection),

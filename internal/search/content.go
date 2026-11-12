@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,6 +41,14 @@ type matcher func([]byte) bool
 
 // Content performs literal or regex search across synced file contents.
 func Content(m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error) {
+	return ContentContext(context.Background(), m, opts)
+}
+
+// ContentContext performs literal or regex search across synced file contents, honoring ctx cancellation.
+func ContentContext(ctx context.Context, m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	query := strings.TrimSpace(opts.Query)
 	if query == "" {
 		return nil, errs.New(
@@ -74,8 +83,11 @@ func Content(m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error)
 	}
 	sort.Strings(names)
 
-	files := contentFiles(m, opts, names)
-	return scanContentFiles(files, opts.Limit, match), nil
+	files, err := contentFiles(ctx, m, opts, names)
+	if err != nil {
+		return nil, err
+	}
+	return scanContentFiles(ctx, files, opts.Limit, match)
 }
 
 type contentFile struct {
@@ -84,14 +96,25 @@ type contentFile struct {
 	relative   string
 }
 
-func contentFiles(m *manifest.Manifest, opts ContentOptions, names []string) []contentFile {
+func contentFiles(
+	ctx context.Context,
+	m *manifest.Manifest,
+	opts ContentOptions,
+	names []string,
+) ([]contentFile, error) {
 	var files []contentFile
 	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if opts.Collection != "" && name != opts.Collection {
 			continue
 		}
 		coll := m.Collections[name]
 		for _, file := range coll.Files {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			files = append(
 				files,
 				contentFile{
@@ -102,25 +125,19 @@ func contentFiles(m *manifest.Manifest, opts ContentOptions, names []string) []c
 			)
 		}
 	}
-	return files
+	return files, nil
 }
 
-func scanContentFiles(files []contentFile, limit int, match matcher) []ContentResult {
+func scanContentFiles(ctx context.Context, files []contentFile, limit int, match matcher) ([]ContentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	const maxWorkers = 8
 	count := min(maxWorkers, runtime.GOMAXPROCS(0), len(files))
 	chunks := make([][]ContentResult, len(files))
 	jobs := make(chan int)
 	var batch, workers sync.WaitGroup
-	for range count {
-		workers.Go(func() {
-			var scratch bytes.Buffer
-			for index := range jobs {
-				file := files[index]
-				chunks[index], _ = scanFile(file.path, file.collection, file.relative, match, &scratch, limit)
-				batch.Done()
-			}
-		})
-	}
+	startContentWorkers(ctx, count, files, chunks, jobs, &batch, &workers, match, limit)
 	defer func() { close(jobs); workers.Wait() }()
 	total := 0
 	// Process bounded windows so a limit stops scheduling after at most one window.
@@ -130,12 +147,18 @@ func scanContentFiles(files []contentFile, limit int, match matcher) []ContentRe
 		window *= windowMultiplier
 	}
 	for first := 0; first < len(files); first += window {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		end := min(first+window, len(files))
 		batch.Add(end - first)
 		for index := first; index < end; index++ {
 			jobs <- index
 		}
 		batch.Wait()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		for _, chunk := range chunks[first:end] {
 			total += len(chunk)
 		}
@@ -144,6 +167,34 @@ func scanContentFiles(files []contentFile, limit int, match matcher) []ContentRe
 			break
 		}
 	}
+	return flattenContentChunks(chunks, total), nil
+}
+
+func startContentWorkers(
+	ctx context.Context,
+	count int,
+	files []contentFile,
+	chunks [][]ContentResult,
+	jobs <-chan int,
+	batch, workers *sync.WaitGroup,
+	match matcher,
+	limit int,
+) {
+	for range count {
+		workers.Go(func() {
+			var scratch bytes.Buffer
+			for index := range jobs {
+				if ctx.Err() == nil {
+					file := files[index]
+					chunks[index], _ = scanFile(ctx, file.path, file.collection, file.relative, match, &scratch, limit)
+				}
+				batch.Done()
+			}
+		})
+	}
+}
+
+func flattenContentChunks(chunks [][]ContentResult, total int) []ContentResult {
 	results := make([]ContentResult, total)
 	position := 0
 	for _, chunk := range chunks {
@@ -196,11 +247,15 @@ func isASCII(text []byte) bool {
 }
 
 func scanFile(
+	ctx context.Context,
 	filePath, collection, relPath string,
 	match matcher,
 	scratch *bytes.Buffer,
 	limit int,
 ) ([]ContentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -221,6 +276,9 @@ func scanFile(
 	if _, readErr := scratch.ReadFrom(file); readErr != nil {
 		return nil, readErr
 	}
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return nil, cancelErr
+	}
 	content := scratch.Bytes()
 	if parser.IsBinary(content) {
 		return nil, nil
@@ -228,6 +286,9 @@ func scanFile(
 	var results []ContentResult
 	lineNumber := 0
 	for raw := range bytes.Lines(content) {
+		if cancelErr := ctx.Err(); cancelErr != nil {
+			return nil, cancelErr
+		}
 		lineNumber++
 		line := bytes.TrimSuffix(raw, []byte{'\n'})
 		if match(line) {

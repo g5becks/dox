@@ -53,6 +53,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Fixed
 
+- `dox sync` now enforces configurable HTTP and per-source deadlines (`timeout = "30s"` in `dox.toml`, overridden by `dox sync --timeout <duration>`), isolates stalled sources so sibling sources still complete, honors `SIGINT`/`SIGTERM` cancellation across sync/manifest/search while saving completed sources' lock entries before exiting `130`.
+
 - Default builds and development tools use Go 1.27.4, addressing reachable standard-library advisory GO-2026-6859. The Go 1.26 minimum remains unchanged.
 
 - The binary ignore rule now applies only at the repository root, and commit-message hooks accept standard breaking-change subjects with `!`.

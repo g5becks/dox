@@ -117,6 +117,10 @@ output = ".dox"
 # Override per-command with: dox sync --parallel N
 max_parallel = 20
 
+# Per-source sync and HTTP request timeout (default: "30s")
+# Override per-command with: dox sync --timeout 30s
+timeout = "30s"
+
 # Global exclude patterns applied to all git sources
 # Per-source excludes add to (not replace) these global patterns
 excludes = [
@@ -151,6 +155,7 @@ dox sync --force            # Force re-download
 dox sync --clean            # Clear owned output before syncing
 dox sync --dry-run          # Preview without downloading
 dox sync --parallel 5       # Override parallelism
+dox sync --timeout 15s      # Override per-source timeout
 ```
 
 ### list
@@ -340,6 +345,7 @@ envelope to `stderr`:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `output` | string | `.dox` | Output directory root |
+| `timeout` | string | `30s` | Per-source sync and HTTP request timeout (`time.ParseDuration`, > 0) |
 | `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | GitHub API token for private repos and higher rate limits |
 | `max_parallel` | int | `4 × CPU cores` (min 10, max 16) | Max concurrent source syncs |
 | `excludes` | []string | `[]` | Global exclude patterns applied to all git sources |

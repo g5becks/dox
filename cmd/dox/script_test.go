@@ -136,8 +136,21 @@ func scriptDoxInterrupt(ts *testscript.TestScript, neg bool, args []string) {
 	want, err := strconv.Atoi(args[0])
 	ts.Check(err)
 
+	fastDone := make(chan struct{})
 	started := make(chan struct{}, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/fast.txt" {
+			_, _ = w.Write([]byte("fast doc\n"))
+			select {
+			case <-fastDone:
+			default:
+				close(fastDone)
+			}
+			return
+		}
+		<-fastDone
+		// Give the client a brief moment to finish writing fast.txt before signaling SIGINT.
+		time.Sleep(50 * time.Millisecond)
 		select {
 		case started <- struct{}{}:
 		default:
@@ -146,8 +159,9 @@ func scriptDoxInterrupt(ts *testscript.TestScript, neg bool, args []string) {
 	}))
 	defer server.Close()
 
-	configText := "output = \".dox\"\n[sources.slow]\ntype = \"url\"\nurl = \"" +
-		server.URL + "/slow.txt\"\nfilename = \"slow.txt\"\n"
+	configText := "output = \".dox\"\n" +
+		"[sources.fast]\ntype = \"url\"\nurl = \"" + server.URL + "/fast.txt\"\nfilename = \"fast.txt\"\n" +
+		"[sources.slow]\ntype = \"url\"\nurl = \"" + server.URL + "/slow.txt\"\nfilename = \"slow.txt\"\n"
 	ts.Check(os.WriteFile(ts.MkAbs("dox.toml"), []byte(configText), 0o600))
 
 	command := exec.Command("dox", args[1:]...)

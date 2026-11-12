@@ -4,15 +4,18 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/httpx"
 )
 
 const (
-	DefaultOutput = ".dox"
-	repoPartCount = 2
+	DefaultOutput  = ".dox"
+	DefaultTimeout = "30s"
+	repoPartCount  = 2
 
 	// Source type constants.
 	sourceTypeGitHub   = "github"
@@ -97,6 +100,7 @@ type Display struct {
 type Config struct {
 	AllowExternalOutput bool              `koanf:"-"`
 	Output              string            `koanf:"output"       validate:"omitempty,dirpath"`
+	Timeout             string            `koanf:"timeout"`
 	GitHubToken         string            `koanf:"github_token"`
 	MaxParallel         int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
 	Excludes            []string          `koanf:"excludes"`
@@ -156,6 +160,9 @@ func mergeExcludes(global, source []string) []string {
 func (c *Config) ApplyDefaults() {
 	if c.Output == "" {
 		c.Output = DefaultOutput
+	}
+	if c.Timeout == "" {
+		c.Timeout = DefaultTimeout
 	}
 
 	// Apply display defaults
@@ -246,7 +253,24 @@ func normalizeGitType(host string) string {
 	}
 }
 
+// TimeoutDuration returns the validated timeout duration or the 30s default.
+func (c *Config) TimeoutDuration() time.Duration {
+	if c == nil || c.Timeout == "" {
+		return httpx.DefaultTimeout
+	}
+	d, err := httpx.ParseTimeout(errs.Config, c.Timeout)
+	if err != nil {
+		return httpx.DefaultTimeout
+	}
+	return d
+}
+
 func (c *Config) Validate() error {
+	if c.Timeout != "" {
+		if _, err := httpx.ParseTimeout(errs.Config, c.Timeout); err != nil {
+			return err
+		}
+	}
 	v := newValidator()
 	if err := validateDisplay(v, c.Display); err != nil {
 		return err

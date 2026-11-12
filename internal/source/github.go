@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"maps"
+	"net/http"
 	neturl "net/url"
 	"os"
 	"path"
@@ -20,6 +21,7 @@ import (
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
@@ -38,6 +40,7 @@ type githubSource struct {
 	owner       string
 	repo        string
 	client      *resty.Client
+	timeout     time.Duration
 	resolvedRef string
 	warnedLowRL bool
 }
@@ -69,17 +72,25 @@ type githubBlobResponse struct {
 }
 
 func newGitHubSource(name string, cfg config.Source, token string) (Source, error) {
+	return newGitHubSourceWithHTTP(name, cfg, token, httpx.NewClient(httpx.DefaultTimeout))
+}
+
+func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpClient *http.Client) (Source, error) {
 	owner, repo, err := parseRepo(cfg.Repo)
 	if err != nil {
 		return nil, err
 	}
+	if httpClient == nil {
+		httpClient = httpx.NewClient(httpx.DefaultTimeout)
+	}
 
 	return &githubSource{
-		name:   name,
-		source: cfg,
-		owner:  owner,
-		repo:   repo,
-		client: newGitHubClient(token),
+		name:    name,
+		source:  cfg,
+		owner:   owner,
+		repo:    repo,
+		client:  newGitHubClientWithHTTP(token, httpClient),
+		timeout: httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
@@ -93,11 +104,14 @@ func (s *githubSource) Sync(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
+	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
+	defer cancel()
+
 	if isSingleFilePath(s.source.Path) {
-		return s.syncSingleFile(ctx, destDir, prevLock, opts)
+		return s.syncSingleFile(sourceCtx, destDir, prevLock, opts)
 	}
 
-	return s.syncDirectory(ctx, destDir, prevLock, opts)
+	return s.syncDirectory(sourceCtx, destDir, prevLock, opts)
 }
 
 func (s *githubSource) syncSingleFile(
@@ -714,8 +728,11 @@ func parseRepo(repo string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func newGitHubClient(token string) *resty.Client {
-	client := resty.New()
+func newGitHubClientWithHTTP(token string, httpClient *http.Client) *resty.Client {
+	if httpClient == nil {
+		httpClient = httpx.NewClient(httpx.DefaultTimeout)
+	}
+	client := resty.NewWithClient(httpClient)
 	client.SetBaseURL(githubAPIBaseURL)
 	client.SetHeader("Accept", "application/vnd.github.v3+json")
 	client.SetHeader("User-Agent", userAgent)

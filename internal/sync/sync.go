@@ -4,16 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"slices"
 	stdsync "sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/source"
@@ -23,6 +26,7 @@ const (
 	cpuMultiplier         = 4  // Multiply CPU count for I/O-bound parallelism
 	minDefaultParallelism = 10 // Minimum parallelism even on low-core machines
 	maxDefaultParallelism = 16 // Bound the computed fallback; explicit choices are not capped
+	fieldFailedSources    = "failed_sources"
 )
 
 // getDefaultMaxParallel returns a smart default for I/O-bound operations.
@@ -60,11 +64,13 @@ type RunResult struct {
 
 type Options struct {
 	outputRoot  *os.Root
+	httpClient  *http.Client
 	sourceDir   string
 	SourceNames []string
 	Force       bool
 	DryRun      bool
 	MaxParallel int
+	Timeout     time.Duration
 	Clean       bool
 	OnEvent     func(Event) // optional; nil = silent
 }
@@ -145,6 +151,15 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	if errorCount > 0 {
 		return runResult, buildSyncFailure(ctx, errorCount, len(sourceNames), firstErr)
 	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return runResult, errs.Wrap(
+			errs.Interrupted,
+			fmt.Errorf("sync interrupted: %w", context.Canceled),
+			errs.WithFields(
+				map[string]any{fieldFailedSources: errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+			),
+		)
+	}
 
 	return runResult, nil
 }
@@ -155,7 +170,7 @@ func buildSyncFailure(ctx context.Context, errorCount, totalSources int, firstEr
 			errs.Interrupted,
 			fmt.Errorf("sync interrupted: %w", context.Canceled),
 			errs.WithFields(
-				map[string]any{"failed_sources": errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+				map[string]any{fieldFailedSources: errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
 			),
 		)
 	}
@@ -177,7 +192,7 @@ func buildSyncFailure(ctx context.Context, errorCount, totalSources int, firstEr
 		fmt.Sprintf("%d source(s) failed during sync", errorCount),
 		errs.WithHint(hint),
 		errs.WithFields(
-			map[string]any{"failed_sources": errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+			map[string]any{fieldFailedSources: errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
 		),
 		errs.WithCause(firstErr),
 	)
@@ -197,6 +212,16 @@ func resolveMaxParallel(cfg *config.Config, opts Options) int {
 	return maxParallel
 }
 
+func resolveTimeout(cfg *config.Config, opts Options) time.Duration {
+	if opts.Timeout > 0 {
+		return opts.Timeout
+	}
+	if cfg != nil {
+		return cfg.TimeoutDuration()
+	}
+	return httpx.DefaultTimeout
+}
+
 func executeSources(
 	ctx context.Context,
 	cfg *config.Config,
@@ -208,6 +233,11 @@ func executeSources(
 	results := make(map[string]runState, len(sourceNames))
 	var resultsMu stdsync.Mutex
 	token := resolveGitHubToken(cfg)
+	timeout := resolveTimeout(cfg, opts)
+	httpClient := httpx.NewClient(timeout)
+	defer httpClient.CloseIdleConnections()
+	opts.Timeout = timeout
+	opts.httpClient = httpClient
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(resolveMaxParallel(cfg, opts))
 
@@ -256,7 +286,7 @@ func commitSync(
 		return err
 	}
 	// Manifest failures are reported but do not fail the sync.
-	if err := manifest.GenerateRoot(ctx, cfg, lock, root); err != nil {
+	if err := manifest.GenerateRoot(ctx, cfg, lock, root); err != nil && ctx.Err() == nil {
 		emit(Event{Kind: EventManifestError, Err: err})
 	}
 	return nil
@@ -276,12 +306,15 @@ func syncSource(
 
 	emit(Event{Kind: EventSourceStart, Source: sourceName})
 
-	src, newErr := source.New(sourceName, sourceCfg, token)
+	sourceCtx, cancel := httpx.SourceContext(ctx, opts.Timeout)
+	defer cancel()
+
+	src, newErr := source.NewWithHTTPClient(sourceName, sourceCfg, token, opts.httpClient)
 	if newErr != nil {
 		state.err = newErr
 	} else {
 		defer src.Close()
-		state.result, state.err = syncPreparedSource(ctx, src, destinationDir, previousLock, opts)
+		state.result, state.err = syncPreparedSource(sourceCtx, src, destinationDir, previousLock, opts)
 	}
 
 	emit(Event{

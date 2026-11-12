@@ -1,6 +1,8 @@
 package search_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -341,5 +343,17 @@ func TestMetadata_ScoreOrdering(t *testing.T) {
 			t.Errorf("results not sorted by score: result[%d].Score=%d > result[%d].Score=%d",
 				i, results[i].Score, i-1, results[i-1].Score)
 		}
+	}
+}
+
+func TestMetadata_HonorsContextCancellation(t *testing.T) {
+	t.Parallel()
+	m := buildTestManifest()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := search.MetadataContext(ctx, m, search.MetadataOptions{Query: "install"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("MetadataContext() error = %v, want context.Canceled", err)
 	}
 }

@@ -1,5 +1,8 @@
-# Exit code 130 (interrupted) on SIGINT during sync.
+# Exit code 130 (interrupted) on SIGINT during sync saves completed sources' lock entries.
 doxinterrupt 130 sync --json
+exists .dox/fast/fast.txt .dox/.dox.lock
+grep '"fast"' .dox/.dox.lock
+! grep '"slow"' .dox/.dox.lock
 jsoncmp interrupt.stderr want-interrupt.json
 
 -- want-interrupt.json --
