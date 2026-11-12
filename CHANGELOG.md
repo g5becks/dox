@@ -43,6 +43,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- README "Upgrading to v0.4.0" and "How GitHub sync works" sections. Every README command example now runs as a testscript case against local fixtures, and a guard test requires a marker on each example block so the documentation cannot drift.
+
 - `dox version` subcommand that prints the same version, commit, and build-time metadata as `dox --version`.
 
 - Local release preparation validates preconditions, creates a local annotated tag, runs the complete CI/snapshot/smoke checks, records binary sizes, and prints maintainer publication commands without executing them.

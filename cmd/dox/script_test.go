@@ -32,17 +32,35 @@ func TestScripts(t *testing.T) {
 			env.Values[scriptEnvKey{}] = append([]string(nil), env.Vars...)
 			return nil
 		},
-		Cmds: map[string]func(*testscript.TestScript, bool, []string){
-			"httpserve":    scriptHTTPServe,
-			"httpfail":     scriptHTTPFail,
-			"envsubst":     scriptEnvSubst,
-			"pathenv":      scriptPathEnv,
-			"jsoncmp":      scriptJSONCompare,
-			"doxexit":      scriptDoxExit,
-			"doxinterrupt": scriptDoxInterrupt,
-		},
+		Cmds:               scriptCommands(),
 		RequireUniqueNames: true,
 	})
+}
+
+// scriptCommands are the custom testscript commands shared by CLI scripts and
+// the generated README example scripts.
+func scriptCommands() map[string]func(*testscript.TestScript, bool, []string) {
+	return map[string]func(*testscript.TestScript, bool, []string){
+		"httpserve":    scriptHTTPServe,
+		"httpservedir": scriptHTTPServeDir,
+		"httpfail":     scriptHTTPFail,
+		"envsubst":     scriptEnvSubst,
+		"pathenv":      scriptPathEnv,
+		"jsoncmp":      scriptJSONCompare,
+		"doxexit":      scriptDoxExit,
+		"doxinterrupt": scriptDoxInterrupt,
+	}
+}
+
+// scriptHTTPServeDir serves every file below a work directory at its relative
+// path and sets $SERVER.
+func scriptHTTPServeDir(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: httpservedir dir")
+	}
+	server := httptest.NewServer(http.FileServer(http.Dir(ts.MkAbs(args[0]))))
+	ts.Defer(server.Close)
+	ts.Setenv("SERVER", server.URL)
 }
 
 func scriptHTTPServe(ts *testscript.TestScript, neg bool, args []string) {

@@ -87,6 +87,8 @@ task build
 
 1. Create a starter config:
 
+<!-- doxtest: workspace=bare -->
+
 ```bash
 dox init
 ```
@@ -94,6 +96,8 @@ dox init
 2. Edit `dox.toml` and add sources.
 
 3. Sync docs:
+
+<!-- doxtest: workspace=synced -->
 
 ```bash
 dox sync
@@ -108,6 +112,8 @@ rewritten. Existing manifests regenerate automatically when cache metadata or
 parser semantics change.
 
 ## Config
+
+<!-- doxtest: config -->
 
 ```toml
 # dox.toml
@@ -144,9 +150,14 @@ url = "https://hono.dev/llms-full.txt"
 
 ## Commands
 
-All commands accept `--config path/to/dox.toml` (`-c`) to override config discovery.
+Every command except `init` accepts `--config path/to/dox.toml` (`-c`) to override
+config discovery. The global flags `--json`, `--verbose` and
+`--allow-external-output` go before the command (for example `dox --json list`)
+or after it.
 
 ### sync
+
+<!-- doxtest: workspace=synced -->
 
 ```bash
 dox sync                    # Sync all sources
@@ -160,6 +171,8 @@ dox sync --timeout 15s      # Override per-source timeout
 
 ### list
 
+<!-- doxtest: workspace=synced -->
+
 ```bash
 dox list                    # Show configured sources
 dox list --verbose          # Show full details
@@ -168,6 +181,8 @@ dox list --files            # Show synced files
 ```
 
 ### add
+
+<!-- doxtest: workspace=empty -->
 
 ```bash
 # GitHub source (type inferred from --repo)
@@ -199,6 +214,8 @@ must stay inside that output. Symlinks cannot redirect writes outside it.
 
 For an intentional separate external directory, opt in on each invocation:
 
+<!-- doxtest: workspace=synced -->
+
 ```sh
 dox --allow-external-output sync
 dox --allow-external-output clean
@@ -213,6 +230,8 @@ ownership marker in place. Selected-source cleanup removes only those sources.
 
 ### clean
 
+<!-- doxtest: workspace=synced -->
+
 ```bash
 dox clean                   # Remove all synced docs
 dox clean goreleaser        # Remove specific source
@@ -220,11 +239,15 @@ dox clean goreleaser        # Remove specific source
 
 ### init
 
+<!-- doxtest: workspace=bare -->
+
 ```bash
 dox init                    # Create starter dox.toml
 ```
 
 ### collections
+
+<!-- doxtest: workspace=synced -->
 
 ```bash
 dox collections             # Table output
@@ -233,6 +256,8 @@ dox collections --limit 5   # Limit results
 ```
 
 ### files
+
+<!-- doxtest: workspace=synced -->
 
 ```bash
 dox files goreleaser                       # Default table output
@@ -247,6 +272,8 @@ dox files goreleaser --desc-length 100     # Shorter descriptions
 Available fields: `path`, `type`, `lines`, `size`, `description`, `modified`
 
 ### cat
+
+<!-- doxtest: workspace=synced -->
 
 ```bash
 dox cat goreleaser docs/install.md                      # Show entire file
@@ -268,6 +295,8 @@ to `--line N+1` before its removal in v0.6.0.
 
 Show document structure — headings for markdown/MDX, exports for TypeScript:
 
+<!-- doxtest: workspace=synced -->
+
 ```bash
 dox outline goreleaser docs/install.md
 dox outline goreleaser docs/install.md --json
@@ -285,6 +314,8 @@ Search across documentation metadata or file contents.
 
 **Metadata search** (default) — fuzzy matches across file paths, descriptions, headings, and exports:
 
+<!-- doxtest: workspace=synced -->
+
 ```bash
 dox search "installation"                    # Search all collections
 dox search "hooks" --collection react        # Search specific collection
@@ -296,6 +327,8 @@ dox search "guide" --desc-length 80          # Truncate descriptions
 
 **Content search** — literal or regex patterns within file contents:
 
+<!-- doxtest: workspace=synced -->
+
 ```bash
 dox search "useState" --content              # Literal (case-insensitive)
 dox search "configuration" --content --collection goreleaser
@@ -306,6 +339,8 @@ dox search "import" --content --limit 20
 Content search skips binary files and files over 50MB. Regex requires `--content`.
 
 **Typical agent workflow:**
+
+<!-- doxtest: workspace=synced -->
 
 ```bash
 dox sync                                    # Ensure docs are current
@@ -354,7 +389,7 @@ envelope to `stderr`:
 | `output` | string | `.dox` | Output directory root |
 | `timeout` | string | `30s` | Per-source sync and HTTP request timeout (`time.ParseDuration`, > 0) |
 | `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | GitHub API token for private repos and higher rate limits |
-| `max_parallel` | int | `4 × CPU cores` (min 10, max 16) | Max concurrent source syncs |
+| `max_parallel` | int | `4 × CPU cores` (min 10, max 16) | Max concurrent source syncs (1–100) |
 | `max_per_host` | int | `16` | Max concurrent HTTP requests to one host across all sources (1–64) |
 | `download_concurrency` | int | `8` | Max concurrent file downloads within one GitHub source (1–64) |
 | `excludes` | []string | `[]` | Global exclude patterns applied to all git sources |
@@ -367,7 +402,7 @@ envelope to `stderr`:
 | `repo` | Yes | — | Repository in `owner/repo` format |
 | `host` | No | `github.com` | Git hosting domain; only `github.com` is supported in v0.4.0 |
 | `path` | Yes | — | Path to directory or file in repo |
-| `ref` | No | Default branch | Branch, tag, or commit SHA |
+| `ref` | No | Default branch (`HEAD`) | Branch, tag, or commit SHA; pinned to a commit at each sync |
 | `patterns` | No | `["**/*.md", "**/*.mdx", "**/*.txt"]` | Glob patterns for files to include |
 | `exclude` | No | `[]` | Exclude patterns (merged with global `excludes`) |
 | `out` | No | Source name | Custom output subdirectory |
@@ -410,6 +445,26 @@ format = "table"              # Default format: table, json, csv
 list_fields = ["path", "type", "lines", "size", "description"]
 ```
 
+## How GitHub sync works
+
+Each GitHub directory source costs 2 REST API calls per sync:
+
+1. `ref` (or `HEAD`) is resolved to a commit SHA, so one sync reads one
+   consistent snapshot. The lock records both `ref_resolved` and `commit`.
+2. The configured folder's tree is fetched at that commit. When the folder's
+   tree SHA matches the lock, the source is up to date, even if other parts of
+   the repository changed.
+
+Changed files are downloaded from commit-pinned `raw.githubusercontent.com`
+URLs (`download_concurrency` at a time; these do not use API quota), or from a
+single commit tarball when 64 or more files changed. Very large trees that
+GitHub truncates are listed directory by directory. Single-file sources use 3
+API calls. With the unauthenticated limit of 60 calls per hour, about 30
+GitHub folder sources sync per hour without a token.
+
+URL sources use `ETag`/`Last-Modified` validators; `--dry-run` sends a `HEAD`
+request instead of downloading.
+
 ## Output Layout
 
 Default output root is `.dox/`:
@@ -445,7 +500,53 @@ excludes = [
 - Config discovery searches for `dox.toml` or `.dox.toml` from CWD up to filesystem root.
 - Relative config paths resolve from the config file directory.
 - GitHub token resolution: `github_token` in config → `GITHUB_TOKEN` env → `GH_TOKEN` env.
+  A token is needed for private repositories and for many GitHub sources per hour.
 - Parallelism uses an explicit `--parallel` value first, then config `max_parallel`, then `min(max(4 × CPU cores, 10), 16)`. An omitted flag (or `--parallel 0`) uses the fallback; explicit positive flag/config values can exceed 16. Pass `--parallel 3` to keep the previous accidental limit.
+
+## Upgrading to v0.4.0
+
+v0.4.0 changes some behavior on purpose. Check each item that applies to you:
+
+- **Output paths**: `output` must be a relative directory below `dox.toml`
+  (`.dox` by default). `"."`, `".."` and absolute paths fail with exit code 2;
+  move them to a dedicated relative directory, or pass
+  `--allow-external-output` for an intentional external directory. `clean` and
+  `sync --clean` only touch directories dox owns (`.dox-root` or `.dox.lock`);
+  run one normal `dox sync` first to mark existing output.
+- **Hosts**: only github.com repositories and URL sources are supported.
+  `type = "gitlab"`, `"codeberg"`, `"git"` or any other `host` now fail with
+  "not supported yet" (exit code 2) instead of silently querying github.com.
+  Use a `url` source for single files until v0.5.0.
+- **Parallelism**: the order is `--parallel` flag, then `max_parallel`, then
+  `min(max(4 × CPU cores, 10), 16)`. `max_parallel` now takes effect when the
+  flag is omitted, and must be 1–100.
+- **Exit codes and errors**: 0 ok, 1 runtime/network, 2 usage/config, 3 partial
+  sync failure, 4 not found, 130 interrupted. Errors print a `hint:` line,
+  `--verbose` adds context, and `--json` emits `{"error": {...}}` on stderr.
+- **Line numbers**: `cat --line N` and `file:N` are 1-based, matching search
+  and outline output. `--offset` still works with a warning until v0.6.0;
+  replace `--offset N` with `--line N+1`.
+- **`dox add`**: `--type` is inferred, `-r`/`-p`/`-u`/`-R` aliases exist, names
+  must use letters, digits, `-` and `_`, and `--force` refuses sections it
+  cannot rewrite safely.
+- **Timeouts**: requests and sources time out after `timeout` (default `30s`;
+  `dox sync --timeout`). Ctrl-C saves completed sources and exits 130.
+- **Lock and manifests**: the lock moves to version 2 (adds `commit`; older
+  locks load). Manifests regenerate automatically. The first sync after
+  upgrading re-checks each GitHub source once without re-downloading
+  unchanged files.
+- **Homebrew and Docker**: the tap ships a cask (`brew uninstall --formula dox`
+  first), and the image runs as UID 65532 (see [Docker](#docker)).
+
+Notes for wrapper scripts and agent setups (such as agentx `mise` tasks):
+
+- `dox add my-lib -r owner/repo -p docs` works without `--type`.
+- `max_parallel` in `dox.toml` is honored, so remove per-call `--parallel`
+  overrides that only worked around the old behavior.
+- `GITHUB_TOKEN` is needed less often: a GitHub folder costs 2 API calls
+  instead of one per file.
+- Pass `--json` through and branch on exit codes (`2` means fix the config, `1`
+  means retry later, `4` means a missing source or file).
 
 ## Contributing
 

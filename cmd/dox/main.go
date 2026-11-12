@@ -35,11 +35,13 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Default: ".dox"
 # output = ".dox"
 
-# GitHub token for higher API rate limits (5000/hr vs 60/hr unauthenticated)
+# GitHub token for private repos and higher API rate limits (5000/hr vs 60/hr).
+# Public syncs need few API calls (2 per GitHub directory source; files come
+# from raw/archive URLs), so most setups work without one.
 # Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
 # github_token = ""
 
-# Max parallel source syncs (default: 4x CPU cores, min 10, max 16)
+# Max parallel source syncs, 1-100 (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
 #
