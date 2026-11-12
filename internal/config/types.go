@@ -108,10 +108,12 @@ type Display struct {
 }
 
 type Config struct {
-	AllowExternalOutput bool              `koanf:"-"`
-	Output              string            `koanf:"output"               validate:"omitempty,dirpath"`
-	Timeout             string            `koanf:"timeout"`
-	GitHubToken         string            `koanf:"github_token"`
+	AllowExternalOutput bool   `koanf:"-"`
+	Output              string `koanf:"output"       validate:"omitempty,dirpath"`
+	Timeout             string `koanf:"timeout"`
+	GitHubToken         string `koanf:"github_token"`
+	// Tokens maps a git host (for example a GitHub Enterprise host) to its token.
+	Tokens              map[string]string `koanf:"tokens"`
 	MaxParallel         int               `koanf:"max_parallel"         validate:"omitempty,min=1,max=100"`
 	MaxPerHost          int               `koanf:"max_per_host"         validate:"omitempty,min=1,max=64"`
 	DownloadConcurrency int               `koanf:"download_concurrency"`
@@ -242,6 +244,12 @@ func inferSourceType(src Source) string {
 		return sourceTypeURL
 	}
 	if src.Repo != "" {
+		// A host decides the provider: github.com and GitHub Enterprise hosts
+		// whose name contains "github" infer github; other hosts need an
+		// explicit type so a GitLab or Gitea server is never queried as GitHub.
+		if host := strings.TrimSpace(src.Host); host != "" {
+			return normalizeGitType(strings.ToLower(host))
+		}
 		return sourceTypeGitHub
 	}
 	return ""
@@ -457,23 +465,13 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 func validateSupportedProvider(sourceName string, sourceCfg Source) error {
 	switch sourceCfg.Type {
 	case sourceTypeGitLab, sourceTypeCodeberg, sourceTypeGit:
-		return unsupportedProviderError(
-			sourceName,
-			fmt.Sprintf("source type %q", sourceCfg.Type),
-			map[string]any{fieldType: sourceCfg.Type},
-		)
+		what := fmt.Sprintf("source type %q", sourceCfg.Type)
+		if host := strings.TrimSpace(sourceCfg.Host); host != "" && !strings.EqualFold(host, githubHost) {
+			what += fmt.Sprintf(" (host %q)", host)
+		}
+		return unsupportedProviderError(sourceName, what, map[string]any{fieldType: sourceCfg.Type})
 	}
-	if sourceCfg.Repo == "" {
-		return nil
-	}
-	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
-	if host != "" && host != githubHost {
-		return unsupportedProviderError(
-			sourceName,
-			fmt.Sprintf("host %q", sourceCfg.Host),
-			map[string]any{fieldName: "host", fieldValue: sourceCfg.Host},
-		)
-	}
+	// A github-type source may name a GitHub Enterprise Server host.
 	return nil
 }
 
@@ -484,7 +482,8 @@ func unsupportedProviderError(sourceName, what string, fields map[string]any) er
 		errs.Config,
 		fmt.Sprintf("%s for source %q is not supported yet (planned for v0.5.0)", what, sourceName),
 		errs.WithHint(
-			"dox currently syncs github.com repositories and direct URLs; remove 'host'/'type' or use a 'url' source",
+			"dox currently syncs GitHub repositories (github.com, or Enterprise with type = \"github\") "+
+				"and direct URLs; fix 'host'/'type' or use a 'url' source",
 		),
 		errs.WithFields(fields),
 	)

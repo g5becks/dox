@@ -330,7 +330,6 @@ func executeSources(
 ) (map[string]runState, error) {
 	results := make(map[string]runState, len(sourceNames))
 	var resultsMu stdsync.Mutex
-	token := resolveGitHubToken(cfg)
 	timeout := resolveTimeout(cfg, opts)
 	perHost := 0
 	if cfg != nil {
@@ -365,6 +364,7 @@ func executeSources(
 		previousLock := lock.GetEntry(sourceName)
 
 		group.Go(func() error {
+			token := resolveToken(cfg, sourceCfg)
 			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, sourceOpts, emit)
 			resultsMu.Lock()
 			results[sourceName] = state
@@ -477,6 +477,29 @@ func resolveSourceNames(
 	}
 
 	return sourceNames, nil
+}
+
+// resolveToken returns the credential for a repo source's host: a
+// `tokens.<host>` entry first, then for github.com github_token, GITHUB_TOKEN
+// and GH_TOKEN, and for GitHub Enterprise hosts GH_ENTERPRISE_TOKEN.
+func resolveToken(cfg *config.Config, sourceCfg config.Source) string {
+	if sourceCfg.Repo == "" {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
+	if host == "" {
+		host = "github.com"
+	}
+	if token := cfg.Tokens[host]; token != "" {
+		return token
+	}
+	if host != "github.com" {
+		if sourceCfg.Type == "github" {
+			return os.Getenv("GH_ENTERPRISE_TOKEN")
+		}
+		return ""
+	}
+	return resolveGitHubToken(cfg)
 }
 
 func resolveGitHubToken(cfg *config.Config) string {

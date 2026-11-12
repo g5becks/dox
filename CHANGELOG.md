@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- GitHub Enterprise Server sources: set `host` to the instance (with `type = "github"` when the host name lacks "github"). dox uses `https://<host>/api/v3` and fetches content and archives through the API. Per-host tokens come from `tokens = { "<host>" = "..." }` or `GH_ENTERPRISE_TOKEN`. A source with a host and no `type` now infers its type from the host, so a `gitlab.com` or unknown host is reported as not supported rather than treated as GitHub. Internally, GitHub sources run through a provider interface that GitLab and Gitea will implement.
+
 - `dox sync --check` reports staleness without writing anything: exit 0 when every source is current, 3 when any would change; `--json` prints `{"stale": [...], "current": [...]}`. `dox sync --locked` reproduces the lock: GitHub sources fetch the locked commits, URL sources must match their recorded content digest, and config drift fails with exit code 2. Lock entries now record a `config_digest`, and URL entries record the content's `sha256` under `files`. Locks written before v0.5.0 need one plain `dox sync` before `--locked`.
 
 ## [0.4.0] - 2026-11-12

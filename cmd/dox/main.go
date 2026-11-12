@@ -43,6 +43,9 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
 # github_token = ""
 
+# Per-host tokens, e.g. for GitHub Enterprise Server (or GH_ENTERPRISE_TOKEN)
+# tokens = { "github.mycorp.com" = "" }
+
 # Max parallel source syncs, 1-100 (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
@@ -149,9 +152,14 @@ excludes = [
 # exclude = ["custom-pattern/**"]                    # optional (adds to global excludes, no duplicates)
 # out = "custom-dir-name"                             # optional (default: source key name)
 
-# --- Planned (v0.5.0): GitLab, Codeberg/Gitea and self-hosted hosts ---
-# Only github.com repositories are supported today; any other 'host' fails
-# validation with "not supported yet".
+# --- GitHub Enterprise Server - set host (type "github" if the name lacks "github") ---
+# [sources.internal-docs]
+# type = "github"
+# host = "git.mycorp.com"
+# repo = "platform/handbook"
+# path = "docs"
+
+# --- Planned: GitLab and Codeberg/Gitea/Forgejo ---
 
 # --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]

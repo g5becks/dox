@@ -55,6 +55,7 @@ type githubSource struct {
 	resolvedCommit    string
 	tarballMinFiles   int
 	tarballByteBudget int64
+	provider          provider
 	warnedLowRL       atomic.Bool
 	onWarning         func(string)
 }
@@ -91,7 +92,7 @@ func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpC
 		httpClient = httpx.NewClient(httpx.DefaultTimeout)
 	}
 
-	return &githubSource{
+	src := &githubSource{
 		name:         name,
 		source:       cfg,
 		owner:        owner,
@@ -103,7 +104,13 @@ func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpC
 		codeloadBase: githubCodeloadBaseURL,
 		token:        token,
 		timeout:      httpx.NormalizeTimeout(httpClient.Timeout),
-	}, nil
+	}
+	gitHub := &githubProvider{s: src, enterprise: isEnterpriseHost(cfg.Host)}
+	if gitHub.enterprise {
+		src.apiBase = enterpriseAPIBase(cfg.Host)
+	}
+	src.provider = gitHub
+	return src, nil
 }
 
 // Close releases idle connections of a client this source created; a shared
@@ -156,7 +163,7 @@ func (s *githubSource) syncSingleFile(
 
 	filePath := normalizeRepoPath(s.source.Path)
 	relativePath := path.Base(filePath)
-	sha, err := s.fetchContentSHA(ctx, commit, filePath)
+	sha, err := s.provider.fileSHA(ctx, commit, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +191,7 @@ func (s *githubSource) syncSingleFile(
 	}
 
 	if !opts.DryRun {
-		content, fetchErr := s.fetchBlobContent(ctx, sha)
+		content, fetchErr := s.provider.fileContent(ctx, commit, filePath, sha)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
@@ -226,7 +233,7 @@ func (s *githubSource) syncDirectory(
 
 	// Fetch only the configured folder's tree ("<commit>:<path>") and compare
 	// its own SHA, so commits elsewhere in the repository keep the fast path.
-	tree, err := s.fetchFolderTree(ctx, commit)
+	tree, err := s.provider.folderTree(ctx, commit)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +321,8 @@ func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struc
 	return nil
 }
 
-func (s *githubSource) fetchTree(ctx context.Context, ref string, recursive bool) (*githubTreeResponse, error) {
+func (p *githubProvider) fetchTree(ctx context.Context, ref string, recursive bool) (*githubTreeResponse, error) {
+	s := p.s
 	endpoint := fmt.Sprintf("/repos/%s/%s/git/trees/%s", s.owner, s.repo, neturl.PathEscape(ref))
 	result := &githubTreeResponse{}
 	var query map[string]string
@@ -342,7 +350,8 @@ func (s *githubSource) fetchTree(ctx context.Context, ref string, recursive bool
 	return result, nil
 }
 
-func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath string) (string, error) {
+func (p *githubProvider) fileSHA(ctx context.Context, ref string, filePath string) (string, error) {
+	s := p.s
 	endpoint := fmt.Sprintf("/repos/%s/%s/contents/%s", s.owner, s.repo, escapeRepoPath(filePath))
 	result := &githubContentResponse{}
 
@@ -381,7 +390,8 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 }
 
 // fetchBlobContent downloads one blob as raw bytes (no JSON or base64).
-func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte, error) {
+func (p *githubProvider) fileContent(ctx context.Context, _, _, sha string) ([]byte, error) {
+	s := p.s
 	endpoint := fmt.Sprintf("/repos/%s/%s/git/blobs/%s", s.owner, s.repo, sha)
 	var content []byte
 

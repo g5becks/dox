@@ -33,7 +33,7 @@ stdout 'notes'
 dox add hosted -r owner/repo -p docs --host github.com
 grep '^host = "github.com"$' dox.toml
 doxexit 2 add gl -r owner/repo -p docs --host gitlab.com
-stderr 'host "gitlab.com" for source "gl" is not supported yet'
+stderr 'source type "gitlab" \(host "gitlab.com"\) for source "gl" is not supported yet'
 ! grep 'sources.gl' dox.toml
 
 # Names must be TOML bare keys

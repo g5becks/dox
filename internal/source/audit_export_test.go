@@ -73,3 +73,13 @@ func SetGitHubToken(src Source, token string) {
 func SetGitHubTarballByteBudget(src Source, budget int64) {
 	src.(*githubSource).tarballByteBudget = budget
 }
+
+// SetGitHubEnterprise points src at a GitHub Enterprise-style server: the API
+// lives below <server>/api/v3, and raw/codeload hosts must not be used.
+func SetGitHubEnterprise(src Source, serverURL string) {
+	github := src.(*githubSource)
+	github.apiBase = serverURL + "/api/v3"
+	github.rawBase = "http://raw.invalid"
+	github.codeloadBase = "http://codeload.invalid"
+	github.provider = &githubProvider{s: github, enterprise: true}
+}

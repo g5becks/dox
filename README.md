@@ -403,7 +403,8 @@ envelope to `stderr`:
 |-------|------|---------|-------------|
 | `output` | string | `.dox` | Output directory root |
 | `timeout` | string | `30s` | Per-source sync and HTTP request timeout (`time.ParseDuration`, > 0) |
-| `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | GitHub API token for private repos and higher rate limits |
+| `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | github.com API token for private repos and higher rate limits |
+| `tokens` | table | `{}` | Per-host tokens, for example `tokens = { "github.mycorp.com" = "..." }` |
 | `max_parallel` | int | `4 × CPU cores` (min 10, max 16) | Max concurrent source syncs (1–100) |
 | `max_per_host` | int | `16` | Max concurrent HTTP requests to one host across all sources (1–64) |
 | `download_concurrency` | int | `8` | Max concurrent file downloads within one GitHub source (1–64) |
@@ -413,9 +414,9 @@ envelope to `stderr`:
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `type` | No | Inferred from `repo` | `github` (other git hosts are planned for v0.5.0) |
+| `type` | No | Inferred from `repo` and `host` | `github` (github.com or GitHub Enterprise); GitLab and Gitea are planned |
 | `repo` | Yes | — | Repository in `owner/repo` format |
-| `host` | No | `github.com` | Git hosting domain; only `github.com` is supported in v0.4.0 |
+| `host` | No | `github.com` | Git hosting domain; a GitHub Enterprise Server host is supported |
 | `path` | Yes | — | Path to directory or file in repo |
 | `ref` | No | Default branch (`HEAD`) | Branch, tag, or commit SHA; pinned to a commit at each sync |
 | `patterns` | No | `["**/*.md", "**/*.mdx", "**/*.txt"]` | Glob patterns for files to include |
@@ -433,10 +434,28 @@ repo = "owner/repo"
 path = "docs"
 ```
 
-**Planned (v0.5.0):** GitLab, Codeberg/Gitea/Forgejo and self-hosted hosts
-(including GitHub Enterprise). Until then, `type = "gitlab"`, `"codeberg"` or
-`"git"`, and any `host` other than `github.com`, fail validation with
-"not supported yet" (exit code 2) instead of silently querying github.com.
+**GitHub Enterprise Server:** set `host` to your instance. Hosts whose name
+contains `github` infer `type = "github"`; for any other host name, set it
+explicitly:
+
+<!-- doxtest: config -->
+
+```toml
+[sources.internal-docs]
+type = "github"
+host = "git.mycorp.com"
+repo = "platform/handbook"
+path = "docs"
+```
+
+dox calls `https://<host>/api/v3` and fetches content and archives through that
+API (GHE raw web URLs require a browser session). Tokens come from
+`tokens.<host>` in `dox.toml`, then `GH_ENTERPRISE_TOKEN`.
+
+**Planned:** GitLab and Codeberg/Gitea/Forgejo. Until they land,
+`type = "gitlab"`, `"codeberg"` or `"git"`, and hosts that infer those types
+(such as `gitlab.com`), fail validation with "not supported yet" (exit code 2)
+instead of silently querying GitHub.
 
 ### URL Sources
 
@@ -514,7 +533,9 @@ excludes = [
 
 - Config discovery searches for `dox.toml` or `.dox.toml` from CWD up to filesystem root.
 - Relative config paths resolve from the config file directory.
-- GitHub token resolution: `github_token` in config → `GITHUB_TOKEN` env → `GH_TOKEN` env.
+- Token resolution: `tokens.<host>` in config first; for github.com then
+  `github_token` → `GITHUB_TOKEN` → `GH_TOKEN`; for GitHub Enterprise hosts then
+  `GH_ENTERPRISE_TOKEN`.
   A token is needed for private repositories and for many GitHub sources per hour.
 - Parallelism uses an explicit `--parallel` value first, then config `max_parallel`, then `min(max(4 × CPU cores, 10), 16)`. An omitted flag (or `--parallel 0`) uses the fallback; explicit positive flag/config values can exceed 16. Pass `--parallel 3` to keep the previous accidental limit.
 

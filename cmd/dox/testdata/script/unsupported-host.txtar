@@ -1,14 +1,19 @@
 # Non-GitHub hosts and unsupported provider types fail config validation with
 # exit 2 before any network request (audit C4, dox-deb.17).
 doxexit 2 sync --config gitlab-host.toml
-stderr 'host "gitlab.com" for source "docs" is not supported yet \(planned for v0.5.0\)'
-stderr '^hint: dox currently syncs github.com repositories and direct URLs'
+stderr 'source type "gitlab" \(host "gitlab.com"\) for source "docs" is not supported yet \(planned for v0.5.0\)'
+stderr '^hint: dox currently syncs GitHub repositories '
 
 doxexit 2 sync --config codeberg-host.toml
-stderr 'host "codeberg.org" for source "docs" is not supported yet'
+stderr 'source type "codeberg" \(host "codeberg.org"\) for source "docs" is not supported yet'
 
-doxexit 2 sync --config enterprise-host.toml
-stderr 'host "github.mycorp.com" for source "docs" is not supported yet'
+# GitHub Enterprise hosts are supported since v0.5.0; an unknown host without
+# an explicit type is still rejected rather than queried as GitHub.
+dox list --config enterprise-host.toml
+stdout 'docs'
+doxexit 2 sync --config unknown-host.toml
+stderr 'source type "git" \(host "git.mycorp.com"\) for source "docs" is not supported yet'
+stderr 'type = "github"'
 
 doxexit 2 sync --config gitlab-type.toml
 stderr 'source type "gitlab" for source "docs" is not supported yet'
@@ -31,6 +36,11 @@ host = "codeberg.org"
 repo = "acme/docs"
 path = "docs"
 host = "github.mycorp.com"
+-- unknown-host.toml --
+[sources.docs]
+repo = "acme/docs"
+path = "docs"
+host = "git.mycorp.com"
 -- gitlab-type.toml --
 [sources.docs]
 type = "gitlab"

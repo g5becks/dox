@@ -35,7 +35,7 @@ func TestableGitHubSource(
 		t.Fatalf("parseRepo() error = %v", err)
 	}
 
-	return &githubSource{
+	src := &githubSource{
 		name:        name,
 		source:      cfg,
 		owner:       owner,
@@ -46,6 +46,8 @@ func TestableGitHubSource(
 		// Mocks key routes by the ref name, so treat it as the resolved commit.
 		resolvedCommit: resolvedRef,
 	}
+	src.provider = &githubProvider{s: src}
+	return src
 }
 
 // TestableURLSource creates a urlSource and returns it as a Source + a setter for the client.

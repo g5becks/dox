@@ -372,16 +372,24 @@ func TestConfigValidate(t *testing.T) {
 					"project": {Type: "git", Repo: "owner/repo", Path: "docs", Host: "git.company.com"},
 				},
 			},
-			wantErrContains: `source type "git" for source "project" is not supported yet`,
+			wantErrContains: `source type "git" (host "git.company.com") for source "project" is not supported yet`,
 		},
 		{
-			name: "non-github host not supported yet",
+			name: "github enterprise host accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {Type: "github", Repo: "owner/repo", Path: "docs", Host: "github.mycorp.com"},
 				},
 			},
-			wantErrContains: `host "github.mycorp.com" for source "project" is not supported yet`,
+		},
+		{
+			name: "gitlab-inferred host not supported yet",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "gitlab", Repo: "owner/repo", Path: "docs", Host: "gitlab.example.com"},
+				},
+			},
+			wantErrContains: `source type "gitlab" (host "gitlab.example.com") for source "project" is not supported yet`,
 		},
 		{
 			name: "explicit github.com host accepted",
