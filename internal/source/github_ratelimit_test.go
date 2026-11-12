@@ -34,7 +34,7 @@ func TestRateLimitClassificationProducesTypedResetAndTokenHint(t *testing.T) {
 func assertRateLimitStatus(t *testing.T, status int, resetUnix time.Time) {
 	t.Helper()
 	server := fakegithub.New(t, 1)
-	server.Set("/api/repos/acme/docs/git/trees/main", fakegithub.Response{
+	server.Set("/api/repos/acme/docs/commits/main", fakegithub.Response{
 		Status: status,
 		Headers: http.Header{
 			"X-Ratelimit-Remaining": {"0"},
@@ -69,7 +69,7 @@ func assertRateLimitStatus(t *testing.T, status int, resetUnix time.Time) {
 func TestSuccessWithZeroRemainingSucceedsAndWarnsOnce(t *testing.T) {
 	t.Parallel()
 	server := fakegithub.New(t, 3)
-	server.Set("/api/repos/acme/docs/git/trees/main", fakegithub.Response{
+	server.Set("/api/repos/acme/docs/commits/main", fakegithub.Response{
 		Headers: http.Header{"X-Ratelimit-Remaining": {"0"}},
 	})
 
@@ -97,7 +97,7 @@ func TestSuccessWithZeroRemainingSucceedsAndWarnsOnce(t *testing.T) {
 func TestRetryPolicyRetries5xxWithRetryAfter(t *testing.T) {
 	t.Parallel()
 	server := fakegithub.New(t, 1)
-	server.Set("/api/repos/acme/docs/git/trees/main", fakegithub.Response{
+	server.Set("/api/repos/acme/docs/commits/main", fakegithub.Response{
 		Status:  http.StatusServiceUnavailable,
 		Headers: http.Header{"Retry-After": {"0"}},
 	})
@@ -115,7 +115,7 @@ func TestRetryPolicyRetries5xxWithRetryAfter(t *testing.T) {
 func TestRetryPolicyStopsWhenRetryAfterExceedsBound(t *testing.T) {
 	t.Parallel()
 	server := fakegithub.New(t, 1)
-	server.Set("/api/repos/acme/docs/git/trees/main", fakegithub.Response{
+	server.Set("/api/repos/acme/docs/commits/main", fakegithub.Response{
 		Status:  http.StatusServiceUnavailable,
 		Headers: http.Header{"Retry-After": {"3600"}},
 	})
@@ -138,7 +138,7 @@ func TestRetryPolicyNeverRetries4xx(t *testing.T) {
 	t.Parallel()
 	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound} {
 		server := fakegithub.New(t, 1)
-		server.Set("/api/repos/acme/docs/git/trees/main", fakegithub.Response{
+		server.Set("/api/repos/acme/docs/commits/main", fakegithub.Response{
 			Status: status,
 		})
 
@@ -186,8 +186,14 @@ func newTestGitHubSource(t *testing.T, apiURL string) source.Source {
 func TestSharedClientReusesConnectionsAndWritesRawBlobs(t *testing.T) {
 	t.Parallel()
 	const files = 40
-	server := fakegithub.New(t, files)
+	// GitHub serves HTTP/2, so concurrent downloads share one connection per host.
+	server := fakegithub.NewTLS(t, files)
 	client := httpx.NewClient(10 * time.Second)
+	limited, ok := client.Transport.(*httpx.LimitedTransport)
+	if !ok {
+		t.Fatalf("unexpected transport %T", client.Transport)
+	}
+	limited.Unwrap().TLSClientConfig = server.TLSConfig()
 	t.Cleanup(client.CloseIdleConnections)
 
 	src, err := source.NewWithHTTPClient(
@@ -212,6 +218,9 @@ func TestSharedClientReusesConnectionsAndWritesRawBlobs(t *testing.T) {
 	}
 	if got := server.NewConnections(); got < 1 || got > 2 {
 		t.Fatalf("new connections for %d requests = %d, want 1..2", len(server.Requests()), got)
+	}
+	if got := len(server.Requests()); got != files+2 {
+		t.Fatalf("requests = %d, want %d (commit + tree + one raw file each)", got, files+2)
 	}
 	content, err := os.ReadFile(filepath.Join(dest, "page-000.md"))
 	if err != nil {

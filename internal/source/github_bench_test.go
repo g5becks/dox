@@ -75,10 +75,25 @@ func TestGitHubBenchmarkHarness(t *testing.T) {
 			if len(files) != count {
 				t.Errorf("written files = %d, want %d", len(files), count)
 			}
-			if f.RESTCalls.Load() != int64(count+2) {
-				t.Errorf("baseline REST calls = %d, want %d", f.RESTCalls.Load(), count+2)
-			}
+			assertHarnessCalls(t, f, count)
 		})
+	}
+}
+
+// assertHarnessCalls checks quota use: commit resolution and the tree are the
+// only REST calls; files come from raw URLs or, above the threshold, one tarball.
+func assertHarnessCalls(t *testing.T, f *githubfixture.Server, count int) {
+	t.Helper()
+	if f.RESTCalls.Load() != 2 {
+		t.Errorf("REST calls = %d, want 2 (v0.3.0 used %d)", f.RESTCalls.Load(), count+2)
+	}
+	wantRaw, wantArchive := int64(count), int64(0)
+	if count >= 64 {
+		wantRaw, wantArchive = 0, 1
+	}
+	if f.RawCalls.Load() != wantRaw || f.ArchiveCalls.Load() != wantArchive {
+		t.Errorf("raw/archive calls = %d/%d, want %d/%d",
+			f.RawCalls.Load(), f.ArchiveCalls.Load(), wantRaw, wantArchive)
 	}
 }
 

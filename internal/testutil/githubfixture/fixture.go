@@ -117,7 +117,15 @@ func (f *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 	case resource == "":
 		writeJSON(w, map[string]string{"default_branch": "main"})
 	case resource == "/commits/main" || resource == "/commits/HEAD" || resource == "/commits/"+Commit:
+		// Like GitHub, the sha media type returns the bare SHA as text.
+		if r.Header.Get("Accept") == "application/vnd.github.sha" {
+			_, _ = w.Write([]byte(Commit))
+			return
+		}
 		writeJSON(w, map[string]string{fieldSHA: Commit})
+	case resource == "/tarball/"+Commit:
+		// The authenticated API redirects to a codeload archive URL.
+		http.Redirect(w, r, "/codeload/acme/docs/tar.gz/"+Commit, http.StatusFound)
 	case strings.HasPrefix(resource, "/git/trees/"):
 		f.serveTree(w, strings.TrimPrefix(resource, "/git/trees/"))
 	case strings.HasPrefix(resource, "/git/blobs/"):

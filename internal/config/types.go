@@ -18,6 +18,8 @@ const (
 	repoPartCount  = 2
 	// maxPerHostLimit caps max_per_host, the per-host HTTP concurrency bound.
 	maxPerHostLimit = 64
+	// maxDownloadConcurrency caps download_concurrency, the per-source file download bound.
+	maxDownloadConcurrency = 64
 
 	// Source type constants.
 	sourceTypeGitHub   = "github"
@@ -102,14 +104,15 @@ type Display struct {
 
 type Config struct {
 	AllowExternalOutput bool              `koanf:"-"`
-	Output              string            `koanf:"output"       validate:"omitempty,dirpath"`
+	Output              string            `koanf:"output"               validate:"omitempty,dirpath"`
 	Timeout             string            `koanf:"timeout"`
 	GitHubToken         string            `koanf:"github_token"`
-	MaxParallel         int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
-	MaxPerHost          int               `koanf:"max_per_host" validate:"omitempty,min=1,max=64"`
+	MaxParallel         int               `koanf:"max_parallel"         validate:"omitempty,min=1,max=100"`
+	MaxPerHost          int               `koanf:"max_per_host"         validate:"omitempty,min=1,max=64"`
+	DownloadConcurrency int               `koanf:"download_concurrency"`
 	Excludes            []string          `koanf:"excludes"`
 	Display             Display           `koanf:"display"`
-	Sources             map[string]Source `koanf:"sources"      validate:"required,dive"`
+	Sources             map[string]Source `koanf:"sources"              validate:"required,dive"`
 	ConfigDir           string            `koanf:"-"`
 }
 
@@ -275,19 +278,13 @@ func (c *Config) Validate() error {
 			return err
 		}
 	}
-	if c.MaxPerHost != 0 && (c.MaxPerHost < 1 || c.MaxPerHost > maxPerHostLimit) {
-		return errs.New(
-			errs.Config,
-			fmt.Sprintf("invalid max_per_host %d", c.MaxPerHost),
-			errs.WithHint(fmt.Sprintf("Use a value from 1 to %d, or omit it for the default of 16", maxPerHostLimit)),
-			errs.WithFields(
-				map[string]any{
-					fieldName:            "max_per_host",
-					fieldValue:           c.MaxPerHost,
-					errs.LegacyCodeField: errs.LegacyConfigInvalid,
-				},
-			),
-		)
+	if err := validateOptionalRange("max_per_host", c.MaxPerHost, maxPerHostLimit, "16"); err != nil {
+		return err
+	}
+	if err := validateOptionalRange(
+		"download_concurrency", c.DownloadConcurrency, maxDownloadConcurrency, "8",
+	); err != nil {
+		return err
 	}
 	v := newValidator()
 	if err := validateDisplay(v, c.Display); err != nil {
@@ -299,6 +296,25 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// validateOptionalRange accepts 0 (unset, use the default) or 1..upper.
+func validateOptionalRange(name string, value, upper int, defaultLabel string) error {
+	if value == 0 || (value >= 1 && value <= upper) {
+		return nil
+	}
+	return errs.New(
+		errs.Config,
+		fmt.Sprintf("invalid %s %d", name, value),
+		errs.WithHint(fmt.Sprintf("Use a value from 1 to %d, or omit it for the default of %s", upper, defaultLabel)),
+		errs.WithFields(
+			map[string]any{
+				fieldName:            name,
+				fieldValue:           value,
+				errs.LegacyCodeField: errs.LegacyConfigInvalid,
+			},
+		),
+	)
 }
 
 func validateDisplay(v *validator.Validate, display Display) error {

@@ -2,6 +2,7 @@
 package fakegithub
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -42,6 +43,26 @@ type Server struct {
 
 func New(tb testing.TB, files int) *Server {
 	tb.Helper()
+	return newServer(tb, files, false)
+}
+
+// NewTLS serves the same routes over TLS with HTTP/2 enabled, as GitHub does;
+// TLSConfig returns the client settings that trust it.
+func NewTLS(tb testing.TB, files int) *Server {
+	tb.Helper()
+	return newServer(tb, files, true)
+}
+
+// TLSConfig returns a client TLS configuration trusting a NewTLS server.
+func (f *Server) TLSConfig() *tls.Config {
+	if transport, ok := f.client.Transport.(*http.Transport); ok && transport.TLSClientConfig != nil {
+		return transport.TLSClientConfig.Clone()
+	}
+	return nil
+}
+
+func newServer(tb testing.TB, files int, useTLS bool) *Server {
+	tb.Helper()
 	base := githubfixture.New(tb, files)
 	base.Latency = 0
 	started := make(chan struct{}, 1)
@@ -52,7 +73,12 @@ func New(tb testing.TB, files int) *Server {
 			f.newConns.Add(1)
 		}
 	}
-	server.Start()
+	if useTLS {
+		server.EnableHTTP2 = true
+		server.StartTLS()
+	} else {
+		server.Start()
+	}
 	f.URL = server.URL
 	f.client = server.Client()
 	tb.Cleanup(server.Close)

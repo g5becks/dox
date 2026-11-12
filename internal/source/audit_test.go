@@ -76,7 +76,7 @@ func auditRateHint(t *testing.T, status int) error {
 	t.Helper()
 	server := fakegithub.New(t, 1)
 	server.Set(
-		"/api/repos/acme/docs/git/trees/main",
+		"/api/repos/acme/docs/commits/main",
 		fakegithub.Response{
 			Status:  status,
 			Headers: http.Header{"X-Ratelimit-Remaining": {"0"}, "Retry-After": {"120"}},
@@ -98,7 +98,7 @@ func auditLastQuota(t *testing.T) error {
 	t.Helper()
 	server := fakegithub.New(t, 1)
 	server.Set(
-		"/api/repos/acme/docs/git/trees/main",
+		"/api/repos/acme/docs/commits/main",
 		fakegithub.Response{Headers: http.Header{"X-Ratelimit-Remaining": {"0"}}},
 	)
 	_, err := auditGitHub(t, server).Sync(t.Context(), t.TempDir(), nil, source.SyncOptions{})

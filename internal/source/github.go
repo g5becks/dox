@@ -29,6 +29,7 @@ const (
 	githubAPIVersion    = "2022-11-28"
 	githubJSONMediaType = "application/vnd.github+json"
 	githubRawMediaType  = "application/vnd.github.raw"
+	gitObjectBlob       = "blob"
 	userAgent           = "dox"
 	httpRetryCount      = 3
 	rateLimitWarnThresh = 10
@@ -42,6 +43,8 @@ type githubSource struct {
 	http              *http.Client
 	ownsClient        bool
 	apiBase           string
+	rawBase           string
+	codeloadBase      string
 	token             string
 	timeout           time.Duration
 	maxRetries        int
@@ -49,6 +52,8 @@ type githubSource struct {
 	retryBaseWait     time.Duration
 	maxRateLimitWait  time.Duration
 	resolvedRef       string
+	resolvedCommit    string
+	tarballMinFiles   int
 	warnedLowRL       atomic.Bool
 	onWarning         func(string)
 }
@@ -63,10 +68,7 @@ type githubTreeEntry struct {
 	Path string `json:"path"`
 	Type string `json:"type"`
 	SHA  string `json:"sha"`
-}
-
-type githubRepoResponse struct {
-	DefaultBranch string `json:"default_branch"`
+	Size int64  `json:"size"`
 }
 
 type githubContentResponse struct {
@@ -89,15 +91,17 @@ func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpC
 	}
 
 	return &githubSource{
-		name:       name,
-		source:     cfg,
-		owner:      owner,
-		repo:       repo,
-		http:       httpClient,
-		ownsClient: ownsClient,
-		apiBase:    githubAPIBaseURL,
-		token:      token,
-		timeout:    httpx.NormalizeTimeout(httpClient.Timeout),
+		name:         name,
+		source:       cfg,
+		owner:        owner,
+		repo:         repo,
+		http:         httpClient,
+		ownsClient:   ownsClient,
+		apiBase:      githubAPIBaseURL,
+		rawBase:      githubRawBaseURL,
+		codeloadBase: githubCodeloadBaseURL,
+		token:        token,
+		timeout:      httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
@@ -133,14 +137,14 @@ func (s *githubSource) syncSingleFile(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	ref, err := s.resolveRef(ctx)
+	ref, commit, err := s.resolveCommit(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	filePath := normalizeRepoPath(s.source.Path)
 	relativePath := path.Base(filePath)
-	sha, err := s.fetchContentSHA(ctx, ref, filePath)
+	sha, err := s.fetchContentSHA(ctx, commit, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +162,7 @@ func (s *githubSource) syncSingleFile(
 
 		lockEntry.Type = sourceTypeGitHub
 		lockEntry.RefResolved = ref
+		lockEntry.Commit = commit
 		lockEntry.SyncedAt = time.Now().UTC()
 
 		return &SyncResult{
@@ -187,6 +192,7 @@ func (s *githubSource) syncSingleFile(
 		LockEntry: &lockfile.LockEntry{
 			Type:        sourceTypeGitHub,
 			RefResolved: ref,
+			Commit:      commit,
 			SyncedAt:    time.Now().UTC(),
 			Files: map[string]string{
 				relativePath: sha,
@@ -201,12 +207,12 @@ func (s *githubSource) syncDirectory(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	ref, err := s.resolveRef(ctx)
+	ref, commit, err := s.resolveCommit(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tree, err := s.fetchTree(ctx, ref)
+	tree, err := s.fetchTree(ctx, commit)
 	if err != nil {
 		return nil, err
 	}
@@ -219,6 +225,7 @@ func (s *githubSource) syncDirectory(
 
 		lockEntry.Type = sourceTypeGitHub
 		lockEntry.RefResolved = ref
+		lockEntry.Commit = commit
 		lockEntry.SyncedAt = time.Now().UTC()
 
 		return &SyncResult{
@@ -227,9 +234,13 @@ func (s *githubSource) syncDirectory(
 		}, nil
 	}
 
-	newFiles, err := s.buildFileMap(tree.Tree)
+	remoteFiles, err := s.buildFileMap(tree.Tree)
 	if err != nil {
 		return nil, err
+	}
+	newFiles := make(map[string]string, len(remoteFiles))
+	for relativePath, file := range remoteFiles {
+		newFiles[relativePath] = file.sha
 	}
 
 	oldFiles := map[string]string{}
@@ -246,7 +257,13 @@ func (s *githubSource) syncDirectory(
 			return nil, rootErr
 		}
 		defer root.Close()
-		if downloadErr := s.downloadFiles(ctx, root, toDownload); downloadErr != nil {
+		changed := make(map[string]remoteFile, len(toDownload))
+		for relativePath := range toDownload {
+			changed[relativePath] = remoteFiles[relativePath]
+		}
+		if downloadErr := s.downloadChanged(
+			ctx, root, commit, changed, repoBlobBytes(tree.Tree), s.downloadConcurrency(opts),
+		); downloadErr != nil {
 			return nil, downloadErr
 		}
 		if deleteErr := s.deleteStaleFiles(root, toDelete); deleteErr != nil {
@@ -261,30 +278,11 @@ func (s *githubSource) syncDirectory(
 			Type:        sourceTypeGitHub,
 			TreeSHA:     tree.SHA,
 			RefResolved: ref,
+			Commit:      commit,
 			SyncedAt:    time.Now().UTC(),
 			Files:       newFiles,
 		},
 	}, nil
-}
-
-func (s *githubSource) downloadFiles(ctx context.Context, root *os.Root, toDownload map[string]string) error {
-	for _, relativePath := range slices.Sorted(maps.Keys(toDownload)) {
-		if err := config.ValidatePath(filepath.FromSlash(relativePath)); err != nil {
-			return err
-		}
-		content, err := s.fetchBlobContent(ctx, toDownload[relativePath])
-		if err != nil {
-			return err
-		}
-		if atomicWriteErr := fsutil.AtomicWrite(
-			root,
-			filepath.FromSlash(relativePath),
-			content,
-		); atomicWriteErr != nil {
-			return atomicWriteErr
-		}
-	}
-	return nil
 }
 
 func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struct{}) error {
@@ -299,43 +297,6 @@ func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struc
 		cleanupEmptyDirs(root, filepath.Dir(local))
 	}
 	return nil
-}
-
-func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
-	if s.resolvedRef != "" {
-		return s.resolvedRef, nil
-	}
-
-	if s.source.Ref != "" {
-		s.resolvedRef = s.source.Ref
-		return s.resolvedRef, nil
-	}
-
-	endpoint := fmt.Sprintf("/repos/%s/%s", s.owner, s.repo)
-	result := &githubRepoResponse{}
-
-	if err := s.doGitHubGet(ctx, githubRequestSpec{
-		endpoint:   endpoint,
-		result:     result,
-		errContext: "fetching repository metadata",
-		statusDesc: "repository metadata",
-		statusHint: "Check that the repository exists and is accessible",
-		legacyCode: errs.LegacyGithubAPIError,
-		fields:     map[string]any{fieldRepo: s.source.Repo, errs.LegacyCodeField: errs.LegacyGithubAPIError},
-	}); err != nil {
-		return "", err
-	}
-
-	if result.DefaultBranch == "" {
-		return "", errs.New(
-			errs.Network,
-			"github repository metadata did not include default branch",
-			errs.WithFields(map[string]any{fieldRepo: s.source.Repo, errs.LegacyCodeField: errs.LegacyGithubAPIError}),
-		)
-	}
-
-	s.resolvedRef = result.DefaultBranch
-	return s.resolvedRef, nil
 }
 
 func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeResponse, error) {
@@ -425,7 +386,7 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 		accept:     githubRawMediaType,
 		raw:        &content,
 		errContext: "downloading blob",
-		statusDesc: "blob",
+		statusDesc: gitObjectBlob,
 		legacyCode: errs.LegacyDownloadFailed,
 		fields: map[string]any{
 			fieldRepo:            s.source.Repo,
@@ -439,16 +400,16 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 	return content, nil
 }
 
-func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]string, error) {
+func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]remoteFile, error) {
 	basePath := normalizeRepoPath(s.source.Path)
 	patterns := s.source.Patterns
 	if len(patterns) == 0 {
 		patterns = config.DefaultPatterns()
 	}
 
-	files := make(map[string]string)
+	files := make(map[string]remoteFile)
 	for _, entry := range treeEntries {
-		if entry.Type != "blob" || entry.Path == "" || entry.SHA == "" {
+		if entry.Type != gitObjectBlob || entry.Path == "" || entry.SHA == "" {
 			continue
 		}
 
@@ -466,10 +427,22 @@ func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]s
 			continue
 		}
 
-		files[relativePath] = entry.SHA
+		files[relativePath] = remoteFile{repoPath: normalizeRepoPath(entry.Path), sha: entry.SHA, size: entry.Size}
 	}
 
 	return files, nil
+}
+
+// repoBlobBytes sums every blob in the recursive tree: the size of a
+// repository tarball before compression.
+func repoBlobBytes(treeEntries []githubTreeEntry) int64 {
+	var total int64
+	for _, entry := range treeEntries {
+		if entry.Type == gitObjectBlob {
+			total += entry.Size
+		}
+	}
+	return total
 }
 
 func diffDownloads(newFiles map[string]string, oldFiles map[string]string, force bool) map[string]string {

@@ -43,6 +43,8 @@ func TestableGitHubSource(
 		http:        client,
 		apiBase:     mockGitHubAPIBase,
 		resolvedRef: resolvedRef,
+		// Mocks key routes by the ref name, so treat it as the resolved commit.
+		resolvedCommit: resolvedRef,
 	}
 }
 

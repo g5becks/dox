@@ -321,6 +321,21 @@ func TestConfigValidate(t *testing.T) {
 			wantErrContains: "invalid max_per_host -1",
 		},
 		{
+			name: "download_concurrency above limit",
+			cfg: &config.Config{
+				DownloadConcurrency: 65,
+				Sources:             map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid download_concurrency 65",
+		},
+		{
+			name: "download_concurrency within limit",
+			cfg: &config.Config{
+				DownloadConcurrency: 4,
+				Sources:             map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+		},
+		{
 			name: "max_per_host within limit",
 			cfg: &config.Config{
 				MaxPerHost: 8,

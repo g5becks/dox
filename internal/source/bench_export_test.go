@@ -17,6 +17,6 @@ func NewBenchmarkGitHubSource(tb testing.TB, serverURL string) Source {
 	if !ok {
 		tb.Fatal("expected a GitHub source")
 	}
-	github.apiBase = serverURL + "/api"
+	setFixtureBases(github, serverURL+"/api")
 	return src
 }

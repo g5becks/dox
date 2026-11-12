@@ -45,6 +45,9 @@ const initTemplate = `# dox.toml - Documentation source configuration
 #
 # Max concurrent HTTP requests to one host across all sources (default: 16)
 # max_per_host = 16
+#
+# Max concurrent file downloads within one GitHub source (default: 8)
+# download_concurrency = 8
 
 # Per-source sync and HTTP request timeout (default: "30s")
 # Override per-command with: dox sync --timeout 30s

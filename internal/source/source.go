@@ -30,6 +30,9 @@ type SyncOptions struct {
 	Force     bool
 	DryRun    bool
 	OnWarning func(string)
+	// DownloadConcurrency bounds concurrent file downloads within one source
+	// (DefaultDownloadConcurrency when <= 0).
+	DownloadConcurrency int
 }
 
 // Source defines a documentation source that can be synced.

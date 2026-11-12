@@ -20,8 +20,8 @@ func TestLoadReturnsEmptyLockWhenFileMissing(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if lock.Version != 1 {
-		t.Fatalf("Version = %d, want 1", lock.Version)
+	if lock.Version != 2 {
+		t.Fatalf("Version = %d, want 2", lock.Version)
 	}
 
 	if len(lock.Sources) != 0 {
@@ -62,8 +62,8 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if loaded.Version != 1 {
-		t.Fatalf("Version = %d, want 1", loaded.Version)
+	if loaded.Version != 2 {
+		t.Fatalf("Version = %d, want 2", loaded.Version)
 	}
 
 	githubEntry := loaded.GetEntry("goreleaser")
@@ -178,5 +178,38 @@ func TestSaveOnNilLockReturnsError(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "cannot save nil lock file") {
 		t.Fatalf("Save() error = %q, expected nil-lock message", err.Error())
+	}
+}
+
+func TestLoadVersion1LockUpgradesWithoutLosingEntries(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	v1 := `{"version":1,"sources":{"docs":{"type":"github","tree_sha":"tree-1",` +
+		`"ref_resolved":"main","synced_at":"2026-01-02T03:04:05Z","files":{"a.md":"sha-a"}}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".dox.lock"), []byte(v1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := lockfile.Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if lock.Version != 2 {
+		t.Fatalf("Version = %d, want 2", lock.Version)
+	}
+	entry := lock.GetEntry("docs")
+	if entry == nil || entry.TreeSHA != "tree-1" || entry.RefResolved != "main" ||
+		entry.Commit != "" || entry.Files["a.md"] != "sha-a" {
+		t.Fatalf("v1 entry not preserved: %+v", entry)
+	}
+	entry.Commit = "c0ffee"
+	if saveErr := lock.Save(dir); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	reloaded, err := lockfile.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.GetEntry("docs").Commit; got != "c0ffee" {
+		t.Fatalf("Commit after round trip = %q", got)
 	}
 }

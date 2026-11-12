@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	fileName       = ".dox.lock"
-	currentVersion = 1
+	fileName = ".dox.lock"
+	// currentVersion 2 adds LockEntry.Commit; version 1 locks load unchanged.
+	currentVersion = 2
 )
 
 type LockFile struct {
@@ -26,6 +27,7 @@ type LockEntry struct {
 	Type        string            `json:"type"`
 	TreeSHA     string            `json:"tree_sha,omitempty"`
 	RefResolved string            `json:"ref_resolved,omitempty"`
+	Commit      string            `json:"commit,omitempty"`
 	ETag        string            `json:"etag,omitempty"`
 	LastMod     string            `json:"last_modified,omitempty"`
 	SyncedAt    time.Time         `json:"synced_at"`
@@ -57,7 +59,8 @@ func Load(outputDir string) (*LockFile, error) {
 		)
 	}
 
-	if lock.Version == 0 {
+	// Older versions are subsets of the current schema; upgrade them in place.
+	if lock.Version < currentVersion {
 		lock.Version = currentVersion
 	}
 

@@ -65,16 +65,18 @@ type RunResult struct {
 }
 
 type Options struct {
-	outputRoot  *os.Root
-	httpClient  *http.Client
-	sourceDir   string
-	SourceNames []string
-	Force       bool
-	DryRun      bool
-	MaxParallel int
-	Timeout     time.Duration
-	Clean       bool
-	OnEvent     func(Event) // optional; nil = silent
+	outputRoot *os.Root
+	httpClient *http.Client
+	// downloadConcurrency comes from config download_concurrency (0 = source default).
+	downloadConcurrency int
+	sourceDir           string
+	SourceNames         []string
+	Force               bool
+	DryRun              bool
+	MaxParallel         int
+	Timeout             time.Duration
+	Clean               bool
+	OnEvent             func(Event) // optional; nil = silent
 }
 
 type runState struct {
@@ -239,6 +241,7 @@ func executeSources(
 	perHost := 0
 	if cfg != nil {
 		perHost = cfg.MaxPerHost
+		opts.downloadConcurrency = cfg.DownloadConcurrency
 	}
 	// One client for the whole run: its pooled transport reuses connections per
 	// host, and its limiter bounds concurrent requests to each host.
@@ -420,9 +423,10 @@ func syncPreparedSource(
 		destinationDir,
 		previousLock,
 		source.SyncOptions{
-			Force:  opts.Force,
-			DryRun: opts.DryRun,
-			Root:   sourceRoot,
+			Force:               opts.Force,
+			DryRun:              opts.DryRun,
+			Root:                sourceRoot,
+			DownloadConcurrency: opts.downloadConcurrency,
 			OnWarning: func(msg string) {
 				emit(Event{Kind: EventWarning, Source: sourceName, Warning: msg})
 			},

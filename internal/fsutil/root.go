@@ -2,12 +2,15 @@
 package fsutil
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // DirMode is the permission policy for documentation output directories.
@@ -47,6 +50,27 @@ func AtomicWrite(root *os.Root, path string, data []byte) error {
 
 // AtomicWriteContext preserves the previous file when cancellation precedes publication.
 func AtomicWriteContext(ctx context.Context, root *os.Root, path string, data []byte) error {
+	return AtomicWriteReader(ctx, root, path, bytes.NewReader(data))
+}
+
+const copyBufferSize = 32 << 10
+
+// copyBuffers reuses copy buffers across the many small files of a sync.
+//
+//nolint:gochecknoglobals // A process-wide pool is the point of sync.Pool.
+var copyBuffers = sync.Pool{New: func() any {
+	buffer := make([]byte, copyBufferSize)
+	return &buffer
+}}
+
+// writerOnly hides *os.File's ReaderFrom, whose generic fallback would
+// allocate a fresh buffer instead of using the pooled one.
+type writerOnly struct{ io.Writer }
+
+// AtomicWriteReader streams r into a temporary file beside path and renames it
+// into place, so readers never observe a partial file and a failed or canceled
+// copy leaves the previous file untouched.
+func AtomicWriteReader(ctx context.Context, root *os.Root, path string, r io.Reader) error {
 	if cancelErr := ctx.Err(); cancelErr != nil {
 		return cancelErr
 	}
@@ -63,7 +87,14 @@ func AtomicWriteContext(ctx context.Context, root *os.Root, path string, data []
 		return err
 	}
 	defer func() { _ = root.Remove(temporary) }()
-	if _, err = file.Write(data); err != nil {
+	buffer, pooled := copyBuffers.Get().(*[]byte)
+	if !pooled {
+		fresh := make([]byte, copyBufferSize)
+		buffer = &fresh
+	}
+	_, err = io.CopyBuffer(writerOnly{file}, r, *buffer)
+	copyBuffers.Put(buffer)
+	if err != nil {
 		_ = file.Close()
 		return err
 	}

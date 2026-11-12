@@ -356,6 +356,7 @@ envelope to `stderr`:
 | `github_token` | string | `$GITHUB_TOKEN` or `$GH_TOKEN` | GitHub API token for private repos and higher rate limits |
 | `max_parallel` | int | `4 × CPU cores` (min 10, max 16) | Max concurrent source syncs |
 | `max_per_host` | int | `16` | Max concurrent HTTP requests to one host across all sources (1–64) |
+| `download_concurrency` | int | `8` | Max concurrent file downloads within one GitHub source (1–64) |
 | `excludes` | []string | `[]` | Global exclude patterns applied to all git sources |
 
 ### Git Sources
