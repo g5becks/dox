@@ -5,6 +5,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-12
+
 ### Changed
 
 - `max_parallel` is now validated: values outside 1–100 (for example `-1` or `1000`) fail config loading with exit code `2` and "invalid max_parallel". Before, they were silently accepted. **Migration:** set `max_parallel` between 1 and 100, or remove it to use the default (`4 × CPU cores`, min 10, max 16).
