@@ -196,6 +196,18 @@ func newRootCommand() *cli.Command {
 			newCatCommand(),
 			newOutlineCommand(),
 			newSearchCommand(),
+			newVersionCommand(),
+		},
+	}
+}
+
+func newVersionCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "version",
+		Usage: "Print the version",
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			cli.ShowVersion(cmd.Root())
+			return nil
 		},
 	}
 }

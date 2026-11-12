@@ -35,6 +35,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- `dox version` subcommand that prints the same version, commit, and build-time metadata as `dox --version`.
+
 - Local release preparation validates preconditions, creates a local annotated tag, runs the complete CI/snapshot/smoke checks, records binary sizes, and prints maintainer publication commands without executing them.
 
 - Project-pinned Buildx and a temporary Docker dispatcher make local snapshot image builds reproducible without a global Docker plugin installation.
