@@ -15,6 +15,7 @@ tool() {
 
 project_go version
 bash scripts/test-commit-msg.sh
+bash scripts/test-release-prep.sh
 if [[ "${1:-}" == windows-cross ]]; then
   export GOOS=windows GOARCH=amd64 CGO_ENABLED=0
   project_go vet ./...

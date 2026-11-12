@@ -175,3 +175,60 @@ snapshot checks do not modify that tap. Existing formula users must uninstall
 the formula and install the cask, as shown in README. Docker v2 publishes the
 main version/latest multi-platform tags and keeps the per-architecture aliases;
 snapshots build/load only architecture-suffixed local images without publishing.
+
+## Preparing a release locally
+
+The release-prep issue first verifies that every other epic child is closed;
+v0.4.0 also requires an empty `knownFailing` registry. Plan approval does not
+waive those release prerequisites. GitHub Actions is billing-locked, so use the
+macOS local runner with an already-running Docker daemon. Do not start Colima.
+
+On a clean `release/vX.Y.Z` branch with nonempty `[Unreleased]` entries:
+
+```sh
+bash scripts/release-prep.sh X.Y.Z --dry-run
+bash scripts/release-prep.sh X.Y.Z
+```
+
+Dry-run only reads preconditions; it changes no files or refs. Preflight rejects
+a wrong/detached branch, dirty index/tree, an empty changelog section, an existing
+local/origin tag, or an existing destination. The real run rolls the changelog,
+commits it and creates an annotated **local** tag. It then requires ci-local PASS
+on the tag, strict GoReleaser check and a complete snapshot through pinned Buildx.
+It verifies snapshot checksums, records every binary size, runs the native macOS
+arm64 binary's `--version` and URL sync, runs all Linux binaries (amd64, arm64,
+arm/v7) in digest-pinned containers, and checks container HTTPS. Foreign binaries
+use user-mode QEMU in a pinned, nonroot container; native binaries use the pinned
+CA base. This requires no privileged container, global emulator installation or
+VM/binfmt changes. The product image and HTTPS checks still use the CA base.
+
+Evidence lives in `/Users/takinprofit/Dev/dox-release/vX.Y.Z/`: `ci-tag.log`,
+`artifacts/`, `binary-sizes.json`, `binaries.tsv`, snapshot/config-check logs and
+native/container smoke logs. `DOX_RELEASE_ROOT` can select an owned temporary
+parent for integration tests. Destinations are created once and never reused or
+cleaned by a subsequent run. Snapshot versions have the configured `-next`
+suffix; they are verification artifacts, not published release binaries.
+
+The script never pushes refs or publishes: it prints maintainer commands only.
+After success, run ci-local on the release branch, open a PR with the changelog
+section and issue IDs, and attach both tag/branch tables. Merge with `--merge`
+without `--admin`; update main and confirm the local tag commit is its ancestor.
+The maintainer alone pushes the tag and runs a non-snapshot release. Pushing a Go
+tag can publish the module through the Go proxy. Preserve local tags throughout.
+
+A failed check stops preparation and preserves logs, commit and tag for review.
+Do not merge, repoint/delete tags, or rerun the whole script over that evidence.
+Mark the release-prep issue blocked with the failing step/log. Temporary network
+failures follow the documented 120/300/600-second same-command retry policy;
+record each attempt, and retry the failing step rather than erase its evidence.
+`bash scripts/test-release-prep.sh` checks preflight/dry-run behavior using owned
+local repositories. Full preparation is tested separately in an owned temporary
+clone with a local bare origin; that mechanics test does not prepare the actual
+release or waive its open-issue/known-failure prerequisites.
+
+Before actual release preparation, `bash scripts/test-release-prep-full.sh X.Y.Z`
+exercises the real script against committed HEAD in a new temporary clone and
+local bare origin. It installs fixture hooks, guards git/image pushes and
+non-snapshot GoReleaser execution, verifies dry-run immutability and unchanged
+origin/source refs, and preserves its full CI/snapshot/smoke evidence. This
+expensive test is manual to avoid recursively invoking CI inside every CI job.
