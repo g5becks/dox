@@ -3,7 +3,6 @@ package source
 import (
 	"context"
 	"fmt"
-	"io"
 	"maps"
 	"net/http"
 	neturl "net/url"
@@ -72,14 +71,21 @@ func (s *urlSource) Sync(
 	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
 	defer cancel()
 
-	request, err := s.syncRequest(sourceCtx, prevLock, opts)
+	method := http.MethodGet
+	if opts.DryRun {
+		// A dry run only needs to know whether the document changed.
+		method = http.MethodHead
+	}
+	response, err := s.send(sourceCtx, method, prevLock, opts)
+	if err == nil && opts.DryRun &&
+		(response.StatusCode == http.StatusMethodNotAllowed || response.StatusCode == http.StatusNotImplemented) {
+		// HEAD unsupported: ask for at most one byte and never read it.
+		_ = response.Body.Close()
+		response, err = s.send(sourceCtx, http.MethodGet, prevLock, opts, "Range", "bytes=0-0")
+	}
 	if err == nil {
-		var response *http.Response
-		response, err = s.http.Do(request)
-		if err == nil {
-			defer response.Body.Close()
-			return s.handleResponse(response, destDir, prevLock, opts)
-		}
+		defer response.Body.Close()
+		return s.handleResponse(sourceCtx, response, destDir, prevLock, opts)
 	}
 	return nil, errs.Wrap(
 		errs.Network,
@@ -95,6 +101,7 @@ func (s *urlSource) Sync(
 }
 
 func (s *urlSource) handleResponse(
+	ctx context.Context,
 	response *http.Response,
 	destDir string,
 	prevLock *lockfile.LockEntry,
@@ -133,29 +140,25 @@ func (s *urlSource) handleResponse(
 		)
 	}
 
-	content, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, errs.Wrap(
-			errs.Network,
-			fmt.Errorf("reading response body: %w", err),
-			errs.WithFields(
-				map[string]any{
-					fieldSource:          s.name,
-					sourceTypeURL:        s.source.URL,
-					errs.LegacyCodeField: errs.LegacyDownloadFailed,
-				},
-			),
-		)
-	}
-
 	if !opts.DryRun {
 		root, rootErr := destinationRoot(destDir, opts)
 		if rootErr != nil {
 			return nil, rootErr
 		}
 		defer root.Close()
-		if writeErr := fsutil.AtomicWrite(root, s.filename, content); writeErr != nil {
-			return nil, fmt.Errorf("writing URL source: %w", writeErr)
+		// Stream to a temporary file and rename, never holding the body in memory.
+		if writeErr := fsutil.AtomicWriteReader(ctx, root, s.filename, response.Body); writeErr != nil {
+			return nil, errs.Wrap(
+				errs.Network,
+				fmt.Errorf("downloading url source: %w", writeErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						sourceTypeURL:        s.source.URL,
+						errs.LegacyCodeField: errs.LegacyDownloadFailed,
+					},
+				),
+			)
 		}
 	}
 
@@ -196,12 +199,16 @@ func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {
 	return &cloned
 }
 
-func (s *urlSource) syncRequest(
+// send issues one request with the conditional headers from the previous
+// sync; extra is optional header name/value pairs.
+func (s *urlSource) send(
 	ctx context.Context,
+	method string,
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
-) (*http.Request, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.source.URL, nil)
+	extra ...string,
+) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(ctx, method, s.source.URL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +221,8 @@ func (s *urlSource) syncRequest(
 			request.Header.Set("If-Modified-Since", prevLock.LastMod)
 		}
 	}
-
-	return request, nil
+	for index := 0; index+1 < len(extra); index += 2 {
+		request.Header.Set(extra[index], extra[index+1])
+	}
+	return s.http.Do(request)
 }

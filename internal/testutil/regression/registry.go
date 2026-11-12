@@ -12,9 +12,7 @@ import (
 // KnownFailing returns a fresh copy of the fixed audit registry. Later fixes
 // remove entries here; new entries must not be added to hide regressions.
 func KnownFailing() map[string]string {
-	knownFailing := map[string]string{
-		"P9_dry_run_body": "dox-deb.27: HEAD dry-run",
-	}
+	knownFailing := map[string]string{}
 	return knownFailing
 }
 
