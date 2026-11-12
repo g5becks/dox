@@ -480,8 +480,9 @@ func resolveSourceNames(
 }
 
 // resolveToken returns the credential for a repo source's host: a
-// `tokens.<host>` entry first, then for github.com github_token, GITHUB_TOKEN
-// and GH_TOKEN, and for GitHub Enterprise hosts GH_ENTERPRISE_TOKEN.
+// `tokens.<host>` entry first, then GITLAB_TOKEN for GitLab, github_token,
+// GITHUB_TOKEN and GH_TOKEN for github.com, and GH_ENTERPRISE_TOKEN for GitHub
+// Enterprise hosts.
 func resolveToken(cfg *config.Config, sourceCfg config.Source) string {
 	if sourceCfg.Repo == "" {
 		return ""
@@ -489,11 +490,17 @@ func resolveToken(cfg *config.Config, sourceCfg config.Source) string {
 	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
 	if host == "" {
 		host = "github.com"
+		if sourceCfg.Type == "gitlab" {
+			host = "gitlab.com"
+		}
 	}
 	if token := cfg.Tokens[host]; token != "" {
 		return token
 	}
-	if host != "github.com" {
+	switch {
+	case sourceCfg.Type == "gitlab":
+		return os.Getenv("GITLAB_TOKEN")
+	case host != "github.com":
 		if sourceCfg.Type == "github" {
 			return os.Getenv("GH_ENTERPRISE_TOKEN")
 		}

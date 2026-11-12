@@ -1,11 +1,11 @@
-# Non-GitHub hosts and unsupported provider types fail config validation with
-# exit 2 before any network request (audit C4, dox-deb.17).
-doxexit 2 sync --config gitlab-host.toml
-stderr 'source type "gitlab" \(host "gitlab.com"\) for source "docs" is not supported yet \(planned for v0.5.0\)'
-stderr '^hint: dox currently syncs GitHub repositories '
+# Unsupported providers fail config validation with exit 2 before any network
+# request (audit C4, dox-deb.17). GitLab is supported since v0.5.0.
+dox list --config gitlab-host.toml
+stdout 'docs'
 
 doxexit 2 sync --config codeberg-host.toml
-stderr 'source type "codeberg" \(host "codeberg.org"\) for source "docs" is not supported yet'
+stderr 'source type "codeberg" \(host "codeberg.org"\) for source "docs" is not supported yet \(planned for v0.5.0\)'
+stderr '^hint: dox currently syncs GitHub repositories '
 
 # GitHub Enterprise hosts are supported since v0.5.0; an unknown host without
 # an explicit type is still rejected rather than queried as GitHub.
@@ -15,10 +15,10 @@ doxexit 2 sync --config unknown-host.toml
 stderr 'source type "git" \(host "git.mycorp.com"\) for source "docs" is not supported yet'
 stderr 'type = "github"'
 
-doxexit 2 sync --config gitlab-type.toml
-stderr 'source type "gitlab" for source "docs" is not supported yet'
+dox list --config gitlab-type.toml
+stdout 'docs'
 
-doxexit 2 list --config gitlab-host.toml
+doxexit 2 list --config codeberg-host.toml
 stderr 'not supported yet'
 
 -- gitlab-host.toml --

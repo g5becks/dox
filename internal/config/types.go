@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ const (
 	sourceTypeCodeberg = "codeberg"
 	sourceTypeGit      = "git"
 	githubHost         = "github.com"
+	gitlabHost         = "gitlab.com"
 	sourceTypeURL      = "url"
 )
 
@@ -266,6 +268,9 @@ func applyGitSourceDefaults(src Source, globalExcludes []string) Source {
 	// Default host to github.com if not specified
 	if src.Host == "" {
 		src.Host = githubHost
+		if src.Type == sourceTypeGitLab {
+			src.Host = gitlabHost
+		}
 	}
 
 	// Normalize type based on host if type is generic "git"
@@ -400,6 +405,15 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 	if err := validateSupportedProvider(sourceName, sourceCfg); err != nil {
 		return err
 	}
+	if sourceCfg.Type != sourceTypeGitLab && strings.Count(sourceCfg.Repo, "/") > 1 {
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid repo format %q for source %q", sourceCfg.Repo, sourceName),
+			errs.WithHint("Expected repo format: owner/repo (group/subgroup/project paths are GitLab-only)"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, fieldName: "repo", fieldValue: sourceCfg.Repo,
+				errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
 	// Validate that source has either repo or url (not both, not neither)
 	hasRepo := sourceCfg.Repo != ""
 	hasURL := sourceCfg.URL != ""
@@ -464,7 +478,7 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 // so accepting another host would query (or sync) the wrong repository.
 func validateSupportedProvider(sourceName string, sourceCfg Source) error {
 	switch sourceCfg.Type {
-	case sourceTypeGitLab, sourceTypeCodeberg, sourceTypeGit:
+	case sourceTypeCodeberg, sourceTypeGit:
 		what := fmt.Sprintf("source type %q", sourceCfg.Type)
 		if host := strings.TrimSpace(sourceCfg.Host); host != "" && !strings.EqualFold(host, githubHost) {
 			what += fmt.Sprintf(" (host %q)", host)
@@ -553,11 +567,12 @@ func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldE
 	}
 }
 
+// isValidRepo accepts owner/repo, and deeper group/subgroup/project paths,
+// which only GitLab sources may use (validateSource checks the type).
 func isValidRepo(repo string) bool {
 	parts := strings.Split(repo, "/")
-	if len(parts) != repoPartCount {
+	if len(parts) < repoPartCount {
 		return false
 	}
-
-	return parts[0] != "" && parts[1] != ""
+	return !slices.Contains(parts, "")
 }

@@ -204,17 +204,25 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "gitlab source not supported yet",
+			name: "gitlab source accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
 						Type: "gitlab",
-						Repo: "owner/repo",
+						Repo: "group/subgroup/project",
 						Path: "docs",
 					},
 				},
 			},
-			wantErrContains: "not supported yet (planned for v0.5.0)",
+		},
+		{
+			name: "subgroup path rejected for github",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "github", Repo: "group/subgroup/project", Path: "docs"},
+				},
+			},
+			wantErrContains: `invalid repo format "group/subgroup/project"`,
 		},
 		{
 			name: "codeberg source not supported yet",
@@ -383,13 +391,12 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "gitlab-inferred host not supported yet",
+			name: "self-managed gitlab host accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {Type: "gitlab", Repo: "owner/repo", Path: "docs", Host: "gitlab.example.com"},
 				},
 			},
-			wantErrContains: `source type "gitlab" (host "gitlab.example.com") for source "project" is not supported yet`,
 		},
 		{
 			name: "explicit github.com host accepted",

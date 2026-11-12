@@ -29,12 +29,19 @@ dox list
 stdout 'my-lib'
 stdout 'notes'
 
-# --host: github.com is accepted and kept; others are rejected (exit 2)
+# --host: github.com and GitLab hosts are accepted and kept; unsupported
+# providers are rejected (exit 2).
 dox add hosted -r owner/repo -p docs --host github.com
 grep '^host = "github.com"$' dox.toml
-doxexit 2 add gl -r owner/repo -p docs --host gitlab.com
-stderr 'source type "gitlab" \(host "gitlab.com"\) for source "gl" is not supported yet'
-! grep 'sources.gl' dox.toml
+dox add gl -r group/sub/project -p docs --host gitlab.com
+grep '^type = "gitlab"$' dox.toml
+grep '^repo = "group/sub/project"$' dox.toml
+grep '^host = "gitlab.com"$' dox.toml
+dox list
+stdout 'gl'
+doxexit 2 add cb -r owner/repo -p docs --host codeberg.org
+stderr 'source type "codeberg" \(host "codeberg.org"\) for source "cb" is not supported yet'
+! grep 'sources.cb' dox.toml
 
 # Names must be TOML bare keys
 doxexit 2 add 'bad.name' -r owner/repo -p docs

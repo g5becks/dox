@@ -27,6 +27,19 @@ type provider interface {
 	archiveRequest(ctx context.Context, commit string) (*http.Request, error)
 	// authorize adds credentials to a content (raw or archive) request.
 	authorize(request *http.Request)
+	// decorateAPI sets Accept (accept, or the provider's JSON default) and
+	// credentials on an API request.
+	decorateAPI(request *http.Request, accept string)
+	// apiName labels errors and warnings ("github", "gitlab").
+	apiName() string
+	// tokenHint tells users how to supply credentials for this host.
+	tokenHint() string
+}
+
+// folderSHAProvider can report a folder's tree SHA without listing it, so an
+// unchanged folder costs no listing calls.
+type folderSHAProvider interface {
+	folderSHA(ctx context.Context, commit string) (string, bool, error)
 }
 
 const githubHost = "github.com"
@@ -56,6 +69,24 @@ func (p *githubProvider) authorize(request *http.Request) {
 	if p.s.token != "" {
 		request.Header.Set("Authorization", "Bearer "+p.s.token)
 	}
+}
+
+func (p *githubProvider) decorateAPI(request *http.Request, accept string) {
+	if accept == "" {
+		accept = githubJSONMediaType
+	}
+	request.Header.Set("Accept", accept)
+	request.Header.Set("X-Github-Api-Version", githubAPIVersion)
+	p.authorize(request)
+}
+
+func (p *githubProvider) apiName() string { return "github" }
+
+func (p *githubProvider) tokenHint() string {
+	if p.enterprise {
+		return "Set tokens.<host> in dox.toml or GH_ENTERPRISE_TOKEN to authenticate"
+	}
+	return "Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits"
 }
 
 func (p *githubProvider) rawRequest(ctx context.Context, commit, repoPath string) (*http.Request, error) {

@@ -44,7 +44,7 @@ func renderSourceSection(sourceName string, sourceCfg config.Source) string {
 		fmt.Sprintf("type = %q", sourceCfg.Type),
 	}
 
-	if sourceCfg.Type == "github" {
+	if sourceCfg.Repo != "" {
 		lines = append(lines, fmt.Sprintf("repo = %q", sourceCfg.Repo))
 		if sourceCfg.Host != "" {
 			lines = append(lines, fmt.Sprintf("host = %q", sourceCfg.Host))

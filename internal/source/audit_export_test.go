@@ -10,8 +10,12 @@ import (
 
 // IsGitHubSource identifies the backend without making any request.
 func IsGitHubSource(src Source) bool {
-	_, ok := src.(*githubSource)
-	return ok
+	repoSource, ok := src.(*githubSource)
+	if !ok {
+		return false
+	}
+	_, gitHub := repoSource.provider.(*githubProvider)
+	return gitHub
 }
 
 // SetAuditGitHubEndpoint confines audit repros to their local server.

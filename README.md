@@ -414,9 +414,9 @@ envelope to `stderr`:
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `type` | No | Inferred from `repo` and `host` | `github` (github.com or GitHub Enterprise); GitLab and Gitea are planned |
-| `repo` | Yes | — | Repository in `owner/repo` format |
-| `host` | No | `github.com` | Git hosting domain; a GitHub Enterprise Server host is supported |
+| `type` | No | Inferred from `repo` and `host` | `github` (github.com or GitHub Enterprise) or `gitlab`; Gitea is planned |
+| `repo` | Yes | — | Repository in `owner/repo` format (GitLab: `group/subgroup/project` allowed) |
+| `host` | No | `github.com` (`gitlab.com` for `type = "gitlab"`) | Git hosting domain: github.com, GitHub Enterprise, gitlab.com or self-managed GitLab |
 | `path` | Yes | — | Path to directory or file in repo |
 | `ref` | No | Default branch (`HEAD`) | Branch, tag, or commit SHA; pinned to a commit at each sync |
 | `patterns` | No | `["**/*.md", "**/*.mdx", "**/*.txt"]` | Glob patterns for files to include |
@@ -452,10 +452,34 @@ dox calls `https://<host>/api/v3` and fetches content and archives through that
 API (GHE raw web URLs require a browser session). Tokens come from
 `tokens.<host>` in `dox.toml`, then `GH_ENTERPRISE_TOKEN`.
 
-**Planned:** GitLab and Codeberg/Gitea/Forgejo. Until they land,
-`type = "gitlab"`, `"codeberg"` or `"git"`, and hosts that infer those types
-(such as `gitlab.com`), fail validation with "not supported yet" (exit code 2)
-instead of silently querying GitHub.
+**GitLab (gitlab.com and self-managed):** hosts containing `gitlab` infer
+`type = "gitlab"`; otherwise set it. Subgroups are part of `repo`:
+
+<!-- doxtest: config -->
+
+```toml
+[sources.glab]
+repo = "gitlab-org/cli"
+host = "gitlab.com"
+path = "docs"
+
+[sources.handbook]
+type = "gitlab"
+host = "git.example.com"
+repo = "platform/docs/handbook"
+path = "content"
+```
+
+dox calls `https://<host>/api/v4`: one call pins the ref to a commit, one
+listing of the parent directory detects an unchanged folder, and changed
+folders are listed (paginated) and downloaded as raw files or a single
+folder archive. GitLab counts every API request, including raw files, toward
+its rate limit. Tokens come from `tokens.<host>`, then `GITLAB_TOKEN`, and are
+sent as `PRIVATE-TOKEN`.
+
+**Planned:** Codeberg/Gitea/Forgejo. Until it lands, `type = "codeberg"` or
+`"git"`, and hosts that infer those types (such as `codeberg.org`), fail
+validation with "not supported yet" (exit code 2).
 
 ### URL Sources
 
@@ -535,7 +559,7 @@ excludes = [
 - Relative config paths resolve from the config file directory.
 - Token resolution: `tokens.<host>` in config first; for github.com then
   `github_token` → `GITHUB_TOKEN` → `GH_TOKEN`; for GitHub Enterprise hosts then
-  `GH_ENTERPRISE_TOKEN`.
+  `GH_ENTERPRISE_TOKEN`; for GitLab then `GITLAB_TOKEN`.
   A token is needed for private repositories and for many GitHub sources per hour.
 - Parallelism uses an explicit `--parallel` value first, then config `max_parallel`, then `min(max(4 × CPU cores, 10), 16)`. An omitted flag (or `--parallel 0`) uses the fallback; explicit positive flag/config values can exceed 16. Pass `--parallel 3` to keep the previous accidental limit.
 

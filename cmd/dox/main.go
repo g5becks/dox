@@ -159,7 +159,13 @@ excludes = [
 # repo = "platform/handbook"
 # path = "docs"
 
-# --- Planned: GitLab and Codeberg/Gitea/Forgejo ---
+# --- GitLab (gitlab.com or self-managed; token: tokens.<host> or GITLAB_TOKEN) ---
+# [sources.gitlab-project]
+# repo = "group/subgroup/project"
+# host = "gitlab.com"                                # hosts containing "gitlab" infer type gitlab
+# path = "docs"
+
+# --- Planned: Codeberg/Gitea/Forgejo ---
 
 # --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]

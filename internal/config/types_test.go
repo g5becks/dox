@@ -151,14 +151,14 @@ func TestApplyDefaultsTypeInference(t *testing.T) {
 			wantHost: "",
 		},
 		{
-			name: "explicit type kept",
+			name: "explicit type kept with its default host",
 			source: Source{
 				Type: "gitlab",
 				Repo: "owner/repo",
 				Path: "docs",
 			},
 			wantType: "gitlab",
-			wantHost: "github.com",
+			wantHost: "gitlab.com",
 		},
 		{
 			name: "explicit host kept and decides the type",

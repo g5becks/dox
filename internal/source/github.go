@@ -30,6 +30,7 @@ const (
 	githubJSONMediaType = "application/vnd.github+json"
 	githubRawMediaType  = "application/vnd.github.raw"
 	gitObjectBlob       = "blob"
+	gitObjectTree       = "tree"
 	userAgent           = "dox"
 	httpRetryCount      = 3
 	rateLimitWarnThresh = 10
@@ -174,20 +175,7 @@ func (s *githubSource) syncSingleFile(
 	}
 
 	if !opts.Force && oldSHA != "" && oldSHA == sha {
-		lockEntry := cloneLockEntry(prevLock)
-		if lockEntry == nil {
-			lockEntry = &lockfile.LockEntry{Type: sourceTypeGitHub}
-		}
-
-		lockEntry.Type = sourceTypeGitHub
-		lockEntry.RefResolved = ref
-		lockEntry.Commit = commit
-		lockEntry.SyncedAt = time.Now().UTC()
-
-		return &SyncResult{
-			Skipped:   true,
-			LockEntry: lockEntry,
-		}, nil
+		return s.skippedResult(prevLock, ref, commit), nil
 	}
 
 	if !opts.DryRun {
@@ -209,7 +197,7 @@ func (s *githubSource) syncSingleFile(
 	return &SyncResult{
 		Downloaded: 1,
 		LockEntry: &lockfile.LockEntry{
-			Type:        sourceTypeGitHub,
+			Type:        s.lockType(),
 			RefResolved: ref,
 			Commit:      commit,
 			SyncedAt:    time.Now().UTC(),
@@ -231,8 +219,15 @@ func (s *githubSource) syncDirectory(
 		return nil, err
 	}
 
-	// Fetch only the configured folder's tree ("<commit>:<path>") and compare
-	// its own SHA, so commits elsewhere in the repository keep the fast path.
+	if unchanged, skipErr := s.unchangedBeforeListing(ctx, commit, prevLock, opts); skipErr != nil || unchanged {
+		if skipErr != nil {
+			return nil, skipErr
+		}
+		return s.skippedResult(prevLock, ref, commit), nil
+	}
+
+	// Fetch only the configured folder's tree and compare its own SHA, so
+	// commits elsewhere in the repository keep the fast path.
 	tree, err := s.provider.folderTree(ctx, commit)
 	if err != nil {
 		return nil, err
@@ -240,20 +235,7 @@ func (s *githubSource) syncDirectory(
 	folderSHA := tree.SHA
 
 	if !opts.Force && prevLock != nil && prevLock.TreeSHA == folderSHA {
-		lockEntry := cloneLockEntry(prevLock)
-		if lockEntry == nil {
-			lockEntry = &lockfile.LockEntry{Type: sourceTypeGitHub}
-		}
-
-		lockEntry.Type = sourceTypeGitHub
-		lockEntry.RefResolved = ref
-		lockEntry.Commit = commit
-		lockEntry.SyncedAt = time.Now().UTC()
-
-		return &SyncResult{
-			Skipped:   true,
-			LockEntry: lockEntry,
-		}, nil
+		return s.skippedResult(prevLock, ref, commit), nil
 	}
 
 	remoteFiles, err := s.buildFileMap(tree.Tree)
@@ -274,22 +256,8 @@ func (s *githubSource) syncDirectory(
 	toDelete := diffDeletes(oldFiles, newFiles)
 
 	if !opts.DryRun {
-		root, rootErr := destinationRoot(destDir, opts)
-		if rootErr != nil {
-			return nil, rootErr
-		}
-		defer root.Close()
-		changed := make(map[string]remoteFile, len(toDownload))
-		for relativePath := range toDownload {
-			changed[relativePath] = remoteFiles[relativePath]
-		}
-		if downloadErr := s.downloadChanged(
-			ctx, root, commit, changed, s.downloadConcurrency(opts),
-		); downloadErr != nil {
-			return nil, downloadErr
-		}
-		if deleteErr := s.deleteStaleFiles(root, toDelete); deleteErr != nil {
-			return nil, deleteErr
+		if applyErr := s.applyChanges(ctx, destDir, commit, remoteFiles, toDownload, toDelete, opts); applyErr != nil {
+			return nil, applyErr
 		}
 	}
 
@@ -297,7 +265,7 @@ func (s *githubSource) syncDirectory(
 		Downloaded: len(toDownload),
 		Deleted:    len(toDelete),
 		LockEntry: &lockfile.LockEntry{
-			Type:        sourceTypeGitHub,
+			Type:        s.lockType(),
 			TreeSHA:     folderSHA,
 			RefResolved: ref,
 			Commit:      commit,
@@ -305,6 +273,70 @@ func (s *githubSource) syncDirectory(
 			Files:       newFiles,
 		},
 	}, nil
+}
+
+// applyChanges downloads changed files and removes stale ones.
+func (s *githubSource) applyChanges(
+	ctx context.Context,
+	destDir, commit string,
+	remoteFiles map[string]remoteFile,
+	toDownload map[string]string,
+	toDelete map[string]struct{},
+	opts SyncOptions,
+) error {
+	root, err := destinationRoot(destDir, opts)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	changed := make(map[string]remoteFile, len(toDownload))
+	for relativePath := range toDownload {
+		changed[relativePath] = remoteFiles[relativePath]
+	}
+	if downloadErr := s.downloadChanged(ctx, root, commit, changed, s.downloadConcurrency(opts)); downloadErr != nil {
+		return downloadErr
+	}
+	return s.deleteStaleFiles(root, toDelete)
+}
+
+// unchangedBeforeListing lets providers that can report the folder's tree SHA
+// cheaply skip an unchanged folder before listing it.
+func (s *githubSource) unchangedBeforeListing(
+	ctx context.Context,
+	commit string,
+	prevLock *lockfile.LockEntry,
+	opts SyncOptions,
+) (bool, error) {
+	shaProvider, ok := s.provider.(folderSHAProvider)
+	if !ok || opts.Force || prevLock == nil {
+		return false, nil
+	}
+	folderSHA, known, err := shaProvider.folderSHA(ctx, commit)
+	if err != nil {
+		return false, err
+	}
+	return known && prevLock.TreeSHA == folderSHA, nil
+}
+
+// skippedResult carries the previous lock entry forward for an unchanged source.
+func (s *githubSource) skippedResult(prevLock *lockfile.LockEntry, ref, commit string) *SyncResult {
+	lockEntry := cloneLockEntry(prevLock)
+	if lockEntry == nil {
+		lockEntry = &lockfile.LockEntry{}
+	}
+	lockEntry.Type = s.lockType()
+	lockEntry.RefResolved = ref
+	lockEntry.Commit = commit
+	lockEntry.SyncedAt = time.Now().UTC()
+	return &SyncResult{Skipped: true, LockEntry: lockEntry}
+}
+
+// lockType records the hosting type (github, gitlab, ...) in lock entries.
+func (s *githubSource) lockType() string {
+	if s.source.Type != "" {
+		return s.source.Type
+	}
+	return sourceTypeGitHub
 }
 
 func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struct{}) error {
@@ -335,7 +367,7 @@ func (p *githubProvider) fetchTree(ctx context.Context, ref string, recursive bo
 		query:      query,
 		result:     result,
 		errContext: "fetching tree",
-		statusDesc: "tree",
+		statusDesc: gitObjectTree,
 		statusHint: "Check repository, path, and ref in your config",
 		legacyCode: errs.LegacyGithubAPIError,
 		fields: map[string]any{

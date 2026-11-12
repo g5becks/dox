@@ -446,7 +446,7 @@ func (p *githubProvider) walkTree(ctx context.Context, treeID, directory string)
 		switch entry.Type {
 		case gitObjectBlob:
 			entries = append(entries, entry)
-		case "tree":
+		case gitObjectTree:
 			children, walkErr := p.walkTree(ctx, entry.SHA, entry.Path)
 			if walkErr != nil {
 				return nil, walkErr
