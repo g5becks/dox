@@ -21,6 +21,7 @@ import (
 	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/manifest"
+	"github.com/g5becks/dox/internal/runlock"
 	"github.com/g5becks/dox/internal/source"
 )
 
@@ -84,8 +85,11 @@ type Options struct {
 	// sources must match their recorded digests, and config drift fails.
 	Locked bool
 	// Check reports staleness without writing anything (implies DryRun).
-	Check   bool
-	OnEvent func(Event) // optional; nil = silent
+	Check bool
+	// LockTimeout bounds the wait for another sync or clean on the same output
+	// directory (runlock.DefaultTimeout when <= 0).
+	LockTimeout time.Duration
+	OnEvent     func(Event) // optional; nil = silent
 }
 
 type runState struct {
@@ -116,11 +120,21 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 	outputDir := paths.Output()
 	if !opts.DryRun {
-		root, rootErr := prepareOutput(paths, opts)
+		root, rootErr := paths.OpenOutput(!opts.Clean)
 		if rootErr != nil {
 			return nil, rootErr
 		}
 		defer root.Close()
+		// Serialize writers of this output directory (sync and clean) before
+		// anything is cleaned or written.
+		lock, lockErr := runlock.Acquire(ctx, root, opts.LockTimeout)
+		if lockErr != nil {
+			return nil, lockErr
+		}
+		defer func() { _ = lock.Release() }()
+		if prepareErr := prepareOutput(root, opts); prepareErr != nil {
+			return nil, prepareErr
+		}
 		opts.outputRoot = root
 	}
 
@@ -605,20 +619,13 @@ func processResults(
 	return errorCount, downloadedCount, deletedCount, skippedCount, firstErr
 }
 
-func prepareOutput(paths *config.Paths, opts Options) (*os.Root, error) {
-	root, err := paths.OpenOutput(!opts.Clean)
-	if err != nil {
-		return nil, err
-	}
+// prepareOutput clears owned output for --clean and marks the directory as
+// dox-owned; the caller holds the run lock.
+func prepareOutput(root *os.Root, opts Options) error {
 	if opts.Clean {
 		if cleanErr := config.CleanOutput(root); cleanErr != nil {
-			_ = root.Close()
-			return nil, cleanErr
+			return cleanErr
 		}
 	}
-	if markErr := config.MarkOutput(root); markErr != nil {
-		_ = root.Close()
-		return nil, markErr
-	}
-	return root, nil
+	return config.MarkOutput(root)
 }

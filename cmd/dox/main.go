@@ -20,6 +20,7 @@ import (
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
+	"github.com/g5becks/dox/internal/runlock"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
 )
@@ -269,6 +270,11 @@ func newSyncCommand() *cli.Command {
 				Name:  "check",
 				Usage: "Exit 3 if any source is stale versus upstream; writes nothing",
 			},
+			&cli.DurationFlag{
+				Name:  "lock-timeout",
+				Value: runlock.DefaultTimeout,
+				Usage: "How long to wait for another sync or clean on the same output directory",
+			},
 			&cli.IntFlag{
 				Name: "parallel", Aliases: []string{"p"},
 				Usage: "Maximum parallel source syncs (0 uses config or computed default)",
@@ -337,6 +343,11 @@ func newCleanCommand() *cli.Command {
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
+			&cli.DurationFlag{
+				Name:  "lock-timeout",
+				Value: runlock.DefaultTimeout,
+				Usage: "How long to wait for another sync or clean on the same output directory",
+			},
 		},
 		Action: cleanAction,
 	}
@@ -386,6 +397,7 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		Clean:       cmd.Bool("clean"),
 		Locked:      locked,
 		Check:       check,
+		LockTimeout: cmd.Duration("lock-timeout"),
 		OnEvent:     onEvent,
 	})
 
@@ -702,7 +714,7 @@ func resolveConfigPath(configPath string) (string, error) {
 	return config.FindConfigFile()
 }
 
-func cleanAction(_ context.Context, cmd *cli.Command) error {
+func cleanAction(ctx context.Context, cmd *cli.Command) error {
 	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
@@ -719,6 +731,11 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 	if requireOwnedErr := config.RequireOwned(root); requireOwnedErr != nil {
 		return requireOwnedErr
 	}
+	runLock, lockErr := runlock.Acquire(ctx, root, cmd.Duration("lock-timeout"))
+	if lockErr != nil {
+		return lockErr
+	}
+	defer func() { _ = runLock.Release() }()
 	selected := commandArgs(cmd)
 	if len(selected) == 0 {
 		return config.CleanOutput(root)

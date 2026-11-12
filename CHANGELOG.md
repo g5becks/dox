@@ -11,6 +11,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- `dox sync` and `dox clean` take an advisory lock on the output directory (`flock` on Unix, `LockFileEx` on Windows, file `.dox-run.lock`), so concurrent runs no longer race on `.dox.lock` and `manifest.json`. A second run waits up to `--lock-timeout` (default `30s`) and then exits 1 with a clear message. `sync --clean` now cleans only after taking the lock. Dry runs and `--check` stay lock-free.
+
 - Gitea, Forgejo and Codeberg sources (`type = "gitea"`, alias `"codeberg"`; inferred for hosts containing codeberg, gitea or forgejo; default host `codeberg.org`). They are commit-pinned, find the folder's tree with non-recursive `git/trees` listings (2 calls for a top-level folder), and list changes with paginated recursive trees, then download raw files or one repository archive. Tokens come from `tokens.<host>` or `GITEA_TOKEN`. Only `type = "git"` and unknown hosts without a type remain unsupported.
 
 - GitLab sources (gitlab.com and self-managed, API v4), with subgroup project paths (`repo = "group/subgroup/project"`). They are commit-pinned and use 2 API calls to detect an unchanged folder (commit plus parent listing). Changed folders get paginated listings, then raw files or a single folder archive. GitLab `RateLimit-*` headers and 429 responses are classified like GitHub's. Tokens come from `tokens.<host>` or `GITLAB_TOKEN` (sent as `PRIVATE-TOKEN`). `type = "gitlab"` now defaults its host to `gitlab.com`, and `dox add --host gitlab.com` writes a complete GitLab source.

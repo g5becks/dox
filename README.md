@@ -171,6 +171,11 @@ dox sync --check            # Exit 3 if any source is stale; writes nothing
 dox sync --locked           # Reproduce the lock exactly (for CI)
 ```
 
+Concurrent `dox sync` and `dox clean` runs on the same output directory are
+serialized with an advisory lock (`.dox-run.lock`): a second run waits up to
+`--lock-timeout` (default `30s`) and then fails with exit code 1. Dry runs and
+`--check` do not take the lock.
+
 `--check` compares each source with upstream without writing anything: it
 exits 0 when everything is current and 3 when a source would change
 (`dox --json sync --check` prints `{"stale": [...], "current": [...]}`).

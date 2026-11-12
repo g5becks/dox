@@ -8,6 +8,7 @@ import (
 
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/runlock"
 )
 
 const RootSentinel = ".dox-root"
@@ -184,7 +185,8 @@ func CleanOutput(root *os.Root) error {
 		return closeErr
 	}
 	for _, entry := range entries {
-		if entry.Name() == RootSentinel {
+		// The ownership marker stays, and so does the run lock the caller holds.
+		if entry.Name() == RootSentinel || entry.Name() == runlock.FileName {
 			continue
 		}
 		if removeAllErr := root.RemoveAll(entry.Name()); removeAllErr != nil {
