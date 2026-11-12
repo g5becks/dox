@@ -7,6 +7,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- Manifest generation reuses unchanged entries, parses changes in parallel, honors cancellation, and avoids rewriting unchanged snapshots. JSON is now compact with additive parser/SHA cache metadata. `generated` derives from input timestamps; without a lock timestamp, `last_sync` uses file mtime. Consumers should parse JSON and use source/lock timestamps for freshness rather than treat generation time or file rewrites as a clock. Existing manifests regenerate automatically.
+
 - Markdown/MDX outlines now use a linear line scanner with original source positions, matched code fences, and YAML/TOML metadata. `gomarkdown` is removed; Goldmark is limited to 256 KiB of inline text per file and metadata decoding to 64 KiB. Re-run `dox sync` after upgrading to regenerate corrected heading positions and metadata; oversized inline text keeps normalized source and oversized metadata is ignored. Corpus differences and fixture corrections are documented in `internal/parser/outline/README.md`.
 
 - The Docker image now uses a digest-pinned Distroless base with CA certificates and default nonroot UID 65532. HTTPS syncs work inside the image. For project bind mounts, migrate root-dependent setups to `--user "$(id -u):$(id -g)"` or grant UID 65532 access to the mounted directory.

@@ -3,6 +3,7 @@ package manifest_test
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/g5becks/dox/internal/benchdata"
@@ -16,6 +17,7 @@ func BenchmarkManifestGenerateFull(b *testing.B) {
 		b.Fatal(err)
 	}
 	cfg.Output = output
+	cfg.ConfigDir = filepath.Dir(output)
 	b.ReportAllocs()
 	for b.Loop() {
 		b.StopTimer()
@@ -37,6 +39,7 @@ func BenchmarkManifestGenerateNoop(b *testing.B) {
 		b.Fatal(err)
 	}
 	cfg.Output = output
+	cfg.ConfigDir = filepath.Dir(output)
 	if err := manifest.Generate(b.Context(), cfg, lock); err != nil {
 		b.Fatal(err)
 	}

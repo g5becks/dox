@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,9 +20,10 @@ const (
 )
 
 type Manifest struct {
-	Version     string                 `json:"version"`
-	Generated   time.Time              `json:"generated"`
-	Collections map[string]*Collection `json:"collections"`
+	ParserVersion int                    `json:"parser_version,omitempty"`
+	Version       string                 `json:"version"`
+	Generated     time.Time              `json:"generated"`
+	Collections   map[string]*Collection `json:"collections"`
 }
 
 type Collection struct {
@@ -39,6 +41,7 @@ type Collection struct {
 }
 
 type FileInfo struct {
+	SHA           string               `json:"sha,omitempty"`
 	Path          string               `json:"path"`
 	Type          string               `json:"type"`
 	Size          int64                `json:"size"`
@@ -119,6 +122,11 @@ func (m *Manifest) Save(outputDir string) error {
 
 // SaveRoot writes state through an already anchored output directory.
 func (m *Manifest) SaveRoot(root *os.Root) error {
+	return m.SaveRootContext(context.Background(), root)
+}
+
+// SaveRootContext checks cancellation before atomically publishing a compact snapshot.
+func (m *Manifest) SaveRootContext(ctx context.Context, root *os.Root) error {
 	if m == nil {
 		return errs.New(
 			errs.Internal,
@@ -128,7 +136,7 @@ func (m *Manifest) SaveRoot(root *os.Root) error {
 		)
 	}
 
-	data, err := json.MarshalIndent(m, "", "  ")
+	data, err := json.Marshal(m)
 	if err != nil {
 		return errs.Wrap(
 			errs.Internal,
@@ -137,7 +145,7 @@ func (m *Manifest) SaveRoot(root *os.Root) error {
 		)
 	}
 	data = append(data, '\n')
-	if atomicWriteErr := fsutil.AtomicWrite(root, ManifestFile, data); atomicWriteErr != nil {
+	if atomicWriteErr := fsutil.AtomicWriteContext(ctx, root, ManifestFile, data); atomicWriteErr != nil {
 		return errs.Wrap(
 			errs.Internal,
 			fmt.Errorf("writing manifest: %w", atomicWriteErr),

@@ -139,3 +139,14 @@ pathological growth ratio is 3.77, below the 5x target. Historical baseline
 confidence intervals remain limited by their three samples; see issue notes
 for complete benchstat output. Run the original `BenchmarkOutline` cases to
 repeat the measurements.
+
+## Incremental manifest comparison
+
+The unchanged v0.3.0 baseline has full/no-op manifest medians 710.8/705.7 ms.
+The incremental implementation measured 189.3/34.85 ms on the same machine
+(Go1.27.4, GOMAXPROCS10, six one-iteration samples). No-op allocation count fell
+from about 2,234,910 to 81,609 (96.35% fewer), and allocated bytes fell 94.09%.
+Full regeneration is 3.75x faster. Historical confidence intervals are limited
+by their three samples. `BenchmarkManifestGenerateFull` removes the manifest
+before each measured run; `BenchmarkManifestGenerateNoop` warms it once. Both
+copy the same pinned corpus into owned temporary output directories.

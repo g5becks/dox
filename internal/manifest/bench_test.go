@@ -16,7 +16,8 @@ func BenchmarkManifestLoad100Files(b *testing.B) {
 	setupBenchmarkFiles(b, doxDir, 100)
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"bench": {
 				Type: "github",
@@ -44,7 +45,8 @@ func BenchmarkManifestLoad1000Files(b *testing.B) {
 	setupBenchmarkFiles(b, doxDir, 1000)
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"bench": {
 				Type: "github",
@@ -72,7 +74,8 @@ func BenchmarkManifestGenerate100Files(b *testing.B) {
 	setupBenchmarkFiles(b, doxDir, 100)
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"bench": {
 				Type: "github",

@@ -2,6 +2,7 @@
 package fsutil
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -41,6 +42,14 @@ func OpenDir(path string) (*os.Root, error) {
 
 // AtomicWrite replaces a file through an opened root, including temp cleanup.
 func AtomicWrite(root *os.Root, path string, data []byte) error {
+	return AtomicWriteContext(context.Background(), root, path, data)
+}
+
+// AtomicWriteContext preserves the previous file when cancellation precedes publication.
+func AtomicWriteContext(ctx context.Context, root *os.Root, path string, data []byte) error {
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return cancelErr
+	}
 	if !filepath.IsLocal(path) || filepath.Clean(path) == "." {
 		return fmt.Errorf("invalid output filename %q", path)
 	}
@@ -60,6 +69,9 @@ func AtomicWrite(root *os.Root, path string, data []byte) error {
 	}
 	if err = file.Close(); err != nil {
 		return err
+	}
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return cancelErr
 	}
 	return root.Rename(temporary, path)
 }

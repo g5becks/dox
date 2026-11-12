@@ -97,6 +97,12 @@ dox sync
 
 4. Add `.dox/` to `.gitignore`.
 
+Manifest updates reuse unchanged entries and parse changed files in parallel.
+The manifest uses compact JSON; `generated` reflects input timestamps, and
+`last_sync` uses the lock timestamp or file mtime. An unchanged snapshot is not
+rewritten. Existing manifests regenerate automatically when cache metadata or
+parser semantics change.
+
 ## Config
 
 ```toml

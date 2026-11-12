@@ -2,6 +2,9 @@ package parser
 
 import "github.com/g5becks/dox/internal/parser/outline"
 
+// CurrentVersion invalidates cached parse results when extraction semantics change.
+const CurrentVersion = 2
+
 // Parser extracts description and outline from file content.
 type Parser interface {
 	Parse(path string, content []byte) (*ParseResult, error)
