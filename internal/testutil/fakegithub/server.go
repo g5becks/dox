@@ -3,11 +3,13 @@ package fakegithub
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,6 +36,8 @@ type Server struct {
 	routes  map[string]Response
 	calls   []string
 	started chan struct{}
+	// newConns counts accepted TCP connections, to prove connection reuse.
+	newConns atomic.Int64
 }
 
 func New(tb testing.TB, files int) *Server {
@@ -42,7 +46,13 @@ func New(tb testing.TB, files int) *Server {
 	base.Latency = 0
 	started := make(chan struct{}, 1)
 	f := &Server{base: base, routes: make(map[string]Response), started: started, Started: started}
-	server := httptest.NewServer(http.HandlerFunc(f.serveHTTP))
+	server := httptest.NewUnstartedServer(http.HandlerFunc(f.serveHTTP))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			f.newConns.Add(1)
+		}
+	}
+	server.Start()
 	f.URL = server.URL
 	f.client = server.Client()
 	tb.Cleanup(server.Close)
@@ -59,7 +69,10 @@ func (f *Server) Set(path string, response Response) {
 }
 
 func (f *Server) Client() *http.Client { return f.client }
-func (f *Server) APIURL() string       { return f.URL + "/api" }
+
+// NewConnections returns how many TCP connections the server has accepted.
+func (f *Server) NewConnections() int64 { return f.newConns.Load() }
+func (f *Server) APIURL() string        { return f.URL + "/api" }
 
 // Requests returns a copy of the observed paths, including canceled requests.
 func (f *Server) Requests() []string {

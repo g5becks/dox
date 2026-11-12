@@ -3,6 +3,9 @@ package source_test
 import (
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -11,6 +14,7 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/source"
 	"github.com/g5becks/dox/internal/testutil/fakegithub"
 )
@@ -177,4 +181,86 @@ func newTestGitHubSource(t *testing.T, apiURL string) source.Source {
 	t.Cleanup(func() { _ = src.Close() })
 	source.ConfigureGitHubTestRetry(src, apiURL, 3, time.Millisecond, time.Second)
 	return src
+}
+
+func TestSharedClientReusesConnectionsAndWritesRawBlobs(t *testing.T) {
+	t.Parallel()
+	const files = 40
+	server := fakegithub.New(t, files)
+	client := httpx.NewClient(10 * time.Second)
+	t.Cleanup(client.CloseIdleConnections)
+
+	src, err := source.NewWithHTTPClient(
+		"docs",
+		config.Source{Type: "github", Repo: "acme/docs", Path: "docs", Ref: "main"},
+		"",
+		client,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = src.Close() })
+	source.SetAuditGitHubEndpoint(src, server.APIURL())
+
+	dest := t.TempDir()
+	result, err := src.Sync(t.Context(), dest, nil, source.SyncOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Downloaded != files {
+		t.Fatalf("Downloaded = %d, want %d", result.Downloaded, files)
+	}
+	if got := server.NewConnections(); got < 1 || got > 2 {
+		t.Fatalf("new connections for %d requests = %d, want 1..2", len(server.Requests()), got)
+	}
+	content, err := os.ReadFile(filepath.Join(dest, "page-000.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "# Page 0\n\nDocumentation fixture.\n"; string(content) != want {
+		t.Fatalf("page-000.md = %q, want raw blob %q", content, want)
+	}
+}
+
+func TestURLSourceConditional304ReleasesHostSlot(t *testing.T) {
+	t.Parallel()
+	var conditional atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"v1"` {
+			conditional.Add(1)
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write([]byte("guide"))
+	}))
+	t.Cleanup(server.Close)
+	// One slot per host: a slot leaked by any response would block the next sync.
+	client := httpx.NewClientWithOptions(httpx.Options{Timeout: 5 * time.Second, PerHostLimit: 1})
+	t.Cleanup(client.CloseIdleConnections)
+	src, err := source.NewWithHTTPClient(
+		"guide",
+		config.Source{Type: "url", URL: server.URL + "/guide.txt"},
+		"",
+		client,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = src.Close() })
+
+	dest := t.TempDir()
+	first, err := src.Sync(t.Context(), dest, nil, source.SyncOptions{})
+	if err != nil || first.LockEntry.ETag != `"v1"` {
+		t.Fatalf("first sync = %+v, %v", first, err)
+	}
+	for range 3 {
+		again, syncErr := src.Sync(t.Context(), dest, first.LockEntry, source.SyncOptions{})
+		if syncErr != nil || !again.Skipped {
+			t.Fatalf("conditional sync = %+v, %v; want skipped", again, syncErr)
+		}
+	}
+	if got := conditional.Load(); got != 3 {
+		t.Fatalf("conditional requests = %d, want 3", got)
+	}
 }

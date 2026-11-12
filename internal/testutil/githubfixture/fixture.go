@@ -126,6 +126,11 @@ func (f *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
+		// Like GitHub, serve raw bytes for the raw media type and base64 JSON otherwise.
+		if r.Header.Get("Accept") == "application/vnd.github.raw" {
+			_, _ = w.Write(f.files[name]) // A client may cancel while a response is being sent.
+			return
+		}
 		writeJSON(
 			w,
 			map[string]string{"content": base64.StdEncoding.EncodeToString(f.files[name]), "encoding": "base64"},

@@ -16,7 +16,7 @@ func IsGitHubSource(src Source) bool {
 // SetAuditGitHubEndpoint confines audit repros to their local server.
 func SetAuditGitHubEndpoint(src Source, url string) {
 	github := src.(*githubSource)
-	github.client.SetBaseURL(url)
+	github.apiBase = url
 	github.maxRetries = 0
 	github.retriesConfigured = true
 }
@@ -24,7 +24,7 @@ func SetAuditGitHubEndpoint(src Source, url string) {
 // ConfigureGitHubTestRetry configures retry count, base backoff, and rate-limit wait bound for tests.
 func ConfigureGitHubTestRetry(src Source, url string, maxRetries int, baseWait, maxRateLimitWait time.Duration) {
 	github := src.(*githubSource)
-	github.client.SetBaseURL(url)
+	github.apiBase = url
 	github.maxRetries = maxRetries
 	github.retriesConfigured = true
 	github.retryBaseWait = baseWait
@@ -43,7 +43,7 @@ func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
 // ConfigureGitHubTestNetworkRetry injects a failing transport to count network retry attempts.
 func ConfigureGitHubTestNetworkRetry(src Source, attempts *atomic.Int64, maxRetries int, baseWait time.Duration) {
 	github := src.(*githubSource)
-	github.client.SetTransport(failingTransport{attempts: attempts})
+	github.http = &http.Client{Transport: failingTransport{attempts: attempts}}
 	github.maxRetries = maxRetries
 	github.retriesConfigured = true
 	github.retryBaseWait = baseWait

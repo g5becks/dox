@@ -2,7 +2,6 @@ package httpx_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -17,10 +16,14 @@ func TestNewClientConfiguresTimeoutsAndPool(t *testing.T) {
 	if client.Timeout != timeout {
 		t.Fatalf("client.Timeout = %v, want %v", client.Timeout, timeout)
 	}
-	transport, ok := client.Transport.(*http.Transport)
+	limited, ok := client.Transport.(*httpx.LimitedTransport)
 	if !ok {
 		t.Fatalf("unexpected transport type %T", client.Transport)
 	}
+	if limited.Limit() != httpx.DefaultPerHostLimit {
+		t.Fatalf("per-host limit = %d, want %d", limited.Limit(), httpx.DefaultPerHostLimit)
+	}
+	transport := limited.Unwrap()
 	if transport.ResponseHeaderTimeout != timeout {
 		t.Fatalf("ResponseHeaderTimeout = %v, want %v", transport.ResponseHeaderTimeout, timeout)
 	}

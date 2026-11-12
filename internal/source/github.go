@@ -2,7 +2,6 @@ package source
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"maps"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
@@ -28,6 +26,9 @@ import (
 const (
 	sourceTypeGitHub    = "github"
 	githubAPIBaseURL    = "https://api.github.com"
+	githubAPIVersion    = "2022-11-28"
+	githubJSONMediaType = "application/vnd.github+json"
+	githubRawMediaType  = "application/vnd.github.raw"
 	userAgent           = "dox"
 	httpRetryCount      = 3
 	rateLimitWarnThresh = 10
@@ -38,7 +39,10 @@ type githubSource struct {
 	source            config.Source
 	owner             string
 	repo              string
-	client            *resty.Client
+	http              *http.Client
+	ownsClient        bool
+	apiBase           string
+	token             string
 	timeout           time.Duration
 	maxRetries        int
 	retriesConfigured bool
@@ -70,13 +74,8 @@ type githubContentResponse struct {
 	SHA  string `json:"sha"`
 }
 
-type githubBlobResponse struct {
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"`
-}
-
 func newGitHubSource(name string, cfg config.Source, token string) (Source, error) {
-	return newGitHubSourceWithHTTP(name, cfg, token, httpx.NewClient(httpx.DefaultTimeout))
+	return newGitHubSourceWithHTTP(name, cfg, token, nil)
 }
 
 func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpClient *http.Client) (Source, error) {
@@ -84,22 +83,31 @@ func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpC
 	if err != nil {
 		return nil, err
 	}
-	if httpClient == nil {
+	ownsClient := httpClient == nil
+	if ownsClient {
 		httpClient = httpx.NewClient(httpx.DefaultTimeout)
 	}
 
 	return &githubSource{
-		name:    name,
-		source:  cfg,
-		owner:   owner,
-		repo:    repo,
-		client:  newGitHubClientWithHTTP(token, httpClient),
-		timeout: httpx.NormalizeTimeout(httpClient.Timeout),
+		name:       name,
+		source:     cfg,
+		owner:      owner,
+		repo:       repo,
+		http:       httpClient,
+		ownsClient: ownsClient,
+		apiBase:    githubAPIBaseURL,
+		token:      token,
+		timeout:    httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
+// Close releases idle connections of a client this source created; a shared
+// client belongs to the caller.
 func (s *githubSource) Close() error {
-	return s.client.Close()
+	if s.ownsClient {
+		s.http.CloseIdleConnections()
+	}
+	return nil
 }
 
 func (s *githubSource) Sync(
@@ -407,13 +415,15 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 	return result.SHA, nil
 }
 
+// fetchBlobContent downloads one blob as raw bytes (no JSON or base64).
 func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte, error) {
 	endpoint := fmt.Sprintf("/repos/%s/%s/git/blobs/%s", s.owner, s.repo, sha)
-	result := &githubBlobResponse{}
+	var content []byte
 
 	if err := s.doGitHubGet(ctx, githubRequestSpec{
 		endpoint:   endpoint,
-		result:     result,
+		accept:     githubRawMediaType,
+		raw:        &content,
 		errContext: "downloading blob",
 		statusDesc: "blob",
 		legacyCode: errs.LegacyDownloadFailed,
@@ -424,36 +434,6 @@ func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte
 		},
 	}); err != nil {
 		return nil, err
-	}
-
-	if result.Encoding != "base64" {
-		return nil, errs.New(
-			errs.Network,
-			fmt.Sprintf("unsupported blob encoding %q", result.Encoding),
-			errs.WithFields(
-				map[string]any{
-					fieldRepo:            s.source.Repo,
-					fieldSHA:             sha,
-					errs.LegacyCodeField: errs.LegacyDownloadFailed,
-				},
-			),
-		)
-	}
-
-	normalized := strings.ReplaceAll(result.Content, "\n", "")
-	content, err := base64.StdEncoding.DecodeString(normalized)
-	if err != nil {
-		return nil, errs.Wrap(
-			errs.Network,
-			fmt.Errorf("decoding blob content: %w", err),
-			errs.WithFields(
-				map[string]any{
-					fieldRepo:            s.source.Repo,
-					fieldSHA:             sha,
-					errs.LegacyCodeField: errs.LegacyDownloadFailed,
-				},
-			),
-		)
 	}
 
 	return content, nil
@@ -642,21 +622,4 @@ func parseRepo(repo string) (string, string, error) {
 	}
 
 	return parts[0], parts[1], nil
-}
-
-func newGitHubClientWithHTTP(token string, httpClient *http.Client) *resty.Client {
-	if httpClient == nil {
-		httpClient = httpx.NewClient(httpx.DefaultTimeout)
-	}
-	client := resty.NewWithClient(httpClient)
-	client.SetBaseURL(githubAPIBaseURL)
-	client.SetHeader("Accept", "application/vnd.github.v3+json")
-	client.SetHeader("User-Agent", userAgent)
-	client.SetRetryCount(0)
-
-	if token != "" {
-		client.SetAuthToken(token)
-	}
-
-	return client
 }

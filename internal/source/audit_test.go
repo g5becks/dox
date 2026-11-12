@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"resty.dev/v3"
-
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/source"
@@ -180,7 +178,7 @@ func auditDryRun(t *testing.T) error {
 		"docs",
 		config.Source{URL: "https://example.invalid/guide.txt", Filename: "guide.txt"},
 	)
-	client := resty.New().SetTransport(auditTransport{read: &read})
+	client := &http.Client{Transport: auditTransport{read: &read}}
 	setClient(client)
 	defer src.Close()
 	_, err := src.Sync(t.Context(), t.TempDir(), nil, source.SyncOptions{DryRun: true})

@@ -10,8 +10,6 @@ import (
 	"path"
 	"time"
 
-	"resty.dev/v3"
-
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/fsutil"
@@ -20,15 +18,16 @@ import (
 )
 
 type urlSource struct {
-	name     string
-	source   config.Source
-	filename string
-	client   *resty.Client
-	timeout  time.Duration
+	name       string
+	source     config.Source
+	filename   string
+	http       *http.Client
+	ownsClient bool
+	timeout    time.Duration
 }
 
 func NewURL(name string, cfg config.Source) (Source, error) {
-	return newURLSourceWithHTTP(name, cfg, httpx.NewClient(httpx.DefaultTimeout))
+	return newURLSourceWithHTTP(name, cfg, nil)
 }
 
 func newURLSourceWithHTTP(name string, cfg config.Source, httpClient *http.Client) (Source, error) {
@@ -40,22 +39,28 @@ func newURLSourceWithHTTP(name string, cfg config.Source, httpClient *http.Clien
 	if err := config.ValidatePath(filename); err != nil {
 		return nil, err
 	}
-	if httpClient == nil {
+	ownsClient := httpClient == nil
+	if ownsClient {
 		httpClient = httpx.NewClient(httpx.DefaultTimeout)
 	}
-	client := resty.NewWithClient(httpClient)
 
 	return &urlSource{
-		name:     name,
-		source:   cfg,
-		filename: filename,
-		client:   client,
-		timeout:  httpx.NormalizeTimeout(httpClient.Timeout),
+		name:       name,
+		source:     cfg,
+		filename:   filename,
+		http:       httpClient,
+		ownsClient: ownsClient,
+		timeout:    httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
+// Close releases idle connections of a client this source created; a shared
+// client belongs to the caller.
 func (s *urlSource) Close() error {
-	return s.client.Close()
+	if s.ownsClient {
+		s.http.CloseIdleConnections()
+	}
+	return nil
 }
 
 func (s *urlSource) Sync(
@@ -67,24 +72,35 @@ func (s *urlSource) Sync(
 	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
 	defer cancel()
 
-	request := s.syncRequest(sourceCtx, prevLock, opts)
-
-	response, err := request.Get(s.source.URL)
-	if err != nil {
-		return nil, errs.Wrap(
-			errs.Network,
-			fmt.Errorf("downloading url source: %w", err),
-			errs.WithFields(
-				map[string]any{
-					fieldSource:          s.name,
-					sourceTypeURL:        s.source.URL,
-					errs.LegacyCodeField: errs.LegacyDownloadFailed,
-				},
-			),
-		)
+	request, err := s.syncRequest(sourceCtx, prevLock, opts)
+	if err == nil {
+		var response *http.Response
+		response, err = s.http.Do(request)
+		if err == nil {
+			defer response.Body.Close()
+			return s.handleResponse(response, destDir, prevLock, opts)
+		}
 	}
+	return nil, errs.Wrap(
+		errs.Network,
+		fmt.Errorf("downloading url source: %w", err),
+		errs.WithFields(
+			map[string]any{
+				fieldSource:          s.name,
+				sourceTypeURL:        s.source.URL,
+				errs.LegacyCodeField: errs.LegacyDownloadFailed,
+			},
+		),
+	)
+}
 
-	if response.StatusCode() == http.StatusNotModified {
+func (s *urlSource) handleResponse(
+	response *http.Response,
+	destDir string,
+	prevLock *lockfile.LockEntry,
+	opts SyncOptions,
+) (*SyncResult, error) {
+	if response.StatusCode == http.StatusNotModified {
 		lock := cloneLockEntry(prevLock)
 		if lock == nil {
 			lock = &lockfile.LockEntry{
@@ -101,19 +117,19 @@ func (s *urlSource) Sync(
 		}, nil
 	}
 
-	if response.StatusCode() < http.StatusOK || response.StatusCode() >= http.StatusMultipleChoices {
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, errs.New(
 			errs.Network,
-			fmt.Sprintf("url source returned non-success status %d", response.StatusCode()),
+			fmt.Sprintf("url source returned non-success status %d", response.StatusCode),
 			errs.WithFields(
 				map[string]any{
 					fieldSource:          s.name,
 					sourceTypeURL:        s.source.URL,
-					fieldStatus:          response.StatusCode(),
+					fieldStatus:          response.StatusCode,
 					errs.LegacyCodeField: errs.LegacyDownloadFailed,
 				},
 			),
-			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode()}),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode}),
 		)
 	}
 
@@ -147,8 +163,8 @@ func (s *urlSource) Sync(
 		Downloaded: 1,
 		LockEntry: &lockfile.LockEntry{
 			Type:     sourceTypeURL,
-			ETag:     response.Header().Get("ETag"),
-			LastMod:  response.Header().Get("Last-Modified"),
+			ETag:     response.Header.Get("ETag"),
+			LastMod:  response.Header.Get("Last-Modified"),
 			SyncedAt: time.Now().UTC(),
 		},
 	}, nil
@@ -180,16 +196,24 @@ func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {
 	return &cloned
 }
 
-func (s *urlSource) syncRequest(ctx context.Context, prevLock *lockfile.LockEntry, opts SyncOptions) *resty.Request {
-	request := s.client.R().SetContext(ctx)
+func (s *urlSource) syncRequest(
+	ctx context.Context,
+	prevLock *lockfile.LockEntry,
+	opts SyncOptions,
+) (*http.Request, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.source.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("User-Agent", userAgent)
 	if !opts.Force && prevLock != nil {
 		if prevLock.ETag != "" {
-			request.SetHeader("If-None-Match", prevLock.ETag)
+			request.Header.Set("If-None-Match", prevLock.ETag)
 		}
 		if prevLock.LastMod != "" {
-			request.SetHeader("If-Modified-Since", prevLock.LastMod)
+			request.Header.Set("If-Modified-Since", prevLock.LastMod)
 		}
 	}
 
-	return request
+	return request, nil
 }

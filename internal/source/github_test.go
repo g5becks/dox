@@ -1,7 +1,6 @@
 package source_test
 
 import (
-	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -170,7 +169,6 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 	t.Parallel()
 
 	destDir := t.TempDir()
-	encoded := base64.StdEncoding.EncodeToString([]byte("hello docs"))
 
 	src := source.TestableGitHubSource(t, "widgets", config.Source{
 		Repo: "acme/widgets",
@@ -180,7 +178,8 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 			Body: `{"type":"file","sha":"blob-1"}`,
 		},
 		"/repos/acme/widgets/git/blobs/blob-1": {
-			Body: `{"encoding":"base64","content":"` + encoded + `"}`,
+			Body:       "hello docs",
+			WantAccept: "application/vnd.github.raw",
 		},
 	}), "main")
 

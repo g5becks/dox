@@ -42,6 +42,9 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # Max parallel source syncs (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
+#
+# Max concurrent HTTP requests to one host across all sources (default: 16)
+# max_per_host = 16
 
 # Per-source sync and HTTP request timeout (default: "30s")
 # Override per-command with: dox sync --timeout 30s

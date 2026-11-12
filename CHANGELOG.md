@@ -57,6 +57,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Fixed
 
+- Network: one shared HTTP client per sync run now pools connections per host (HTTP/2 where offered), and a per-host limiter bounds concurrent requests to each host across all sources (`max_per_host`, default `16`, range 1–64). GitHub blobs are fetched with `Accept: application/vnd.github.raw` instead of base64 JSON. The pre-release `resty.dev/v3` dependency is removed in favor of `net/http`.
+
 - GitHub rate-limit classification now inspects 403/429 responses before status handling, waits when the reset is within 60 seconds, otherwise fails with `*errs.RateLimitError` and the `GITHUB_TOKEN`/`GH_TOKEN` hint, succeeds with a single low-quota warning when a 2xx response has `X-RateLimit-Remaining <= 10` (including `0`), and retries only 5xx/network errors (up to 3 retries) with jittered backoff, honoring `Retry-After` up to the same 60-second bound; 4xx responses are never retried. Warnings appear on stderr as `⚠ <source>: …` and are omitted from `--json` output.
 
 - `dox sync` now enforces configurable HTTP and per-source deadlines (`timeout = "30s"` in `dox.toml`, overridden by `dox sync --timeout <duration>`), isolates stalled sources so sibling sources still complete, honors `SIGINT`/`SIGTERM` cancellation across sync/manifest/search while saving completed sources' lock entries before exiting `130`.

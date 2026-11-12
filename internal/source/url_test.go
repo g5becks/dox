@@ -52,7 +52,7 @@ func TestURLSyncDownloadsFileAndUpdatesLock(t *testing.T) {
 		URL: "https://example.test/llms-full.txt",
 	})
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		headers := http.Header{}
 		headers.Set("ETag", `"abc123"`)
 		headers.Set("Last-Modified", "Tue, 15 Jan 2024 10:30:00 GMT")
@@ -99,7 +99,7 @@ func TestURLSyncSendsConditionalHeadersAndSkips304(t *testing.T) {
 	var ifNoneMatch string
 	var ifModifiedSince string
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		ifNoneMatch = req.Header.Get("If-None-Match")
 		ifModifiedSince = req.Header.Get("If-Modified-Since")
 
@@ -138,7 +138,7 @@ func TestURLSyncDryRunDoesNotWriteFile(t *testing.T) {
 		URL: "https://example.test/llms-full.txt",
 	})
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		return source.NewHTTPResponse(req, http.StatusOK, "dry-run-content", nil)
 	}))
 
@@ -165,7 +165,7 @@ func TestURLSyncReturnsErrorOnFailureStatus(t *testing.T) {
 		URL: "https://example.test/llms-full.txt",
 	})
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		return source.NewHTTPResponse(req, http.StatusBadGateway, "gateway error", nil)
 	}))
 

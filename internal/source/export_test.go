@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"resty.dev/v3"
-
 	"github.com/g5becks/dox/internal/config"
 )
 
@@ -27,7 +25,7 @@ func TestableGitHubSource(
 	t *testing.T,
 	name string,
 	cfg config.Source,
-	client *resty.Client,
+	client *http.Client,
 	resolvedRef string,
 ) Source {
 	t.Helper()
@@ -42,13 +40,14 @@ func TestableGitHubSource(
 		source:      cfg,
 		owner:       owner,
 		repo:        repo,
-		client:      client,
+		http:        client,
+		apiBase:     mockGitHubAPIBase,
 		resolvedRef: resolvedRef,
 	}
 }
 
 // TestableURLSource creates a urlSource and returns it as a Source + a setter for the client.
-func TestableURLSource(t *testing.T, name string, cfg config.Source) (Source, func(*resty.Client)) {
+func TestableURLSource(t *testing.T, name string, cfg config.Source) (Source, func(*http.Client)) {
 	t.Helper()
 
 	src, err := NewURL(name, cfg)
@@ -58,8 +57,8 @@ func TestableURLSource(t *testing.T, name string, cfg config.Source) (Source, fu
 
 	u := src.(*urlSource)
 
-	return u, func(client *resty.Client) {
-		u.client = client
+	return u, func(client *http.Client) {
+		u.http = client
 	}
 }
 
@@ -68,19 +67,19 @@ type MockHTTPResponse struct {
 	Status int
 	Body   string
 	Header http.Header
+	// WantAccept, when set, fails the test unless the request carries this Accept header.
+	WantAccept string
 }
 
-// NewMockGitHubClient creates a resty client with mock transport for external tests.
-func NewMockGitHubClient(t *testing.T, responses map[string]MockHTTPResponse) *resty.Client {
-	t.Helper()
+const mockGitHubAPIBase = "https://api.github.test"
 
-	client := resty.New().SetBaseURL("https://api.github.test")
-	client.SetTransport(&exportedMockTransport{
+// NewMockGitHubClient creates an HTTP client with a mock GitHub API transport for external tests.
+func NewMockGitHubClient(t *testing.T, responses map[string]MockHTTPResponse) *http.Client {
+	t.Helper()
+	return &http.Client{Transport: &exportedMockTransport{
 		t:         t,
 		responses: responses,
-	})
-
-	return client
+	}}
 }
 
 type exportedMockTransport struct {
@@ -99,6 +98,9 @@ func (m *exportedMockTransport) RoundTrip(req *http.Request) (*http.Response, er
 	response, ok := m.responses[key]
 	if !ok {
 		m.t.Fatalf("unexpected request %s %s", req.Method, key)
+	}
+	if response.WantAccept != "" && req.Header.Get("Accept") != response.WantAccept {
+		m.t.Fatalf("request %s Accept = %q, want %q", key, req.Header.Get("Accept"), response.WantAccept)
 	}
 
 	status := response.Status
@@ -133,12 +135,9 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req), nil
 }
 
-// NewMockRestyClient creates a resty client with a custom round-trip handler.
-func NewMockRestyClient(handler RoundTripFunc) *resty.Client {
-	client := resty.New()
-	client.SetTransport(handler)
-
-	return client
+// NewMockHTTPClient creates an HTTP client with a custom round-trip handler.
+func NewMockHTTPClient(handler RoundTripFunc) *http.Client {
+	return &http.Client{Transport: handler}
 }
 
 // NewHTTPResponse creates a mock HTTP response for tests.

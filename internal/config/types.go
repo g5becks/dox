@@ -16,6 +16,8 @@ const (
 	DefaultOutput  = ".dox"
 	DefaultTimeout = "30s"
 	repoPartCount  = 2
+	// maxPerHostLimit caps max_per_host, the per-host HTTP concurrency bound.
+	maxPerHostLimit = 64
 
 	// Source type constants.
 	sourceTypeGitHub   = "github"
@@ -104,6 +106,7 @@ type Config struct {
 	Timeout             string            `koanf:"timeout"`
 	GitHubToken         string            `koanf:"github_token"`
 	MaxParallel         int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
+	MaxPerHost          int               `koanf:"max_per_host" validate:"omitempty,min=1,max=64"`
 	Excludes            []string          `koanf:"excludes"`
 	Display             Display           `koanf:"display"`
 	Sources             map[string]Source `koanf:"sources"      validate:"required,dive"`
@@ -271,6 +274,20 @@ func (c *Config) Validate() error {
 		if _, err := httpx.ParseTimeout(errs.Config, c.Timeout); err != nil {
 			return err
 		}
+	}
+	if c.MaxPerHost != 0 && (c.MaxPerHost < 1 || c.MaxPerHost > maxPerHostLimit) {
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid max_per_host %d", c.MaxPerHost),
+			errs.WithHint(fmt.Sprintf("Use a value from 1 to %d, or omit it for the default of 16", maxPerHostLimit)),
+			errs.WithFields(
+				map[string]any{
+					fieldName:            "max_per_host",
+					fieldValue:           c.MaxPerHost,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 	}
 	v := newValidator()
 	if err := validateDisplay(v, c.Display); err != nil {

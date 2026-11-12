@@ -34,7 +34,7 @@ func TestURLUsesSuppliedRootAfterRename(t *testing.T) {
 	src, setClient := source.TestableURLSource(t, "docs", config.Source{URL: "https://example.test/guide.txt"})
 	defer src.Close()
 	setClient(
-		source.NewMockRestyClient(
+		source.NewMockHTTPClient(
 			func(req *http.Request) *http.Response { return source.NewHTTPResponse(req, http.StatusOK, "safe", nil) },
 		),
 	)

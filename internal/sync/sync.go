@@ -236,7 +236,13 @@ func executeSources(
 	var resultsMu stdsync.Mutex
 	token := resolveGitHubToken(cfg)
 	timeout := resolveTimeout(cfg, opts)
-	httpClient := httpx.NewClient(timeout)
+	perHost := 0
+	if cfg != nil {
+		perHost = cfg.MaxPerHost
+	}
+	// One client for the whole run: its pooled transport reuses connections per
+	// host, and its limiter bounds concurrent requests to each host.
+	httpClient := httpx.NewClientWithOptions(httpx.Options{Timeout: timeout, PerHostLimit: perHost})
 	defer httpClient.CloseIdleConnections()
 	opts.Timeout = timeout
 	opts.httpClient = httpClient

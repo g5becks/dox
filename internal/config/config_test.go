@@ -305,6 +305,29 @@ func TestConfigValidate(t *testing.T) {
 			wantErrContains: "unknown source type",
 		},
 		{
+			name: "max_per_host above limit",
+			cfg: &config.Config{
+				MaxPerHost: 65,
+				Sources:    map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid max_per_host 65",
+		},
+		{
+			name: "max_per_host negative",
+			cfg: &config.Config{
+				MaxPerHost: -1,
+				Sources:    map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid max_per_host -1",
+		},
+		{
+			name: "max_per_host within limit",
+			cfg: &config.Config{
+				MaxPerHost: 8,
+				Sources:    map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+		},
+		{
 			name: "git type not supported yet",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{

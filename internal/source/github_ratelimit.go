@@ -3,16 +3,17 @@ package source
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"math/big"
 	"net/http"
+	neturl "net/url"
 	"strconv"
 	"strings"
 	"time"
-
-	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/errs"
 )
@@ -28,7 +29,9 @@ const (
 type githubRequestSpec struct {
 	endpoint   string
 	query      map[string]string
-	result     any
+	accept     string  // defaults to githubJSONMediaType
+	result     any     // JSON destination for a 2xx response
+	raw        *[]byte // raw destination for a 2xx response (githubRawMediaType)
 	errContext string
 	statusDesc string
 	statusHint string
@@ -68,19 +71,71 @@ func (s *githubSource) doGitHubGet(ctx context.Context, spec githubRequestSpec) 
 		if respErr != nil {
 			return respErr
 		}
-		return nil
+		return s.decodeGitHubBody(spec, response)
 	}
 }
 
-func (s *githubSource) sendGitHubRequest(ctx context.Context, spec githubRequestSpec) (*resty.Response, error) {
-	request := s.client.R().SetContext(ctx)
-	for k, v := range spec.query {
-		request.SetQueryParam(k, v)
+// githubResponse is a fully read API response; bodies are small JSON documents
+// or single raw blobs, and reading them releases the per-host slot promptly.
+type githubResponse struct {
+	status int
+	header http.Header
+	body   []byte
+}
+
+func (r *githubResponse) isSuccess() bool {
+	return r.status >= http.StatusOK && r.status < http.StatusMultipleChoices
+}
+
+func (s *githubSource) sendGitHubRequest(ctx context.Context, spec githubRequestSpec) (*githubResponse, error) {
+	target := strings.TrimRight(s.apiBase, "/") + spec.endpoint
+	if len(spec.query) > 0 {
+		values := neturl.Values{}
+		for k, v := range spec.query {
+			values.Set(k, v)
+		}
+		target += "?" + values.Encode()
 	}
-	if spec.result != nil {
-		request.SetResult(spec.result)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
 	}
-	return request.Get(spec.endpoint)
+	accept := spec.accept
+	if accept == "" {
+		accept = githubJSONMediaType
+	}
+	request.Header.Set("Accept", accept)
+	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("X-Github-Api-Version", githubAPIVersion)
+	if s.token != "" {
+		request.Header.Set("Authorization", "Bearer "+s.token)
+	}
+	response, err := s.http.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &githubResponse{status: response.StatusCode, header: response.Header, body: body}, nil
+}
+
+func (s *githubSource) decodeGitHubBody(spec githubRequestSpec, response *githubResponse) error {
+	switch {
+	case spec.raw != nil:
+		*spec.raw = response.body
+	case spec.result != nil:
+		if err := json.Unmarshal(response.body, spec.result); err != nil {
+			return errs.Wrap(
+				errs.Network,
+				fmt.Errorf("%s: decoding response: %w", spec.errContext, err),
+				errs.WithFields(spec.fields),
+			)
+		}
+	}
+	return nil
 }
 
 func (s *githubSource) shouldRetryNetworkError(ctx context.Context, err error, attempt, maxRetries int) bool {
@@ -96,35 +151,35 @@ func (s *githubSource) wrapNetworkError(spec githubRequestSpec, err error) error
 }
 
 func (s *githubSource) evaluateGitHubResponse(
-	response *resty.Response,
+	response *githubResponse,
 	spec githubRequestSpec,
 	attempt, maxRetries int,
 	waitedForRateLimit *bool,
 ) (time.Duration, bool, error) {
 	now := time.Now().UTC()
 	if isRateLimitedResponse(response) {
-		resetTime, waitDuration, hasWait := parseRateLimitReset(response.Header(), now)
+		resetTime, waitDuration, hasWait := parseRateLimitReset(response.header, now)
 		if !*waitedForRateLimit && hasWait && waitDuration > 0 && waitDuration <= s.effectiveMaxRateLimitWait() {
 			*waitedForRateLimit = true
 			return waitDuration, true, nil
 		}
-		return 0, false, s.newRateLimitError(response.Header(), resetTime)
+		return 0, false, s.newRateLimitError(response.header, resetTime)
 	}
 
-	status := response.StatusCode()
+	status := response.status
 	if status >= http.StatusInternalServerError && attempt < maxRetries {
 		// A server asking for a longer pause than the wait bound is not worth
 		// blocking the sync on; fail with the status error instead.
-		if delay := s.retryDelayForResponse(attempt, response.Header(), now); delay <= s.effectiveMaxRateLimitWait() {
+		if delay := s.retryDelayForResponse(attempt, response.header, now); delay <= s.effectiveMaxRateLimitWait() {
 			return delay, true, nil
 		}
 	}
 
-	if !response.IsSuccess() {
+	if !response.isSuccess() {
 		return 0, false, s.newStatusError(status, spec)
 	}
 
-	s.observeQuotaHeader(response.Header())
+	s.observeQuotaHeader(response.header)
 	return 0, false, nil
 }
 
@@ -232,12 +287,12 @@ func (s *githubSource) observeQuotaHeader(header http.Header) {
 	}
 }
 
-func isRateLimitedResponse(response *resty.Response) bool {
-	status := response.StatusCode()
+func isRateLimitedResponse(response *githubResponse) bool {
+	status := response.status
 	if status != http.StatusForbidden && status != http.StatusTooManyRequests {
 		return false
 	}
-	header := response.Header()
+	header := response.header
 	if strings.TrimSpace(header.Get("X-Ratelimit-Remaining")) == "0" {
 		return true
 	}

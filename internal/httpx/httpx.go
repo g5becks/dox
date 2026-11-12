@@ -45,9 +45,25 @@ func NormalizeTimeout(d time.Duration) time.Duration {
 	return d
 }
 
-// NewClient constructs a shared HTTP client with request, response-header, and idle-connection bounds.
+// Options configures a shared client.
+type Options struct {
+	// Timeout bounds each request and its response headers (DefaultTimeout when <= 0).
+	Timeout time.Duration
+	// PerHostLimit bounds in-flight requests per host (DefaultPerHostLimit when <= 0).
+	PerHostLimit int
+}
+
+// NewClient constructs a shared HTTP client with request, response-header,
+// idle-connection and per-host concurrency bounds.
 func NewClient(timeout time.Duration) *http.Client {
-	effective := NormalizeTimeout(timeout)
+	return NewClientWithOptions(Options{Timeout: timeout})
+}
+
+// NewClientWithOptions constructs one client for all sources of a run: a single
+// pooled transport (HTTP/2 where offered) keeps connections per host, and a
+// LimitedTransport bounds concurrent requests to each host.
+func NewClientWithOptions(opts Options) *http.Client {
+	effective := NormalizeTimeout(opts.Timeout)
 	var transport *http.Transport
 	if base, ok := http.DefaultTransport.(*http.Transport); ok {
 		transport = base.Clone()
@@ -56,10 +72,11 @@ func NewClient(timeout time.Duration) *http.Client {
 	}
 	transport.ResponseHeaderTimeout = effective
 	transport.MaxIdleConnsPerHost = DefaultMaxIdleConnsPerHost
+	transport.ForceAttemptHTTP2 = true
 
 	return &http.Client{
 		Timeout:   effective,
-		Transport: transport,
+		Transport: NewLimitedTransport(transport, opts.PerHostLimit),
 	}
 }
 
