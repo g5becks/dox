@@ -54,6 +54,7 @@ type githubSource struct {
 	resolvedRef       string
 	resolvedCommit    string
 	tarballMinFiles   int
+	tarballByteBudget int64
 	warnedLowRL       atomic.Bool
 	onWarning         func(string)
 }
@@ -212,12 +213,15 @@ func (s *githubSource) syncDirectory(
 		return nil, err
 	}
 
-	tree, err := s.fetchTree(ctx, commit)
+	// Fetch only the configured folder's tree ("<commit>:<path>") and compare
+	// its own SHA, so commits elsewhere in the repository keep the fast path.
+	tree, err := s.fetchFolderTree(ctx, commit)
 	if err != nil {
 		return nil, err
 	}
+	folderSHA := tree.SHA
 
-	if !opts.Force && prevLock != nil && prevLock.TreeSHA == tree.SHA {
+	if !opts.Force && prevLock != nil && prevLock.TreeSHA == folderSHA {
 		lockEntry := cloneLockEntry(prevLock)
 		if lockEntry == nil {
 			lockEntry = &lockfile.LockEntry{Type: sourceTypeGitHub}
@@ -262,7 +266,7 @@ func (s *githubSource) syncDirectory(
 			changed[relativePath] = remoteFiles[relativePath]
 		}
 		if downloadErr := s.downloadChanged(
-			ctx, root, commit, changed, repoBlobBytes(tree.Tree), s.downloadConcurrency(opts),
+			ctx, root, commit, changed, s.downloadConcurrency(opts),
 		); downloadErr != nil {
 			return nil, downloadErr
 		}
@@ -276,7 +280,7 @@ func (s *githubSource) syncDirectory(
 		Deleted:    len(toDelete),
 		LockEntry: &lockfile.LockEntry{
 			Type:        sourceTypeGitHub,
-			TreeSHA:     tree.SHA,
+			TreeSHA:     folderSHA,
 			RefResolved: ref,
 			Commit:      commit,
 			SyncedAt:    time.Now().UTC(),
@@ -299,13 +303,17 @@ func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struc
 	return nil
 }
 
-func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeResponse, error) {
+func (s *githubSource) fetchTree(ctx context.Context, ref string, recursive bool) (*githubTreeResponse, error) {
 	endpoint := fmt.Sprintf("/repos/%s/%s/git/trees/%s", s.owner, s.repo, neturl.PathEscape(ref))
 	result := &githubTreeResponse{}
+	var query map[string]string
+	if recursive {
+		query = map[string]string{"recursive": "1"}
+	}
 
 	if err := s.doGitHubGet(ctx, githubRequestSpec{
 		endpoint:   endpoint,
-		query:      map[string]string{"recursive": "1"},
+		query:      query,
 		result:     result,
 		errContext: "fetching tree",
 		statusDesc: "tree",
@@ -318,21 +326,6 @@ func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeRe
 		},
 	}); err != nil {
 		return nil, err
-	}
-
-	if result.Truncated {
-		return nil, errs.New(
-			errs.Network,
-			"github returned a truncated tree; contents fallback is not implemented",
-			errs.WithHint("Narrow the configured path to reduce tree size"),
-			errs.WithFields(
-				map[string]any{
-					fieldRepo:            s.source.Repo,
-					fieldRef:             ref,
-					errs.LegacyCodeField: errs.LegacyGithubAPIError,
-				},
-			),
-		)
 	}
 
 	return result, nil
@@ -431,18 +424,6 @@ func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]r
 	}
 
 	return files, nil
-}
-
-// repoBlobBytes sums every blob in the recursive tree: the size of a
-// repository tarball before compression.
-func repoBlobBytes(treeEntries []githubTreeEntry) int64 {
-	var total int64
-	for _, entry := range treeEntries {
-		if entry.Type == gitObjectBlob {
-			total += entry.Size
-		}
-	}
-	return total
 }
 
 func diffDownloads(newFiles map[string]string, oldFiles map[string]string, force bool) map[string]string {

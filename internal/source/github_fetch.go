@@ -12,6 +12,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,9 +40,10 @@ const (
 	// archive, while raw files cost ~60ms each at 8-way concurrency, so the
 	// crossover is ~50-100 files; 64 sits in that range.
 	defaultTarballMinFiles = 64
-	// The tarball holds the whole repository, so it is only used while the
-	// repository's blob bytes stay within this multiple of the changed bytes
-	// (or under tarballSizeFloor, where transfer time is negligible).
+	// The tarball holds the whole repository, whose size is unknown up front.
+	// Extraction stops after max(tarballSizeFactor x changed bytes,
+	// tarballSizeFloor) compressed bytes and fetches the rest as raw files, so
+	// a large repository costs at most that budget before falling back.
 	tarballSizeFactor = 8
 	tarballSizeFloor  = 16 << 20
 )
@@ -142,17 +144,23 @@ func (s *githubSource) effectiveTarballMinFiles() int {
 	return defaultTarballMinFiles
 }
 
-// useTarball reports whether one archive download is cheaper than per-file
-// raw downloads for this change set.
-func (s *githubSource) useTarball(toDownload map[string]remoteFile, repoBytes int64) bool {
-	if len(toDownload) < s.effectiveTarballMinFiles() {
-		return false
+// useTarball reports whether the change set is large enough for one archive
+// download to beat per-file raw downloads.
+func (s *githubSource) useTarball(toDownload map[string]remoteFile) bool {
+	return len(toDownload) >= s.effectiveTarballMinFiles()
+}
+
+// tarballBudget bounds the compressed archive bytes read before giving up on
+// the archive for this change set.
+func (s *githubSource) tarballBudget(toDownload map[string]remoteFile) int64 {
+	if s.tarballByteBudget > 0 {
+		return s.tarballByteBudget
 	}
 	var changedBytes int64
 	for _, file := range toDownload {
 		changedBytes += file.size
 	}
-	return repoBytes <= max(changedBytes*tarballSizeFactor, tarballSizeFloor)
+	return max(changedBytes*tarballSizeFactor, tarballSizeFloor)
 }
 
 // downloadChanged writes every changed file at commit, via one tarball when
@@ -163,7 +171,6 @@ func (s *githubSource) downloadChanged(
 	root *os.Root,
 	commit string,
 	toDownload map[string]remoteFile,
-	repoBytes int64,
 	concurrency int,
 ) error {
 	for relativePath := range toDownload {
@@ -172,7 +179,7 @@ func (s *githubSource) downloadChanged(
 		}
 	}
 	remaining := toDownload
-	if s.useTarball(toDownload, repoBytes) {
+	if s.useTarball(toDownload) {
 		var err error
 		remaining, err = s.extractTarball(ctx, root, commit, toDownload)
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -309,7 +316,8 @@ func (s *githubSource) extractTarball(
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, &errs.HTTPStatusError{Code: response.StatusCode}
 	}
-	compressed, err := gzip.NewReader(response.Body)
+	budget := &budgetReader{reader: response.Body, remaining: s.tarballBudget(toDownload)}
+	compressed, err := gzip.NewReader(budget)
 	if err != nil {
 		return nil, err
 	}
@@ -343,4 +351,101 @@ func (s *githubSource) extractTarball(
 		delete(remaining, relativePath)
 	}
 	return remaining, nil
+}
+
+// errTarballBudget stops an archive that is too large for its change set.
+var errTarballBudget = errors.New("tarball exceeds its byte budget; fetching remaining files individually")
+
+// budgetReader fails once more than remaining bytes have been read.
+type budgetReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func (b *budgetReader) Read(p []byte) (int, error) {
+	if b.remaining <= 0 {
+		return 0, errTarballBudget
+	}
+	if int64(len(p)) > b.remaining {
+		p = p[:b.remaining]
+	}
+	n, err := b.reader.Read(p)
+	b.remaining -= int64(n)
+	return n, err
+}
+
+// fetchFolderTree lists every blob of the configured folder at commit with
+// repository-relative paths. It requests the "<commit>:<path>" tree-ish, so
+// GitHub returns only that folder and its own tree SHA in one call, and walks
+// directory by directory when GitHub truncates the recursive listing.
+func (s *githubSource) fetchFolderTree(ctx context.Context, commit string) (*githubTreeResponse, error) {
+	base := normalizeRepoPath(s.source.Path)
+	treeish := commit
+	if base != "" {
+		treeish = commit + ":" + base
+	}
+	tree, err := s.fetchTree(ctx, treeish, true)
+	if err != nil {
+		if status, ok := errors.AsType[*errs.HTTPStatusError](
+			err,
+		); ok && status.Code == http.StatusNotFound &&
+			base != "" {
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("directory %q not found in %s at %s", base, s.source.Repo, commit),
+				errs.WithHint("Check 'path' (and 'ref') for this source in your config"),
+				errs.WithCause(errs.ErrSourceNotFound),
+				errs.WithFields(map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldPath:            base,
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				}),
+			)
+		}
+		return nil, err
+	}
+	if tree.Truncated {
+		entries, walkErr := s.walkTree(ctx, tree.SHA, "")
+		if walkErr != nil {
+			return nil, walkErr
+		}
+		tree.Tree, tree.Truncated = entries, false
+	}
+	// A folder's tree lists paths relative to the folder; restore repo paths.
+	if base != "" {
+		for index := range tree.Tree {
+			tree.Tree[index].Path = path.Join(base, tree.Tree[index].Path)
+		}
+	}
+	return tree, nil
+}
+
+func (s *githubSource) walkTree(ctx context.Context, treeID, directory string) ([]githubTreeEntry, error) {
+	tree, err := s.fetchTree(ctx, treeID, false)
+	if err != nil {
+		return nil, err
+	}
+	if tree.Truncated {
+		return nil, errs.New(
+			errs.Network,
+			fmt.Sprintf("github truncated the listing of directory %q", directory),
+			errs.WithHint("Narrow the configured path to a smaller directory"),
+			errs.WithFields(map[string]any{fieldRepo: s.source.Repo, errs.LegacyCodeField: errs.LegacyGithubAPIError}),
+		)
+	}
+	var entries []githubTreeEntry
+	for _, entry := range tree.Tree {
+		entry.Path = path.Join(directory, entry.Path)
+		switch entry.Type {
+		case gitObjectBlob:
+			entries = append(entries, entry)
+		case "tree":
+			children, walkErr := s.walkTree(ctx, entry.SHA, entry.Path)
+			if walkErr != nil {
+				return nil, walkErr
+			}
+			entries = append(entries, children...)
+		}
+	}
+	return entries, nil
 }

@@ -68,3 +68,8 @@ func SetGitHubTarballMinFiles(src Source, minFiles int) {
 func SetGitHubToken(src Source, token string) {
 	src.(*githubSource).token = token
 }
+
+// SetGitHubTarballByteBudget overrides the archive byte budget (0 restores the default).
+func SetGitHubTarballByteBudget(src Source, budget int64) {
+	src.(*githubSource).tarballByteBudget = budget
+}

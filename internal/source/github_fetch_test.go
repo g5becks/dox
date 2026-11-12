@@ -47,8 +47,14 @@ func TestDirectorySyncPinsCommitInLock(t *testing.T) {
 	f.Latency = 0
 	_, result := syncInto(t, fixtureSource(t, f))
 	entry := result.LockEntry
-	if entry.Commit != githubfixture.Commit || entry.RefResolved != "HEAD" || entry.TreeSHA != githubfixture.Tree {
-		t.Fatalf("lock entry = %+v, want commit %s, ref HEAD, tree %s", entry, githubfixture.Commit, githubfixture.Tree)
+	// tree_sha is the docs folder's own tree (dox-deb.23), not the root tree.
+	if entry.Commit != githubfixture.Commit || entry.RefResolved != "HEAD" || entry.TreeSHA != githubfixture.Subtree {
+		t.Fatalf(
+			"lock entry = %+v, want commit %s, ref HEAD, tree %s",
+			entry,
+			githubfixture.Commit,
+			githubfixture.Subtree,
+		)
 	}
 }
 

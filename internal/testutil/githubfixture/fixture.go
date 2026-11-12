@@ -149,6 +149,10 @@ func (f *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *Server) serveTree(w http.ResponseWriter, ref string) {
+	// "<commit>:docs" names the docs folder's tree, as on GitHub.
+	if ref == Commit+":docs" {
+		ref = Subtree
+	}
 	switch ref {
 	case "main", "HEAD", Commit, Tree, Subtree:
 	default:
