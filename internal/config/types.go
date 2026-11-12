@@ -18,6 +18,8 @@ const (
 	repoPartCount  = 2
 	// maxPerHostLimit caps max_per_host, the per-host HTTP concurrency bound.
 	maxPerHostLimit = 64
+	// maxParallelLimit caps max_parallel, the concurrent source sync bound.
+	maxParallelLimit = 100
 	// maxDownloadConcurrency caps download_concurrency, the per-source file download bound.
 	maxDownloadConcurrency = 64
 
@@ -277,6 +279,11 @@ func (c *Config) Validate() error {
 		if _, err := httpx.ParseTimeout(errs.Config, c.Timeout); err != nil {
 			return err
 		}
+	}
+	if err := validateOptionalRange(
+		"max_parallel", c.MaxParallel, maxParallelLimit, "4 × CPU cores, min 10, max 16",
+	); err != nil {
+		return err
 	}
 	if err := validateOptionalRange("max_per_host", c.MaxPerHost, maxPerHostLimit, "16"); err != nil {
 		return err
