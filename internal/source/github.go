@@ -122,6 +122,17 @@ func (s *githubSource) Sync(
 	opts SyncOptions,
 ) (*SyncResult, error) {
 	s.onWarning = opts.OnWarning
+	if opts.Locked {
+		if prevLock == nil || prevLock.Commit == "" {
+			return nil, errs.New(
+				errs.Config,
+				fmt.Sprintf("source %q has no locked commit", s.name),
+				errs.WithHint("Run 'dox sync' once to record commits, then use --locked"),
+				errs.WithFields(map[string]any{fieldSource: s.name, errs.LegacyCodeField: errs.LegacyLockError}),
+			)
+		}
+		s.resolvedRef, s.resolvedCommit = prevLock.RefResolved, prevLock.Commit
+	}
 	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
 	defer cancel()
 

@@ -5,6 +5,10 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+### Added
+
+- `dox sync --check` reports staleness without writing anything: exit 0 when every source is current, 3 when any would change; `--json` prints `{"stale": [...], "current": [...]}`. `dox sync --locked` reproduces the lock: GitHub sources fetch the locked commits, URL sources must match their recorded content digest, and config drift fails with exit code 2. Lock entries now record a `config_digest`, and URL entries record the content's `sha256` under `files`. Locks written before v0.5.0 need one plain `dox sync` before `--locked`.
+
 ## [0.4.0] - 2026-11-12
 
 ### Changed

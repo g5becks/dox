@@ -24,14 +24,17 @@ type LockFile struct {
 }
 
 type LockEntry struct {
-	Type        string            `json:"type"`
-	TreeSHA     string            `json:"tree_sha,omitempty"`
-	RefResolved string            `json:"ref_resolved,omitempty"`
-	Commit      string            `json:"commit,omitempty"`
-	ETag        string            `json:"etag,omitempty"`
-	LastMod     string            `json:"last_modified,omitempty"`
-	SyncedAt    time.Time         `json:"synced_at"`
-	Files       map[string]string `json:"files,omitempty"`
+	Type        string `json:"type"`
+	TreeSHA     string `json:"tree_sha,omitempty"`
+	RefResolved string `json:"ref_resolved,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	// ConfigDigest fingerprints the source's configuration at sync time, so
+	// `dox sync --locked` can detect config drift.
+	ConfigDigest string            `json:"config_digest,omitempty"`
+	ETag         string            `json:"etag,omitempty"`
+	LastMod      string            `json:"last_modified,omitempty"`
+	SyncedAt     time.Time         `json:"synced_at"`
+	Files        map[string]string `json:"files,omitempty"`
 }
 
 func Load(outputDir string) (*LockFile, error) {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -241,6 +243,14 @@ func newSyncCommand() *cli.Command {
 			},
 			&cli.BoolFlag{Name: "clean", Usage: "Clear owned output contents before syncing"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
+			&cli.BoolFlag{
+				Name:  "locked",
+				Usage: "Reproduce the lock: fetch locked commits and verify URL digests; fail on config drift",
+			},
+			&cli.BoolFlag{
+				Name:  "check",
+				Usage: "Exit 3 if any source is stale versus upstream; writes nothing",
+			},
 			&cli.IntFlag{
 				Name: "parallel", Aliases: []string{"p"},
 				Usage: "Maximum parallel source syncs (0 uses config or computed default)",
@@ -337,10 +347,15 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		timeout = parsedTimeout
 	}
 
+	check, locked := cmd.Bool("check"), cmd.Bool("locked")
+	if conflictErr := syncFlagConflicts(cmd, check, locked); conflictErr != nil {
+		return conflictErr
+	}
+
 	var onEvent func(doxsync.Event)
 	var printer *ui.SyncPrinter
 	if !jsonEnabled(cmd) {
-		printer = ui.NewSyncPrinter(cmd.Bool("dry-run"))
+		printer = ui.NewSyncPrinter(cmd.Bool("dry-run") || check)
 		onEvent = printer.HandleEvent
 	}
 
@@ -351,14 +366,66 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		MaxParallel: cmd.Int("parallel"),
 		Timeout:     timeout,
 		Clean:       cmd.Bool("clean"),
+		Locked:      locked,
+		Check:       check,
 		OnEvent:     onEvent,
 	})
 
 	if printer != nil {
 		printer.PrintSummary(result)
 	}
+	if check && jsonEnabled(cmd) && result != nil {
+		if writeErr := writeCheckJSON(cfg, commandArgs(cmd), result); writeErr != nil {
+			return writeErr
+		}
+	}
 
 	return runErr
+}
+
+// syncFlagConflicts rejects combinations whose meaning would be ambiguous.
+func syncFlagConflicts(cmd *cli.Command, check, locked bool) error {
+	conflict := ""
+	switch {
+	case check && locked:
+		conflict = "--check and --locked"
+	case check && cmd.Bool("clean"):
+		conflict = "--check and --clean"
+	case check && cmd.Bool("force"):
+		conflict = "--check and --force"
+	case locked && cmd.Bool("clean"):
+		conflict = "--locked and --clean"
+	}
+	if conflict == "" {
+		return nil
+	}
+	return errs.New(
+		errs.Usage,
+		conflict+" cannot be combined",
+		errs.WithHint("--check only reports staleness; --locked reproduces the lock"),
+		errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+	)
+}
+
+// writeCheckJSON prints {"stale": [...], "current": [...]} for sync --check.
+func writeCheckJSON(cfg *config.Config, selected []string, result *doxsync.RunResult) error {
+	names := selected
+	if len(names) == 0 {
+		names = slices.Sorted(maps.Keys(cfg.Sources))
+	}
+	current := []string{}
+	for _, name := range names {
+		if !slices.Contains(result.Stale, name) {
+			current = append(current, name)
+		}
+	}
+	stale := result.Stale
+	if stale == nil {
+		stale = []string{}
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(map[string][]string{"stale": stale, "current": current})
 }
 
 func commandArgs(cmd *cli.Command) []string {

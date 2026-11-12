@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"runtime"
 	"slices"
+	"strings"
 	stdsync "sync"
 	"time"
 
@@ -62,6 +64,8 @@ type RunResult struct {
 	Deleted    int
 	Skipped    int
 	Errors     int
+	// Stale lists, for Check runs, the sources that would change.
+	Stale []string
 }
 
 type Options struct {
@@ -76,7 +80,12 @@ type Options struct {
 	MaxParallel         int
 	Timeout             time.Duration
 	Clean               bool
-	OnEvent             func(Event) // optional; nil = silent
+	// Locked reproduces the lock: GitHub sources fetch the locked commits, URL
+	// sources must match their recorded digests, and config drift fails.
+	Locked bool
+	// Check reports staleness without writing anything (implies DryRun).
+	Check   bool
+	OnEvent func(Event) // optional; nil = silent
 }
 
 type runState struct {
@@ -93,6 +102,9 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		)
 	}
 
+	if opts.Check {
+		opts.DryRun = true
+	}
 	paths, err := cfg.Paths()
 	if err != nil {
 		return nil, err
@@ -122,6 +134,12 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
+	if opts.Locked {
+		if driftErr := checkLockDrift(cfg, lock, sourceNames, len(opts.SourceNames) == 0); driftErr != nil {
+			return nil, driftErr
+		}
+	}
+
 	emit := opts.OnEvent
 	if emit == nil {
 		emit = func(Event) {}
@@ -131,12 +149,31 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
+	return finishRun(ctx, cfg, opts, lock, sourceNames, results, emit)
+}
+
+// finishRun records results in the lock, persists them (except for dry runs)
+// and turns failures, interruption and staleness into errors.
+func finishRun(
+	ctx context.Context,
+	cfg *config.Config,
+	opts Options,
+	lock *lockfile.LockFile,
+	sourceNames []string,
+	results map[string]runState,
+	emit func(Event),
+) (*RunResult, error) {
 	errorCount, downloadedCount, deletedCount, skippedCount, firstErr := processResults(
 		lock,
 		sourceNames,
 		results,
 		opts.DryRun,
 	)
+	for _, sourceName := range sourceNames {
+		if entry := lock.GetEntry(sourceName); entry != nil && !opts.DryRun && results[sourceName].err == nil {
+			entry.ConfigDigest = cfg.Sources[sourceName].Digest()
+		}
+	}
 
 	if !opts.DryRun {
 		if commitErr := commitSync(ctx, cfg, lock, opts.outputRoot, emit); commitErr != nil {
@@ -155,6 +192,17 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	if errorCount > 0 {
 		return runResult, buildSyncFailure(ctx, errorCount, len(sourceNames), firstErr)
 	}
+	if opts.Check {
+		runResult.Stale = staleSources(sourceNames, results)
+		if len(runResult.Stale) > 0 {
+			return runResult, errs.New(
+				errs.Stale,
+				fmt.Sprintf("%d source(s) are stale: %s", len(runResult.Stale), strings.Join(runResult.Stale, ", ")),
+				errs.WithHint("Run 'dox sync' to update them"),
+				errs.WithFields(map[string]any{"stale": runResult.Stale}),
+			)
+		}
+	}
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return runResult, errs.Wrap(
 			errs.Interrupted,
@@ -166,6 +214,52 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	return runResult, nil
+}
+
+// staleSources lists sources whose dry run would download or delete files.
+func staleSources(sourceNames []string, results map[string]runState) []string {
+	stale := []string{}
+	for _, sourceName := range sourceNames {
+		result := results[sourceName].result
+		if result != nil && (result.Downloaded > 0 || result.Deleted > 0) {
+			stale = append(stale, sourceName)
+		}
+	}
+	return stale
+}
+
+// checkLockDrift fails when the lock cannot reproduce the selected sources:
+// a source is missing from the lock or its configuration changed since the
+// lock was written, or (for a full sync) the lock names unconfigured sources.
+func checkLockDrift(cfg *config.Config, lock *lockfile.LockFile, sourceNames []string, all bool) error {
+	var drift []string
+	for _, sourceName := range sourceNames {
+		entry := lock.GetEntry(sourceName)
+		switch {
+		case entry == nil:
+			drift = append(drift, sourceName+" (not in lock)")
+		case entry.ConfigDigest == "":
+			drift = append(drift, sourceName+" (lock predates config digests)")
+		case entry.ConfigDigest != cfg.Sources[sourceName].Digest():
+			drift = append(drift, sourceName+" (config changed)")
+		}
+	}
+	if all {
+		for _, lockedName := range slices.Sorted(maps.Keys(lock.Sources)) {
+			if _, configured := cfg.Sources[lockedName]; !configured {
+				drift = append(drift, lockedName+" (in lock, not in config)")
+			}
+		}
+	}
+	if len(drift) == 0 {
+		return nil
+	}
+	return errs.New(
+		errs.Config,
+		"config does not match the lock: "+strings.Join(drift, ", "),
+		errs.WithHint("Run 'dox sync' without --locked to update the lock, then commit it"),
+		errs.WithFields(map[string]any{"drift": drift, errs.LegacyCodeField: errs.LegacyLockError}),
+	)
 }
 
 func buildSyncFailure(ctx context.Context, errorCount, totalSources int, firstErr error) error {
@@ -425,6 +519,8 @@ func syncPreparedSource(
 		source.SyncOptions{
 			Force:               opts.Force,
 			DryRun:              opts.DryRun,
+			Locked:              opts.Locked,
+			Check:               opts.Check,
 			Root:                sourceRoot,
 			DownloadConcurrency: opts.downloadConcurrency,
 			OnWarning: func(msg string) {

@@ -1,6 +1,9 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -192,6 +195,32 @@ func (c *Config) ApplyDefaults() {
 		sourceCfg = applySourceDefaults(sourceCfg, c.Excludes)
 		c.Sources[sourceName] = sourceCfg
 	}
+}
+
+// sourceDigestInput is the stable, explicitly tagged form hashed by Digest;
+// renaming config keys must not silently change existing digests.
+type sourceDigestInput struct {
+	Type     string   `json:"type"`
+	Repo     string   `json:"repo"`
+	Host     string   `json:"host"`
+	Path     string   `json:"path"`
+	Ref      string   `json:"ref"`
+	Patterns []string `json:"patterns"`
+	Exclude  []string `json:"exclude"`
+	URL      string   `json:"url"`
+	Filename string   `json:"filename"`
+	Out      string   `json:"out"`
+}
+
+// Digest fingerprints every field that determines what a source syncs (after
+// defaults and global excludes are applied), as "sha256:<hex>".
+func (s Source) Digest() string {
+	canonical, err := json.Marshal(sourceDigestInput(s))
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(canonical)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func applySourceDefaults(src Source, globalExcludes []string) Source {

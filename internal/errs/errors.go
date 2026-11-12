@@ -17,8 +17,10 @@ const (
 	Network        Code = "network"
 	RateLimited    Code = "rate_limited"
 	PartialFailure Code = "partial_failure"
-	Internal       Code = "internal"
-	Interrupted    Code = "interrupted"
+	// Stale reports that `dox sync --check` found sources behind upstream.
+	Stale       Code = "stale"
+	Internal    Code = "internal"
+	Interrupted Code = "interrupted"
 )
 
 // Error carries user guidance and context while retaining a standard error chain.

@@ -162,7 +162,7 @@ func exitCodeForError(err error, detail *errs.Error) int {
 	switch detail.Code {
 	case errs.Usage, errs.Config:
 		return exitUsageConfig
-	case errs.PartialFailure:
+	case errs.PartialFailure, errs.Stale:
 		return exitPartialSync
 	case errs.NotFound:
 		return exitNotFound

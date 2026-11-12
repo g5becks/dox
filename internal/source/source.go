@@ -33,6 +33,13 @@ type SyncOptions struct {
 	// DownloadConcurrency bounds concurrent file downloads within one source
 	// (DefaultDownloadConcurrency when <= 0).
 	DownloadConcurrency int
+	// Locked reproduces the previous lock entry: GitHub sources fetch its
+	// commit, and URL sources must match its recorded content digest.
+	Locked bool
+	// Check (with DryRun) reports whether the source is current. URL sources
+	// without validators compare a content digest with the lock instead of
+	// assuming a change.
+	Check bool
 }
 
 // Source defines a documentation source that can be synced.

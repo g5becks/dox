@@ -167,7 +167,22 @@ dox sync --clean            # Clear owned output before syncing
 dox sync --dry-run          # Preview without downloading
 dox sync --parallel 5       # Override parallelism
 dox sync --timeout 15s      # Override per-source timeout
+dox sync --check            # Exit 3 if any source is stale; writes nothing
+dox sync --locked           # Reproduce the lock exactly (for CI)
 ```
+
+`--check` compares each source with upstream without writing anything: it
+exits 0 when everything is current and 3 when a source would change
+(`dox --json sync --check` prints `{"stale": [...], "current": [...]}`).
+GitHub sources compare folder tree SHAs; URL sources use `ETag`/`Last-Modified`
+or, without them, the content digest recorded in the lock.
+
+`--locked` reproduces `.dox/.dox.lock`: GitHub sources fetch the locked commits
+instead of resolving `ref`, and URL sources must match their recorded content
+digest (URLs cannot be pinned, only verified). It fails with exit code 2 when
+the config no longer matches the lock: a changed source definition, a source
+missing from the lock, or a locked source missing from the config. Commit the
+lock file to make syncs reproducible across machines.
 
 ### list
 

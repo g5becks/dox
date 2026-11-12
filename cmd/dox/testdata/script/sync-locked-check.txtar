@@ -1,0 +1,71 @@
+# dox sync --check and --locked (dox-4e1.1).
+
+# --check before any sync: stale (exit 3), and nothing is written.
+httpserve guide.txt
+envsubst config.in dox.toml
+doxexit 3 sync --check
+stderr '1 source\(s\) are stale: docs'
+! exists .dox
+
+# After a sync, --check is current (exit 0) and lists sources as JSON.
+dox sync
+exists .dox/.dox.lock
+grep '"commit"|"config_digest": "sha256:' .dox/.dox.lock
+cp .dox/.dox.lock lock.before
+dox --json sync --check
+stdout '"stale": \[\]'
+stdout '"current": \['
+cmp .dox/.dox.lock lock.before
+
+# --locked reproduces the lock while the config is unchanged.
+dox sync --locked --force
+cmp .dox/docs/guide.txt guide.txt
+
+# Upstream content changes: --check reports it via the content digest.
+cp .dox/.dox.lock lock.before
+cp .dox/docs/guide.txt synced.before
+cp guide-v2.txt guide.txt
+httpserve guide.txt
+envsubst config.in dox.toml
+doxexit 3 --json sync --check
+stdout '"stale": \[\s*"docs"\s*\]'
+cmp .dox/.dox.lock lock.before
+cmp .dox/docs/guide.txt synced.before
+
+# The URL in the config changed (new server): --locked refuses the drift.
+doxexit 2 sync --locked
+stderr 'config does not match the lock: docs \(config changed\)'
+stderr 'hint: Run ''dox sync'' without --locked'
+
+# Sources in the lock but not in the config are drift too.
+dox sync
+envsubst extra.in dox.toml
+doxexit 2 sync --locked
+stderr 'notes \(not in lock\)'
+
+# Ambiguous combinations are usage errors.
+doxexit 2 sync --check --locked
+stderr '--check and --locked cannot be combined'
+doxexit 2 sync --check --force
+stderr '--check and --force cannot be combined'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+-- extra.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+[sources.notes]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "notes.txt"
+-- guide.txt --
+Documentation fixture
+-- guide-v2.txt --
+Documentation fixture, revised
