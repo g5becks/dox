@@ -107,7 +107,7 @@ type Display struct {
 	DefaultLimit      int      `toml:"default_limit"`
 	DescriptionLength int      `toml:"description_length"`
 	LineNumbers       bool     `toml:"line_numbers"`
-	Format            string   `toml:"format"             validate:"omitempty,oneof=table json csv"`
+	Format            string   `toml:"format"             validate:"omitempty,oneof=table json jsonl csv"`
 	ListFields        []string `toml:"list_fields"`
 }
 
@@ -386,7 +386,7 @@ func validateDisplay(v *validator.Validate, display Display) error {
 					return errs.New(
 						errs.Config,
 						fmt.Sprintf("invalid display format %q", display.Format),
-						errs.WithHint("Supported formats: table, json, csv"),
+						errs.WithHint("Supported formats: table, json, jsonl, csv"),
 						errs.WithFields(
 							map[string]any{
 								fieldName:            "display.format",

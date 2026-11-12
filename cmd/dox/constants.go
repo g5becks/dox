@@ -17,4 +17,9 @@ const flagAllowExternalOutput = "allow-external-output"
 
 const flagLine = "line"
 
+const (
+	fieldLine = flagLine
+	fieldText = "text"
+	nameFiles = "files"
+)
 const flagVerbose = "verbose"

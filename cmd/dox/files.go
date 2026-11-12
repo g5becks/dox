@@ -19,31 +19,14 @@ import (
 
 func newFilesCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "files",
+		Name:      nameFiles,
 		Usage:     "List files in a collection",
 		ArgsUsage: "<collection>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    flagConfig,
-				Aliases: []string{"c"},
-				Usage:   helpConfig,
-			},
-			&cli.BoolFlag{
-				Name:  formatJSON,
-				Usage: helpJSON,
-			},
-			&cli.IntFlag{
-				Name:  flagLimit,
-				Usage: "Show first N files (0 = use config default)",
-			},
-			&cli.BoolFlag{
-				Name:  "all",
-				Usage: "Show all files (no limit)",
-			},
-			&cli.StringFlag{
-				Name:  "format",
-				Usage: "Output format: table, json, csv",
-			},
+			&cli.StringFlag{Name: flagFormat, Usage: helpFormat},
+			&cli.BoolFlag{Name: formatJSON, Usage: helpJSON},
+			&cli.IntFlag{Name: flagLimit, Usage: helpLimit},
+			&cli.BoolFlag{Name: "all", Usage: "Deprecated: use --limit 0 (removed in v0.6.0)"},
 			&cli.StringFlag{
 				Name:  "fields",
 				Usage: "Comma-separated fields: path,type,lines,size,description,modified",
@@ -89,15 +72,18 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 		return errs.New(
 			errs.NotFound,
 			fmt.Sprintf("collection %q not found", collectionName),
-			errs.WithHint("Run 'dox collections' to see available collections"),
+			errs.WithHint(collectionHint(collectionName, m)),
 			errs.WithFields(
 				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
 			),
 		)
 	}
 
-	limit := resolveLimit(cmd, cfg)
-	format := resolveFormat(cmd, cfg)
+	limit := resolveListLimit(cmd, cfg.Display.DefaultLimit)
+	format, err := resolveOutputFormat(cmd, cfg)
+	if err != nil {
+		return err
+	}
 	fields := resolveFields(cmd, cfg)
 	descLength := resolveDescLength(cmd, cfg)
 
@@ -113,31 +99,13 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 	switch format {
 	case formatJSON:
 		return outputFilesJSON(files)
-	case "csv":
+	case formatJSONL:
+		return writeJSONLines(files)
+	case formatCSV:
 		return outputFilesCSV(files, fields, descLength)
 	default:
 		return outputFilesTable(files, fields, descLength, limited, totalFiles)
 	}
-}
-
-func resolveLimit(cmd *cli.Command, cfg *config.Config) int {
-	if cmd.Bool("all") {
-		return 0
-	}
-	if cmd.IsSet(flagLimit) {
-		return cmd.Int(flagLimit)
-	}
-	return cfg.Display.DefaultLimit
-}
-
-func resolveFormat(cmd *cli.Command, cfg *config.Config) string {
-	if jsonEnabled(cmd) {
-		return formatJSON
-	}
-	if cmd.IsSet("format") {
-		return cmd.String("format")
-	}
-	return cfg.Display.Format
 }
 
 func resolveFields(cmd *cli.Command, cfg *config.Config) []string {
@@ -227,7 +195,7 @@ func outputFilesTable(
 
 	if limited {
 		msg := "\n(showing " + strconv.Itoa(len(files)) + " of " + strconv.Itoa(total) +
-			" files, use --all to show all)\n"
+			" files, use --limit 0 to show all)\n"
 		_, _ = os.Stdout.WriteString(msg)
 	}
 

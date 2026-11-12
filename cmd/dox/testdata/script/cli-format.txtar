@@ -1,0 +1,142 @@
+# --format table|json|jsonl|csv on every read command, --json as an alias,
+# and one --limit convention (0 = all) with a deprecated files --all (dox-4e1.7).
+httpservedir site
+envsubst config.in dox.toml
+dox sync
+
+# collections
+dox collections --format json
+stdout '"name": "docs"'
+dox collections --json
+stdout '"name": "docs"'
+dox collections --format jsonl
+stdout '^\{"name":"docs","type":"url","source":'
+stdout '^\{"name":"notes","type":"url","source":'
+dox collections --format csv
+stdout '^name,type,source,path,files,size,last_sync$'
+stdout '^docs,url,'
+dox collections --format table
+stdout 'NAME'
+dox collections
+stdout 'NAME'
+doxexit 2 collections --format xml
+stderr 'unknown output format "xml"'
+stderr 'hint: Use --format table, json, jsonl or csv'
+# An explicit --format wins over the --json alias.
+dox collections --json --format csv
+stdout '^name,type,source,path,files,size,last_sync$'
+
+# one --limit convention: 0 = all
+dox collections --limit 1
+stdout 'docs'
+! stdout 'notes'
+dox collections --limit 0
+stdout 'docs'
+stdout 'notes'
+
+# files
+dox files docs --format jsonl
+stdout '^\{"sha":"sha256:[0-9a-f]+","path":"guide.md",'
+dox files docs --format csv --fields path,type
+stdout '^path,type$'
+stdout '^guide.md,'
+dox files docs --limit 0
+! stderr .
+stdout 'guide.md'
+dox files docs --all
+stderr '^warning: --all is deprecated and will be removed in v0.6.0; use --limit 0$'
+stdout 'guide.md'
+doxexit 2 files docs --format yaml
+stderr 'unknown output format "yaml"'
+
+# cat
+dox cat docs guide.md --format jsonl --limit 2
+stdout '^\{"line":1,"text":"# Heading"\}$'
+stdout '^\{"line":2,"text":""\}$'
+! stdout 'needle'
+dox cat docs guide.md --format csv --line 3 --limit 1
+stdout '^line,text$'
+stdout '^3,needle$'
+dox cat docs guide.md --format json --limit 1
+stdout '"content": "# Heading"'
+dox cat docs guide.md --json --limit 1
+stdout '"content": "# Heading"'
+dox cat docs guide.md --format table --limit 1 --no-line-numbers
+stdout '^# Heading$'
+doxexit 2 cat docs guide.md --format xml
+stderr 'unknown output format "xml"'
+
+# outline
+dox outline docs guide.md --format json
+stdout '"line": 1'
+dox outline docs guide.md --json
+stdout '"line": 1'
+dox outline docs guide.md --format jsonl
+stdout '^\{"kind":"heading","line":1,"level":1,"text":"Heading"\}$'
+dox outline docs guide.md --format csv
+stdout '^kind,line,level,type,text$'
+stdout '^heading,1,1,,Heading$'
+dox outline docs guide.md --format table
+stdout 'STRUCTURE:'
+doxexit 2 outline docs guide.md --format xml
+stderr 'unknown output format "xml"'
+
+# list
+dox list --format json
+stdout '"name": "docs"'
+dox list --json
+stdout '"name": "docs"'
+dox list --format jsonl
+stdout '^\{"name":"docs","type":"url",'
+dox list --format csv
+stdout '^name,type,repo,path,url,ref,patterns,output_dir,status,file_count,synced_at$'
+stdout '^docs,url,,,'
+dox list --format table
+stdout 'SOURCE'
+doxexit 2 list --format xml
+stderr 'unknown output format "xml"'
+
+# search
+dox search needle --content --format jsonl
+stdout '"line":3'
+dox search guide --format jsonl
+stdout '^\{'
+
+# config display.format applies to the query commands and jsonl is valid
+cp dox.toml dox.base.toml
+cp dox.display.toml dox.toml
+dox collections
+stdout '^\{"name":"docs",'
+cp dox.base.toml dox.toml
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.md"
+filename = "guide.md"
+[sources.notes]
+type = "url"
+url = "$SERVER/notes.md"
+filename = "notes.md"
+-- dox.display.toml --
+output = ".dox"
+[display]
+format = "jsonl"
+[sources.docs]
+type = "url"
+url = "http://127.0.0.1:1/guide.md"
+filename = "guide.md"
+[sources.notes]
+type = "url"
+url = "http://127.0.0.1:1/notes.md"
+filename = "notes.md"
+-- site/guide.md --
+# Heading
+
+needle
+outro
+-- site/notes.md --
+# Notes
+
+Some notes.

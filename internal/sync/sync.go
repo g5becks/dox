@@ -378,7 +378,7 @@ func executeSources(
 		previousLock := lock.GetEntry(sourceName)
 
 		group.Go(func() error {
-			token := resolveToken(cfg, sourceCfg)
+			token := ResolveToken(cfg, sourceCfg)
 			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, sourceOpts, emit)
 			resultsMu.Lock()
 			results[sourceName] = state
@@ -493,11 +493,11 @@ func resolveSourceNames(
 	return sourceNames, nil
 }
 
-// resolveToken returns the credential for a repo source's host: a
+// ResolveToken returns the credential for a repo source's host: a
 // `tokens.<host>` entry first, then GITLAB_TOKEN for GitLab, github_token,
 // GITHUB_TOKEN and GH_TOKEN for github.com, and GH_ENTERPRISE_TOKEN for GitHub
 // Enterprise hosts.
-func resolveToken(cfg *config.Config, sourceCfg config.Source) string {
+func ResolveToken(cfg *config.Config, sourceCfg config.Source) string {
 	if sourceCfg.Repo == "" {
 		return ""
 	}

@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -19,18 +19,8 @@ func newOutlineCommand() *cli.Command {
 		Name:      "outline",
 		Usage:     "Show file structure (headings, exports)",
 		ArgsUsage: "<collection> <file>",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    flagConfig,
-				Aliases: []string{"c"},
-				Usage:   helpConfig,
-			},
-			&cli.BoolFlag{
-				Name:  formatJSON,
-				Usage: helpJSON,
-			},
-		},
-		Action: outlineAction,
+		Flags:     formatFlags(),
+		Action:    outlineAction,
 	}
 }
 
@@ -57,6 +47,10 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+	format, err := resolveOutputFormat(cmd, cfg)
+	if err != nil {
+		return err
+	}
 
 	m, err := manifest.Load(cfg.Output)
 	if err != nil {
@@ -68,55 +62,68 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 		return errs.New(
 			errs.NotFound,
 			fmt.Sprintf("collection %q not found", collectionName),
-			errs.WithHint("Run 'dox collections' to see available collections"),
+			errs.WithHint(collectionHint(collectionName, m)),
 			errs.WithFields(
 				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
 			),
 		)
 	}
 
-	var fileInfo *manifest.FileInfo
-	for i := range collection.Files {
-		if collection.Files[i].Path == filePath {
-			fileInfo = &collection.Files[i]
-			break
-		}
+	fileInfo, err := findCollectionFile(collection, collectionName, filePath)
+	if err != nil {
+		return err
 	}
 
-	if fileInfo == nil {
-		return errs.New(
-			errs.NotFound,
-			fmt.Sprintf("file %q not found in collection %q", filePath, collectionName),
-			errs.WithHint("Run 'dox files' to see available files"),
-			errs.WithFields(
-				map[string]any{
-					"file":               filePath,
-					fieldCollection:      collectionName,
-					errs.LegacyCodeField: errs.LegacyFileNotFound,
-				},
-			),
-		)
+	switch format {
+	case formatJSON:
+		return writeJSONValue(fileInfo.Outline)
+	case formatJSONL:
+		return writeJSONLines(outlineEntries(fileInfo.Outline))
+	case formatCSV:
+		return outputOutlineCSV(outlineEntries(fileInfo.Outline))
+	default:
+		return outputOutlineText(fileInfo)
 	}
-
-	if jsonEnabled(cmd) {
-		return outputOutlineJSON(fileInfo)
-	}
-
-	return outputOutlineText(fileInfo)
 }
 
-func outputOutlineJSON(fileInfo *manifest.FileInfo) error {
-	data, err := json.MarshalIndent(fileInfo.Outline, "", "  ")
-	if err != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("encoding outline: %w", err),
-			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
-		)
-	}
+// outlineEntry is one heading or export of an outline, flattened for the jsonl
+// and csv formats.
+type outlineEntry struct {
+	Kind  string `json:"kind"`
+	Line  int    `json:"line"`
+	Level int    `json:"level,omitempty"`
+	Type  string `json:"type,omitempty"`
+	Text  string `json:"text"`
+}
 
-	fmt.Fprintln(os.Stdout, string(data))
-	return nil
+func outlineEntries(outline *parser.Outline) []outlineEntry {
+	if outline == nil {
+		return nil
+	}
+	entries := make([]outlineEntry, 0, len(outline.Headings)+len(outline.Exports))
+	for _, heading := range outline.Headings {
+		entries = append(entries, outlineEntry{
+			Kind: "heading", Line: heading.Line, Level: heading.Level, Text: heading.Text,
+		})
+	}
+	for _, export := range outline.Exports {
+		entries = append(entries, outlineEntry{
+			Kind: "export", Line: export.Line, Type: export.Type, Text: export.Name,
+		})
+	}
+	return entries
+}
+
+func outputOutlineCSV(entries []outlineEntry) error {
+	rows := make([][]string, len(entries))
+	for index, entry := range entries {
+		level := ""
+		if entry.Level > 0 {
+			level = strconv.Itoa(entry.Level)
+		}
+		rows[index] = []string{entry.Kind, strconv.Itoa(entry.Line), level, entry.Type, entry.Text}
+	}
+	return writeCSVRows([]string{"kind", fieldLine, "level", "type", fieldText}, rows)
 }
 
 func outputOutlineText(fileInfo *manifest.FileInfo) error {

@@ -150,10 +150,19 @@ url = "https://hono.dev/llms-full.txt"
 
 ## Commands
 
-Every command except `init` accepts `--config path/to/dox.toml` (`-c`) to override
-config discovery. The global flags `--json`, `--verbose` and
-`--allow-external-output` go before the command (for example `dox --json list`)
-or after it.
+The global `--config path/to/dox.toml` (`-c`) flag overrides config discovery for
+every command, including `init`, which creates the file at that path. Set
+`DOX_CONFIG` to make it the default (the flag wins). The global flags `--json`,
+`--verbose` and `--allow-external-output` go before the command (for example
+`dox --json list`) or after it.
+
+Output commands (`list`, `collections`, `files`, `cat`, `outline`, `search`,
+`doctor`) share the same options. `--format table|json|jsonl|csv` selects the
+output format and `--json` stays as an alias for `--format json`. `--limit N`
+caps the rows, and `--limit 0` means no limit. Without `--format`, `collections`,
+`files`, `cat`, `outline` and `search` use `display.format` from the config file
+(default `table`). `jsonl` writes one JSON object per line, and `csv` writes a
+header row followed by one row per item.
 
 ### sync
 
@@ -197,6 +206,7 @@ lock file to make syncs reproducible across machines.
 dox list                    # Show configured sources
 dox list --verbose          # Show full details
 dox list --json             # JSON output
+dox list --format csv       # CSV output (jsonl is also available)
 dox list --files            # Show synced files
 ```
 
@@ -263,6 +273,7 @@ dox clean goreleaser        # Remove specific source
 
 ```bash
 dox init                    # Create starter dox.toml
+dox init -c docs/dox.toml   # Create it at another path (or set DOX_CONFIG)
 ```
 
 ### collections
@@ -272,8 +283,13 @@ dox init                    # Create starter dox.toml
 ```bash
 dox collections             # Table output
 dox collections --json      # JSON output
+dox collections --format csv  # CSV output (jsonl is also available)
 dox collections --limit 5   # Limit results
 ```
+
+An unknown collection name in `files`, `cat`, `outline` or `search --collection`
+exits with code 4 and a `hint:` that suggests close matches (`Did you mean
+"goreleaser"?`).
 
 ### files
 
@@ -285,11 +301,12 @@ dox files goreleaser --json                # JSON output
 dox files goreleaser --format csv          # CSV output
 dox files goreleaser --fields path,type,size  # Custom fields
 dox files goreleaser --limit 10            # Limit results
-dox files goreleaser --all                 # Show all files (no limit)
+dox files goreleaser --limit 0             # Show all files (no limit)
 dox files goreleaser --desc-length 100     # Shorter descriptions
 ```
 
-Available fields: `path`, `type`, `lines`, `size`, `description`, `modified`
+Available fields: `path`, `type`, `lines`, `size`, `description`, `modified`.
+`--all` is deprecated (it warns and means `--limit 0`); it is removed in v0.6.0.
 
 ### cat
 
@@ -302,6 +319,8 @@ dox cat goreleaser docs/install.md --limit 20           # Show 20 lines
 dox cat goreleaser docs/install.md:11 --limit 20       # Range
 dox cat goreleaser docs/install.md --no-line-numbers    # No line numbers
 dox cat goreleaser docs/install.md --json               # JSON output with metadata
+dox cat goreleaser docs/install.md --format jsonl       # One {"line","text"} object per line
+dox cat goreleaser docs/install.md --format csv         # line,text rows
 ```
 
 Line locations in search results, outlines, `cat --line N`, and `file:N` use
@@ -320,6 +339,7 @@ Show document structure — headings for markdown/MDX, exports for TypeScript:
 ```bash
 dox outline goreleaser docs/install.md
 dox outline goreleaser docs/install.md --json
+dox outline goreleaser docs/install.md --format csv     # kind,line,level,type,text rows
 ```
 
 Markdown/MDX outlines use source line positions, including frontmatter and MDX
@@ -369,6 +389,46 @@ dox search "authentication" --json          # Find relevant topics
 dox files react --json --limit 100          # Browse collection files
 dox cat react docs/hooks.md                 # Read specific content
 ```
+
+### doctor
+
+Diagnose a setup without changing it: config discovery and validity, per-host
+token presence (the value is never printed), the github.com API rate limit,
+output-directory safety, and consistency between the config, the lock and the
+files on disk. Each check is `ok`, `warn` or `fail`; any `fail` exits with code 1.
+
+<!-- doxtest: workspace=synced -->
+
+```bash
+dox doctor --offline        # Skip the checks that need the network
+dox doctor --offline --json # Machine-readable report
+```
+
+<!-- doxtest: skip (queries api.github.com, which tests must not reach) -->
+
+```bash
+dox doctor                  # Also report the github.com API rate limit
+```
+
+### completion
+
+Print a shell completion script for `bash`, `zsh`, `fish` or `pwsh`:
+
+<!-- doxtest: workspace=bare -->
+
+```bash
+dox completion bash
+dox completion zsh
+```
+
+For example, `source <(dox completion bash)` in `~/.bashrc`, or
+`dox completion fish > ~/.config/fish/completions/dox.fish`.
+
+### version
+
+`dox version` (or `dox --version`) prints the version, commit and build time.
+Release binaries carry these values; a binary built with `go install
+github.com/g5becks/dox/cmd/dox@vX.Y.Z` reads them from the Go build info.
 
 ### Error output and exit codes
 
@@ -534,7 +594,7 @@ Customize query output in `dox.toml`:
 default_limit = 50            # Default result limit for files and search
 description_length = 200      # Max description/text length in table output
 line_numbers = true           # Show line numbers in cat
-format = "table"              # Default format: table, json, csv
+format = "table"              # Default format: table, json, jsonl, csv
 list_fields = ["path", "type", "lines", "size", "description"]
 ```
 

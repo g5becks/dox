@@ -7,5 +7,4 @@ var (
 	ResolveSourceNames = resolveSourceNames
 	ResolveGitHubToken = resolveGitHubToken
 	ResolveMaxParallel = resolveMaxParallel
-	ResolveToken       = resolveToken
 )

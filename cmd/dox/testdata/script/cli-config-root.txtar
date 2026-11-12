@@ -1,0 +1,77 @@
+# A root --config/-c (and DOX_CONFIG) selects the config for every command,
+# including init (dox-4e1.7). No dox.toml exists in the working directory.
+httpserve guide.txt
+mkdir conf
+envsubst custom.in conf/custom.toml
+! exists dox.toml
+
+# Without a config there is nothing to find.
+env DOX_CONFIG=
+! dox list
+stderr 'dox.toml'
+
+# Before the command and after it.
+dox --config conf/custom.toml list --json
+stdout '"name": "docs"'
+dox -c conf/custom.toml list --json
+stdout '"name": "docs"'
+dox list --json -c conf/custom.toml
+stdout '"name": "docs"'
+dox list --json --config=conf/custom.toml
+stdout '"name": "docs"'
+
+# DOX_CONFIG works for every command; the flag wins over the environment.
+env DOX_CONFIG=conf/custom.toml
+dox list --json
+stdout '"name": "docs"'
+dox sync
+exists conf/.dox/docs/guide.txt
+! exists .dox
+dox collections
+stdout 'docs'
+dox files docs
+stdout 'guide.txt'
+dox cat docs guide.txt --no-line-numbers
+stdout 'guide text'
+dox outline docs guide.txt
+stdout 'guide.txt'
+dox search guide
+stdout 'guide.txt'
+dox add extra --url http://127.0.0.1:1/extra.txt
+grep '\[sources.extra\]' conf/custom.toml
+dox clean
+! exists conf/.dox/docs
+env DOX_CONFIG=conf/missing.toml
+! dox list
+stderr 'conf/missing.toml'
+dox list --json -c conf/custom.toml
+stdout '"name": "docs"'
+
+# init writes the file named by --config (creating its directory) or DOX_CONFIG.
+env DOX_CONFIG=
+dox init --config conf/new/dox.toml
+exists conf/new/dox.toml
+grep 'Documentation source configuration' conf/new/dox.toml
+! exists dox.toml
+! dox init -c conf/new/dox.toml
+stderr 'config file already exists'
+env DOX_CONFIG=conf/env.toml
+dox init
+exists conf/env.toml
+! exists dox.toml
+! dox init
+stderr 'config file already exists'
+env DOX_CONFIG=
+dox -c conf/root.toml init
+exists conf/root.toml
+dox init
+exists dox.toml
+
+-- custom.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+-- guide.txt --
+guide text

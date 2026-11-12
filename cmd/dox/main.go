@@ -134,7 +134,7 @@ excludes = [
 # Show line numbers in 'dox cat' by default
 # line_numbers = true
 #
-# Default output format: table, json, csv
+# Default output format: table, json, jsonl, csv
 # format = "table"
 #
 # Default fields for 'dox files' table
@@ -205,7 +205,20 @@ func newRootCommand() *cli.Command {
 		Usage:       "Sync framework and library docs to local files",
 		Description: rootDescription,
 		Version:     versionString(),
+		// Root flags are inherited by every subcommand.
+		EnableShellCompletion:      true,
+		ShellCompletionCommandName: "completion",
+		ConfigureShellCompletionCommand: func(completion *cli.Command) {
+			completion.Hidden = false
+			completion.Usage = "Print a shell completion script (bash, zsh, fish or pwsh)"
+		},
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    flagConfig,
+				Aliases: []string{"c"},
+				Usage:   helpConfig + " (default: dox.toml or .dox.toml found from the working directory up)",
+				Sources: cli.EnvVars("DOX_CONFIG"),
+			},
 			&cli.BoolFlag{
 				Name:  flagAllowExternalOutput,
 				Usage: "Allow output outside the config directory (never the config directory or filesystem root)",
@@ -230,6 +243,7 @@ func newRootCommand() *cli.Command {
 			newCatCommand(),
 			newOutlineCommand(),
 			newSearchCommand(),
+			newDoctorCommand(),
 			newVersionCommand(),
 		},
 	}
@@ -254,7 +268,6 @@ func newSyncCommand() *cli.Command {
 		Usage:     "Sync configured documentation sources",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{
 				Name:    "force",
 				Aliases: []string{"f"},
@@ -292,19 +305,17 @@ func newListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
 		Usage: "List configured sources and status",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: formatJSON, Usage: "Emit JSON output"},
+		Flags: append(formatFlags(),
 			&cli.BoolFlag{
 				Name:    "verbose",
 				Aliases: []string{"v"},
 				Usage:   "Show expanded source fields",
 			},
 			&cli.BoolFlag{
-				Name:  "files",
+				Name:  nameFiles,
 				Usage: "Include file counts from local output directories",
 			},
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
-		},
+		),
 		Action: listAction,
 	}
 }
@@ -329,7 +340,6 @@ func newAddCommand() *cli.Command {
 			&cli.StringFlag{Name: fieldURL, Aliases: []string{"u"}, Usage: "Source URL"},
 			&cli.StringFlag{Name: "filename", Usage: "Output filename for URL source"},
 			&cli.StringFlag{Name: "out", Usage: "Custom output subdirectory"},
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{Name: "force", Usage: "Overwrite an existing source with the same name"},
 		},
 		Action: addAction,
@@ -342,7 +352,6 @@ func newCleanCommand() *cli.Command {
 		Usage:     "Remove downloaded documentation output",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.DurationFlag{
 				Name:  "lock-timeout",
 				Value: runlock.DefaultTimeout,
@@ -356,7 +365,7 @@ func newCleanCommand() *cli.Command {
 func newInitCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "init",
-		Usage:  "Create a starter dox.toml in the current directory",
+		Usage:  "Create a starter dox.toml (in the working directory, or at --config/DOX_CONFIG)",
 		Action: initAction,
 	}
 }
@@ -472,6 +481,10 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+	format, err := resolveOutputFormat(cmd, nil)
+	if err != nil {
+		return err
+	}
 
 	paths, pathErr := cfg.Paths()
 	if pathErr != nil {
@@ -488,7 +501,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 	slices.Sort(sourceNames)
 
-	includeFiles := cmd.Bool("files")
+	includeFiles := cmd.Bool(nameFiles)
 	statuses := make([]ui.SourceStatus, 0, len(sourceNames))
 	for _, sourceName := range sourceNames {
 		sourceCfg := cfg.Sources[sourceName]
@@ -530,7 +543,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return ui.RenderSourceList(statuses, ui.ListOptions{
-		JSON:    jsonEnabled(cmd),
+		Format:  format,
 		Verbose: verboseEnabled(cmd),
 		Files:   includeFiles,
 	})
@@ -566,8 +579,23 @@ func countFiles(root string) (int, error) {
 	return count, nil
 }
 
-func initAction(_ context.Context, _ *cli.Command) error {
-	for _, configName := range []string{"dox.toml", ".dox.toml"} {
+func initAction(_ context.Context, cmd *cli.Command) error {
+	// An explicit --config/DOX_CONFIG names the file to create; otherwise the
+	// starter goes in the working directory unless a config already exists.
+	candidates, target := []string{"dox.toml", ".dox.toml"}, "dox.toml"
+	if configPath := cmd.String(flagConfig); configPath != "" {
+		candidates, target = []string{configPath}, configPath
+		if mkdirErr := os.MkdirAll(filepath.Dir(configPath), 0o750); mkdirErr != nil {
+			return errs.Wrap(
+				errs.Config,
+				fmt.Errorf("creating config directory: %w", mkdirErr),
+				errs.WithFields(
+					map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigWriteError},
+				),
+			)
+		}
+	}
+	for _, configName := range candidates {
 		if _, err := os.Stat(configName); err == nil {
 			return errs.New(
 				errs.Config,
@@ -588,11 +616,11 @@ func initAction(_ context.Context, _ *cli.Command) error {
 		}
 	}
 
-	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o600); err != nil {
+	if err := os.WriteFile(target, []byte(initTemplate), 0o600); err != nil {
 		return errs.Wrap(
 			errs.Config,
 			fmt.Errorf("writing starter config: %w", err),
-			errs.WithFields(map[string]any{fieldPath: "dox.toml", errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+			errs.WithFields(map[string]any{fieldPath: target, errs.LegacyCodeField: errs.LegacyConfigWriteError}),
 		)
 	}
 
@@ -776,10 +804,6 @@ func cleanAction(ctx context.Context, cmd *cli.Command) error {
 		lock.RemoveEntry(selected[index])
 	}
 	return lock.SaveRoot(root)
-}
-
-func versionString() string {
-	return fmt.Sprintf("%s (commit %s, built %s)", version, commit, buildTime)
 }
 
 func loadCommandConfig(cmd *cli.Command, path string) (*config.Config, error) {

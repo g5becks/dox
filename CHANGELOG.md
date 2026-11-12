@@ -7,9 +7,25 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Changed
 
+- The `--config` (`-c`) flag is now declared once, on the root command, instead of on each command. It is still accepted before or after the subcommand, so `dox files docs -c dox.toml` keeps working, and `DOX_CONFIG` sets it from the environment (the flag wins). `init` now honors it and creates the file at that path. **Migration:** none for scripts; remove per-command `--config` workarounds if you like.
+
+- `files --all` is deprecated: it prints a warning and behaves as `--limit 0`, and it is removed in v0.6.0. Every list-style command (`collections`, `files`, `cat`, `search`) now follows one `--limit N` convention: `0` means no limit and an omitted flag uses `display.default_limit`. The "more files" hint now says `use --limit 0 to show all`. **Migration:** replace `--all` with `--limit 0`.
+
+- `display.format` in the config now applies to `collections`, `files`, `cat`, `outline` and `search` as the `dox init` template documents; before, it was parsed and ignored, so a config with `format = "json"` or `"csv"` changes their default output. A `--format` flag or `--json` wins over the config. `display.format` also accepts `jsonl`. **Migration:** set `format = "table"` (the default) to keep the previous output.
+
 - Config files are decoded strictly. Value types must match (`repo = 5` now reports `invalid config at "sources.docs.repo" (line 4) … (a string)` instead of a misleading validation error). **Unknown keys are now errors** listing each key and line (for example a misspelled `max_paralel`), where before they were silently ignored. Syntax errors name their line. All of these exit with code 2. Koanf and its dependencies (copystructure, reflectwalk, mapstructure, fsnotify) are removed in favor of go-toml directly. **Migration:** run `dox list` once; fix or remove any key it reports as unknown, and quote string values.
 
 ### Added
+
+- `--format table|json|jsonl|csv` on `list`, `collections`, `files`, `cat`, `outline` and `search`; `--json` stays an alias for `--format json`. JSON Lines writes one object per item and CSV a header plus one row per item (`cat` emits `line,text`, `outline` emits `kind,line,level,type,text`). `dox doctor` takes the same flags.
+
+- `dox doctor` checks the config, per-host token presence (never the value), the github.com API rate limit (skipped by `--offline`), output-directory safety, and consistency between the config, the lock and the files on disk. A `fail` check exits 1.
+
+- Unknown collections and files in `files`, `cat`, `outline` and `search --collection` suggest close matches (`Did you mean "goreleaser"?`) in the `hint:` line, still exiting with code 4.
+
+- Shell completion is available as `dox completion bash|zsh|fish|pwsh`.
+
+- `dox version` and `--version` fall back to `debug.ReadBuildInfo()`, so a binary built with `go install github.com/g5becks/dox/cmd/dox@vX.Y.Z` reports its version, commit and build time instead of `dev`.
 
 - `dox sync` and `dox clean` take an advisory lock on the output directory (`flock` on Unix, `LockFileEx` on Windows, file `.dox-run.lock`), so concurrent runs no longer race on `.dox.lock` and `manifest.json`. A second run waits up to `--lock-timeout` (default `30s`) and then exits 1 with a clear message. `sync --clean` now cleans only after taking the lock. Dry runs and `--check` stay lock-free.
 

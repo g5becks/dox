@@ -1,0 +1,28 @@
+# dox completion prints a shell completion script and completes commands (dox-4e1.7).
+dox completion bash
+stdout '__dox_'
+stdout 'complete .* -F __dox_bash_autocomplete dox'
+! stderr .
+
+dox completion zsh
+stdout '#compdef dox'
+stdout 'compdef _dox dox'
+
+dox completion fish
+stdout 'function __dox_perform_completion'
+stdout 'complete -c dox'
+
+dox completion pwsh
+stdout 'Register-ArgumentCompleter'
+
+# The command is listed in help; unknown shells are usage errors.
+dox --help
+stdout 'completion +Print a shell completion script'
+! dox completion tcsh
+stderr 'tcsh'
+
+# The completion hook lists the commands, including the new ones.
+exec dox --generate-shell-completion
+stdout 'doctor'
+stdout 'completion'
+stdout 'collections'

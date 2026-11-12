@@ -2,16 +2,14 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/urfave/cli/v3"
 
-	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 )
 
@@ -19,21 +17,9 @@ func newCollectionsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "collections",
 		Usage: "List all documentation collections",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    flagConfig,
-				Aliases: []string{"c"},
-				Usage:   helpConfig,
-			},
-			&cli.BoolFlag{
-				Name:  formatJSON,
-				Usage: helpJSON,
-			},
-			&cli.IntFlag{
-				Name:  flagLimit,
-				Usage: "Limit number of results (0 = all)",
-			},
-		},
+		Flags: append(formatFlags(),
+			&cli.IntFlag{Name: flagLimit, Usage: helpLimitAll},
+		),
 		Action: collectionsAction,
 	}
 }
@@ -59,6 +45,11 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	format, err := resolveOutputFormat(cmd, cfg)
+	if err != nil {
+		return err
+	}
+
 	m, err := manifest.Load(cfg.Output)
 	if err != nil {
 		return err
@@ -70,7 +61,7 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 	}
 	sort.Strings(names)
 
-	limit := cmd.Int(flagLimit)
+	limit := resolveListLimit(cmd, 0)
 	if limit > 0 && len(names) > limit {
 		names = names[:limit]
 	}
@@ -89,26 +80,32 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 		})
 	}
 
-	if jsonEnabled(cmd) {
-		return outputCollectionsJSON(collections)
+	switch format {
+	case formatJSON:
+		return writeJSONValue(collections)
+	case formatJSONL:
+		return writeJSONLines(collections)
+	case formatCSV:
+		return outputCollectionsCSV(collections)
+	default:
+		return outputCollectionsTable(collections)
 	}
-
-	return outputCollectionsTable(collections)
 }
 
-func outputCollectionsJSON(collections []collectionOutput) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-
-	if err := encoder.Encode(collections); err != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("encoding collections: %w", err),
-			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
-		)
+func outputCollectionsCSV(collections []collectionOutput) error {
+	rows := make([][]string, 0, len(collections))
+	for _, coll := range collections {
+		rows = append(rows, []string{
+			coll.Name,
+			coll.Type,
+			coll.Source,
+			coll.Path,
+			strconv.Itoa(coll.Files),
+			strconv.FormatInt(coll.Size, 10),
+			coll.LastSync.Format(time.RFC3339),
+		})
 	}
-
-	return nil
+	return writeCSVRows([]string{"name", "type", "source", "path", nameFiles, "size", "last_sync"}, rows)
 }
 
 func outputCollectionsTable(collections []collectionOutput) error {

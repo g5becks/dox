@@ -1,0 +1,46 @@
+# "Did you mean ...?" hints for unknown collections and files (dox-4e1.7).
+httpserve guide.md
+envsubst config.in dox.toml
+dox sync
+
+doxexit 4 cat dcos guide.md
+stderr '^collection "dcos" not found$'
+stderr '^hint: Did you mean "docs"\? Run ''dox collections'' to see available collections$'
+
+doxexit 4 cat docs guide.mdx
+stderr '^file "guide.mdx" not found in collection "docs"$'
+stderr '^hint: Did you mean "guide.md"\? Run ''dox files'' to see available files$'
+
+doxexit 4 outline dcos guide.md
+stderr '^hint: Did you mean "docs"\?'
+
+doxexit 4 outline docs gide.md
+stderr '^hint: Did you mean "guide.md"\?'
+
+doxexit 4 files dcos
+stderr '^hint: Did you mean "docs"\?'
+
+doxexit 4 search guide --collection dcos
+stderr '^hint: Did you mean "docs"\?'
+
+# Nothing close: the plain hint, with no suggestion.
+doxexit 4 cat zzzzzzzz guide.md
+stderr '^hint: Run ''dox collections'' to see available collections$'
+doxexit 4 cat docs zzzzzzzz.md
+stderr '^hint: Run ''dox files'' to see available files$'
+
+# The JSON error envelope carries the same hint.
+doxexit 4 cat --json dcos guide.md
+! stdout .
+stderr '"hint": "Did you mean \\"docs\\"\? Run ''dox collections'' to see available collections"'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.md"
+filename = "guide.md"
+-- guide.md --
+# Heading
+
+needle

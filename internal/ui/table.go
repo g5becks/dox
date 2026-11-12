@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,15 +26,27 @@ type SourceStatus struct {
 	SyncedAt  time.Time `json:"synced_at,omitzero"`
 }
 
+// Output formats of RenderSourceList; anything else renders the table.
+const (
+	FormatJSON  = "json"
+	FormatJSONL = "jsonl"
+	FormatCSV   = "csv"
+)
+
 type ListOptions struct {
-	JSON    bool
+	Format  string
 	Verbose bool
 	Files   bool
 }
 
 func RenderSourceList(sources []SourceStatus, opts ListOptions) error {
-	if opts.JSON {
+	switch opts.Format {
+	case FormatJSON:
 		return renderSourceListJSON(sources)
+	case FormatJSONL:
+		return renderSourceListJSONL(sources)
+	case FormatCSV:
+		return renderSourceListCSV(sources)
 	}
 
 	renderSourceListTable(sources, opts)
@@ -45,6 +59,47 @@ func renderSourceListJSON(sources []SourceStatus) error {
 
 	if err := encoder.Encode(sources); err != nil {
 		return fmt.Errorf("encode source list json: %w", err)
+	}
+
+	return nil
+}
+
+func renderSourceListJSONL(sources []SourceStatus) error {
+	encoder := json.NewEncoder(os.Stdout)
+	for _, source := range sources {
+		if err := encoder.Encode(source); err != nil {
+			return fmt.Errorf("encode source list jsonl: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func renderSourceListCSV(sources []SourceStatus) error {
+	writer := csv.NewWriter(os.Stdout)
+	header := []string{
+		"name", "type", "repo", "path", "url", "ref", "patterns", "output_dir", "status", "file_count", "synced_at",
+	}
+	if err := writer.Write(header); err != nil {
+		return fmt.Errorf("write source list csv: %w", err)
+	}
+	for _, source := range sources {
+		syncedAt := ""
+		if !source.SyncedAt.IsZero() {
+			syncedAt = source.SyncedAt.Format(time.RFC3339)
+		}
+		row := []string{
+			source.Name, source.Type, source.Repo, source.Path, source.URL, source.Ref,
+			strings.Join(source.Patterns, ";"), source.OutputDir, source.Status,
+			strconv.Itoa(source.FileCount), syncedAt,
+		}
+		if err := writer.Write(row); err != nil {
+			return fmt.Errorf("write source list csv: %w", err)
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("write source list csv: %w", err)
 	}
 
 	return nil

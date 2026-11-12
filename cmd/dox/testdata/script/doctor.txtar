@@ -1,0 +1,90 @@
+# dox doctor: config, tokens, output safety and lock consistency (dox-4e1.7).
+# --offline skips the github.com rate-limit request; that check is unit-tested
+# against a local server.
+httpserve guide.txt
+envsubst config.in dox.toml
+
+# Before the first sync the output does not exist: a warning, not a failure.
+dox doctor --offline
+stdout 'ok +│ config'
+stdout 'warn +│ output +│ .*does not exist yet; run ''dox sync'''
+stdout 'warn +│ lock +│ docs: not synced'
+! stdout 'fail'
+
+dox sync
+dox doctor --offline
+stdout 'ok +│ output'
+stdout 'ok +│ lock +│ 1 source\(s\) consistent'
+! stderr .
+
+# JSON and the other formats.
+dox doctor --offline --json
+stdout '"ok": true'
+stdout '"name": "lock"'
+dox --json doctor --offline
+stdout '"ok": true'
+dox doctor --offline --format jsonl
+stdout '^\{"name":"config","status":"ok",'
+dox doctor --offline --format csv
+stdout '^name,status,detail$'
+stdout '^lock,ok,'
+
+# A changed config is lock drift (warning).
+envsubst changed.in dox.toml
+dox doctor --offline
+stdout 'warn +│ lock +│ docs: config changed since the last sync'
+
+# A locked file that is gone from disk is a failure (exit 1).
+envsubst config.in dox.toml
+rm .dox/docs/guide.txt
+doxexit 1 doctor --offline
+stdout 'fail +│ lock +│ 1 locked file\(s\) missing on disk'
+stderr 'doctor found 1 problem\(s\)'
+doxexit 1 doctor --offline --json
+stdout '"ok": false'
+stdout '"status": "fail"'
+dox sync --force
+dox doctor --offline
+
+# Tokens are reported per host and never printed.
+cp tokens.toml dox.toml
+dox doctor --offline
+stdout 'warn +│ token github.com +│ none: public repositories only'
+env GITHUB_TOKEN=secret-token-value
+dox doctor --offline
+stdout 'ok +│ token github.com +│ configured'
+! stdout secret-token-value
+! stderr secret-token-value
+dox doctor --offline --json
+! stdout secret-token-value
+
+# A broken config is a failed check.
+cp broken.toml dox.toml
+doxexit 1 doctor --offline
+stdout 'fail +│ config'
+stderr 'doctor found 1 problem\(s\)'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+-- changed.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt?changed=1"
+filename = "guide.txt"
+-- tokens.toml --
+output = ".dox"
+[sources.lib]
+type = "github"
+repo = "acme/docs"
+path = "docs"
+-- broken.toml --
+output = ".dox"
+[sources.docs]
+type = "github"
+-- guide.txt --
+guide text

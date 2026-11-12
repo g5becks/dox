@@ -380,6 +380,11 @@ func TestValidateDisplayFormat(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid format jsonl",
+			format:  "jsonl",
+			wantErr: false,
+		},
+		{
 			name:    "valid format csv",
 			format:  "csv",
 			wantErr: false,
