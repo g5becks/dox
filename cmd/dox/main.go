@@ -274,17 +274,17 @@ func newAddCommand() *cli.Command {
 		ArgsUsage: "<name>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     fieldType,
-				Aliases:  []string{"t"},
-				Usage:    "Source type: github or url",
-				Required: true,
+				Name:    fieldType,
+				Aliases: []string{"t"},
+				Usage:   "Source type: github or url (default: inferred from --repo or --url)",
 			},
-			&cli.StringFlag{Name: "repo", Usage: "Repository in owner/repo format"},
-			&cli.StringFlag{Name: fieldPath, Usage: "Path within repository"},
-			&cli.StringFlag{Name: "ref", Usage: "Branch, tag, or commit SHA"},
+			&cli.StringFlag{Name: "repo", Aliases: []string{"r"}, Usage: "Repository in owner/repo format"},
+			&cli.StringFlag{Name: "host", Usage: "Git host (only github.com is supported until v0.5.0)"},
+			&cli.StringFlag{Name: fieldPath, Aliases: []string{"p"}, Usage: "Path within repository"},
+			&cli.StringFlag{Name: "ref", Aliases: []string{"R"}, Usage: "Branch, tag, or commit SHA"},
 			&cli.StringSliceFlag{Name: "patterns", Usage: "Include glob pattern (repeatable)"},
 			&cli.StringSliceFlag{Name: "exclude", Usage: "Exclude glob pattern (repeatable)"},
-			&cli.StringFlag{Name: fieldURL, Usage: "Source URL"},
+			&cli.StringFlag{Name: fieldURL, Aliases: []string{"u"}, Usage: "Source URL"},
 			&cli.StringFlag{Name: "filename", Usage: "Output filename for URL source"},
 			&cli.StringFlag{Name: "out", Usage: "Custom output subdirectory"},
 			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
@@ -500,9 +500,12 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return errs.New(
 			errs.Config,
 			"source name is required",
-			errs.WithHint("Usage: dox add <name> --type <github|url> ..."),
+			errs.WithHint("Usage: dox add <name> --repo owner/repo --path docs | --url https://..."),
 			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
 		)
+	}
+	if nameErr := validateAddSourceName(sourceName); nameErr != nil {
+		return nameErr
 	}
 
 	configPath, err := resolveConfigPath(cmd.String(flagConfig))
@@ -528,6 +531,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	newSource := config.Source{
 		Type:     cmd.String(fieldType),
 		Repo:     cmd.String("repo"),
+		Host:     cmd.String("host"),
 		Path:     cmd.String(fieldPath),
 		Ref:      cmd.String("ref"),
 		Patterns: cmd.StringSlice("patterns"),
@@ -546,6 +550,9 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	if valErr := validationConfig.Validate(); valErr != nil {
 		return valErr
 	}
+	// Persist only the inferred type; other defaults (patterns, host) stay
+	// implicit so later default changes still apply to this source.
+	newSource.Type = validationConfig.Sources[sourceName].Type
 
 	section := renderSourceSection(sourceName, newSource)
 	fileData, err := os.ReadFile(configPath)
@@ -600,102 +607,6 @@ func resolveConfigPath(configPath string) (string, error) {
 	}
 
 	return config.FindConfigFile()
-}
-
-func renderSourceSection(sourceName string, sourceCfg config.Source) string {
-	lines := []string{
-		fmt.Sprintf("[sources.%s]", sourceName),
-		fmt.Sprintf("type = %q", sourceCfg.Type),
-	}
-
-	if sourceCfg.Type == "github" {
-		lines = append(lines, fmt.Sprintf("repo = %q", sourceCfg.Repo))
-		lines = append(lines, fmt.Sprintf("path = %q", sourceCfg.Path))
-
-		if sourceCfg.Ref != "" {
-			lines = append(lines, fmt.Sprintf("ref = %q", sourceCfg.Ref))
-		}
-		if len(sourceCfg.Patterns) > 0 {
-			lines = append(
-				lines,
-				fmt.Sprintf("patterns = %s", formatTOMLStringArray(sourceCfg.Patterns)),
-			)
-		}
-		if len(sourceCfg.Exclude) > 0 {
-			lines = append(
-				lines,
-				fmt.Sprintf("exclude = %s", formatTOMLStringArray(sourceCfg.Exclude)),
-			)
-		}
-	}
-
-	if sourceCfg.Type == fieldURL {
-		lines = append(lines, fmt.Sprintf("url = %q", sourceCfg.URL))
-		if sourceCfg.Filename != "" {
-			lines = append(lines, fmt.Sprintf("filename = %q", sourceCfg.Filename))
-		}
-	}
-
-	if sourceCfg.Out != "" {
-		lines = append(lines, fmt.Sprintf("out = %q", sourceCfg.Out))
-	}
-
-	return strings.Join(lines, "\n") + "\n"
-}
-
-func formatTOMLStringArray(values []string) string {
-	parts := make([]string, 0, len(values))
-	for _, value := range values {
-		parts = append(parts, fmt.Sprintf("%q", value))
-	}
-
-	return "[" + strings.Join(parts, ", ") + "]"
-}
-
-func appendSourceSection(fileContent string, section string) string {
-	trimmed := strings.TrimRight(fileContent, "\n")
-	if trimmed == "" {
-		return section
-	}
-
-	return trimmed + "\n\n" + section
-}
-
-func replaceSourceSection(fileContent string, sourceName string, section string) (string, error) {
-	lines := strings.Split(fileContent, "\n")
-	header := fmt.Sprintf("[sources.%s]", sourceName)
-
-	start := -1
-	for idx, line := range lines {
-		if strings.TrimSpace(line) == header {
-			start = idx
-			break
-		}
-	}
-
-	if start == -1 {
-		return "", errs.New(
-			errs.NotFound,
-			fmt.Sprintf("source %q section not found in config", sourceName),
-			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacySourceNotFound}),
-			errs.WithCause(errs.ErrSourceNotFound),
-		)
-	}
-
-	end := len(lines)
-	for idx := start + 1; idx < len(lines); idx++ {
-		if strings.HasPrefix(strings.TrimSpace(lines[idx]), "[sources.") {
-			end = idx
-			break
-		}
-	}
-
-	newLines := make([]string, 0, len(lines))
-	newLines = append(newLines, lines[:start]...)
-	newLines = append(newLines, strings.Split(strings.TrimRight(section, "\n"), "\n")...)
-	newLines = append(newLines, lines[end:]...)
-
-	return strings.TrimRight(strings.Join(newLines, "\n"), "\n") + "\n", nil
 }
 
 func cleanAction(_ context.Context, cmd *cli.Command) error {

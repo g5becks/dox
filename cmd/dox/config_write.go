@@ -5,7 +5,8 @@ import (
 	"path/filepath"
 )
 
-// writeConfig replaces the selected config without truncating an existing inode.
+// writeConfig atomically replaces the selected config (temp file + rename)
+// without truncating an existing inode, preserving its permission bits.
 func writeConfig(path, content string) error {
 	dir := filepath.Dir(path)
 	root, err := os.OpenRoot(dir)
@@ -28,6 +29,13 @@ func writeConfig(path, content string) error {
 	if syncErr := file.Sync(); syncErr != nil {
 		_ = file.Close()
 		return syncErr
+	}
+	// Keep the existing file's permission bits; a new file keeps CreateTemp's 0600.
+	if info, statErr := root.Stat(filepath.Base(path)); statErr == nil {
+		if chmodErr := file.Chmod(info.Mode().Perm()); chmodErr != nil {
+			_ = file.Close()
+			return chmodErr
+		}
 	}
 	if closeErr := file.Close(); closeErr != nil {
 		return closeErr

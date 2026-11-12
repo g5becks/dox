@@ -1,0 +1,82 @@
+# dox add: type inference, aliases, --host, --force and safe replacement
+# (audit C3/C10, dox-deb.18). Every README `dox add` example is exercised.
+
+# README: GitHub source (type inferred from --repo)
+dox add goreleaser --repo goreleaser/goreleaser --path www/docs
+grep '^\[sources\.goreleaser\]$' dox.toml
+grep '^type = "github"$' dox.toml
+grep '^repo = "goreleaser/goreleaser"$' dox.toml
+
+# README: URL source (type inferred from --url)
+dox add hono --url https://hono.dev/llms-full.txt
+grep '^url = "https://hono.dev/llms-full.txt"$' dox.toml
+grep '^type = "url"$' dox.toml
+
+# README: overwrite an existing source
+! dox add goreleaser --repo goreleaser/goreleaser --path www/docs
+stderr 'source "goreleaser" already exists'
+dox add goreleaser --repo goreleaser/goreleaser --path docs --force
+grep '^path = "docs"$' dox.toml
+! grep 'www/docs' dox.toml
+grep '^url = "https://hono.dev/llms-full.txt"$' dox.toml
+
+# agentx wrapper form and short aliases
+dox add my-lib -r owner/repo -p docs -R v1.2.3
+grep '^ref = "v1.2.3"$' dox.toml
+dox add notes -u https://example.com/llms.txt
+dox add explicit --type github --repo owner/repo --path docs
+dox list
+stdout 'my-lib'
+stdout 'notes'
+
+# --host: github.com is accepted and kept; others are rejected (exit 2)
+dox add hosted -r owner/repo -p docs --host github.com
+grep '^host = "github.com"$' dox.toml
+doxexit 2 add gl -r owner/repo -p docs --host gitlab.com
+stderr 'host "gitlab.com" for source "gl" is not supported yet'
+! grep 'sources.gl' dox.toml
+
+# Names must be TOML bare keys
+doxexit 2 add 'bad.name' -r owner/repo -p docs
+stderr 'invalid source name'
+
+# --force refuses a section it cannot rewrite safely, leaving the file unchanged
+cp custom.toml before.toml
+doxexit 2 add custom -r owner/repo -p docs --force --config custom.toml
+stderr 'cannot safely replace source "custom": it contains comments'
+stderr 'hint: Edit \[sources.custom\] in your config by hand'
+cmp custom.toml before.toml
+
+# --force keeps the tables that follow the replaced section
+dox add first -r owner/new -p guide --force --config layered.toml
+cmp layered.toml layered.want
+
+-- dox.toml --
+output = ".dox"
+-- custom.toml --
+[sources.custom]
+repo = "owner/repo"
+# pinned for the 2.x docs
+ref = "v2"
+path = "docs"
+-- layered.toml --
+output = ".dox"
+
+[sources.first]
+repo = "owner/old"
+path = "docs"
+
+# display settings
+[display]
+format = "json"
+-- layered.want --
+output = ".dox"
+
+[sources.first]
+type = "github"
+repo = "owner/new"
+path = "guide"
+
+# display settings
+[display]
+format = "json"

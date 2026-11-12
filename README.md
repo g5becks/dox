@@ -176,9 +176,19 @@ dox add goreleaser --repo goreleaser/goreleaser --path www/docs
 # URL source (type inferred from --url)
 dox add hono --url https://hono.dev/llms-full.txt
 
+# Short aliases: -r/--repo, -p/--path, -u/--url, -R/--ref
+dox add my-lib -r owner/repo -p docs -R v1.2.3
+
 # Overwrite existing source
 dox add goreleaser --repo goreleaser/goreleaser --path www/docs --force
 ```
+
+`--type` is optional (inferred from `--repo` or `--url`). `--host` accepts only
+`github.com` until other providers land in v0.5.0. Source names may contain
+letters, digits, `-` and `_`. `dox add` writes the config atomically and keeps its
+file permissions. `--force` only rewrites a section in the simple form `dox add`
+itself produces (single-line `key = value` pairs, no comments inside). Otherwise it
+refuses with exit code 2 and leaves the file unchanged, so edit that section by hand.
 
 ### Output safety
 
