@@ -30,6 +30,7 @@ fi
 
 GOTOOLCHAIN=go1.27.4 go tool -modfile=tools/actionlint/go.mod actionlint
 GOTOOLCHAIN=go1.27.4 go tool -modfile=tools/buildx/go.mod -n buildx >/dev/null
+tool goreleaser check
 project_go build ./...
 project_go vet ./...
 CGO_ENABLED=0 tool golangci-lint run

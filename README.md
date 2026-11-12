@@ -7,8 +7,12 @@ CLI tool that syncs, searches, and reads library docs locally.
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install g5becks/tap/dox
+brew install --cask g5becks/tap/dox
 ```
+
+The v0.4.0 tap package is a cask on macOS and Linux. If the older formula is
+installed, run `brew uninstall --formula dox` before the cask install above.
+Update Homebrew first (`brew update`) for Linux cask support.
 
 ### Download Binary
 

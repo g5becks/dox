@@ -22,16 +22,17 @@ case "$architecture" in
   *) printf 'Unsupported Docker architecture: %s\n' "$architecture" >&2; exit 1 ;;
 esac
 platform="linux/$architecture"
+mkdir -p "$scratch/context/$platform"
 if [[ -n "${1:-}" ]]; then
-  cp "$1" "$scratch/context/dox"
+  cp "$1" "$scratch/context/$platform/dox"
 else
   toolchain=${DOX_GO_TOOLCHAIN:-$(go env GOVERSION)}
   CGO_ENABLED=0 GOOS=linux GOARCH="$architecture" GOTOOLCHAIN="$toolchain" \
-    go build -trimpath -ldflags='-s -w' -o "$scratch/context/dox" ./cmd/dox
+    go build -trimpath -ldflags='-s -w' -o "$scratch/context/$platform/dox" ./cmd/dox
 fi
 cp Dockerfile "$scratch/context/Dockerfile"
 image="dox-smoke:$(git rev-parse --short HEAD)-$(basename "$scratch")"
-docker build --platform "$platform" -t "$image" "$scratch/context"
+docker build --platform "$platform" --build-arg "TARGETPLATFORM=$platform" -t "$image" "$scratch/context"
 image_user=$(docker image inspect --format '{{.Config.User}}' "$image")
 if [[ "$image_user" != '65532' && "$image_user" != '65532:65532' ]]; then
   printf 'Expected nonroot image user, got %s\n' "$image_user" >&2

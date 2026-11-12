@@ -159,3 +159,19 @@ workflow legs. On macOS it creates owned temporary fixtures under
 share the bind mount; other platforms use the normal temporary directory.
 The container uses the bind mount owner's UID/GID during the test, and its
 configured default nonroot user is checked separately.
+
+## Release packaging
+
+Run the pinned `go tool -modfile=tools/go.mod goreleaser check` without bypass
+flags. Snapshot images use `scripts/with-buildx.sh` and an owned temporary dist
+path, as described in tools/README.md. The shared Dockerfile expects binaries
+under `linux/amd64/dox` or `linux/arm64/dox` in its build context. BuildKit supplies
+TARGETPLATFORM; a legacy Docker builder needs the matching `--build-arg`.
+
+GoReleaser generates a Homebrew cask under `Casks/dox.rb` (macOS universal and
+Linux amd64/arm64). Its declarative post-install step runs `dox --version`,
+preserving the former formula's executable probe. The maintainer publishes it to the existing tap; this repo's
+snapshot checks do not modify that tap. Existing formula users must uninstall
+the formula and install the cask, as shown in README. Docker v2 publishes the
+main version/latest multi-platform tags and keeps the per-architecture aliases;
+snapshots build/load only architecture-suffixed local images without publishing.
