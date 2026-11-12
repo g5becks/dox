@@ -397,6 +397,9 @@ envelope to `stderr`:
 
 ## Config Reference
 
+`dox.toml` is decoded strictly: unknown keys and wrongly typed values fail with
+the key path and line (exit code 2).
+
 ### Global
 
 | Field | Type | Default | Description |

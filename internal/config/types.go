@@ -104,40 +104,40 @@ func DefaultExcludes() []string {
 }
 
 type Display struct {
-	DefaultLimit      int      `koanf:"default_limit"`
-	DescriptionLength int      `koanf:"description_length"`
-	LineNumbers       bool     `koanf:"line_numbers"`
-	Format            string   `koanf:"format"             validate:"omitempty,oneof=table json csv"`
-	ListFields        []string `koanf:"list_fields"`
+	DefaultLimit      int      `toml:"default_limit"`
+	DescriptionLength int      `toml:"description_length"`
+	LineNumbers       bool     `toml:"line_numbers"`
+	Format            string   `toml:"format"             validate:"omitempty,oneof=table json csv"`
+	ListFields        []string `toml:"list_fields"`
 }
 
 type Config struct {
-	AllowExternalOutput bool   `koanf:"-"`
-	Output              string `koanf:"output"       validate:"omitempty,dirpath"`
-	Timeout             string `koanf:"timeout"`
-	GitHubToken         string `koanf:"github_token"`
+	AllowExternalOutput bool   `toml:"-"`
+	Output              string `toml:"output"       validate:"omitempty,dirpath"`
+	Timeout             string `toml:"timeout"`
+	GitHubToken         string `toml:"github_token"`
 	// Tokens maps a git host (for example a GitHub Enterprise host) to its token.
-	Tokens              map[string]string `koanf:"tokens"`
-	MaxParallel         int               `koanf:"max_parallel"         validate:"omitempty,min=1,max=100"`
-	MaxPerHost          int               `koanf:"max_per_host"         validate:"omitempty,min=1,max=64"`
-	DownloadConcurrency int               `koanf:"download_concurrency"`
-	Excludes            []string          `koanf:"excludes"`
-	Display             Display           `koanf:"display"`
-	Sources             map[string]Source `koanf:"sources"              validate:"required,dive"`
-	ConfigDir           string            `koanf:"-"`
+	Tokens              map[string]string `toml:"tokens"`
+	MaxParallel         int               `toml:"max_parallel"         validate:"omitempty,min=1,max=100"`
+	MaxPerHost          int               `toml:"max_per_host"         validate:"omitempty,min=1,max=64"`
+	DownloadConcurrency int               `toml:"download_concurrency"`
+	Excludes            []string          `toml:"excludes"`
+	Display             Display           `toml:"display"`
+	Sources             map[string]Source `toml:"sources"              validate:"required,dive"`
+	ConfigDir           string            `toml:"-"`
 }
 
 type Source struct {
-	Type     string   `koanf:"type"     validate:"omitempty,oneof=github url git gitlab gitea codeberg"`
-	Repo     string   `koanf:"repo"     validate:"omitempty,github_repo"`
-	Host     string   `koanf:"host"`
-	Path     string   `koanf:"path"`
-	Ref      string   `koanf:"ref"`
-	Patterns []string `koanf:"patterns"`
-	Exclude  []string `koanf:"exclude"`
-	URL      string   `koanf:"url"      validate:"omitempty,url"`
-	Filename string   `koanf:"filename"`
-	Out      string   `koanf:"out"`
+	Type     string   `toml:"type"     validate:"omitempty,oneof=github url git gitlab gitea codeberg"`
+	Repo     string   `toml:"repo"     validate:"omitempty,github_repo"`
+	Host     string   `toml:"host"`
+	Path     string   `toml:"path"`
+	Ref      string   `toml:"ref"`
+	Patterns []string `toml:"patterns"`
+	Exclude  []string `toml:"exclude"`
+	URL      string   `toml:"url"      validate:"omitempty,url"`
+	Filename string   `toml:"filename"`
+	Out      string   `toml:"out"`
 }
 
 func newValidator() *validator.Validate {

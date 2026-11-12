@@ -5,6 +5,10 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+### Changed
+
+- Config files are decoded strictly. Value types must match (`repo = 5` now reports `invalid config at "sources.docs.repo" (line 4) … (a string)` instead of a misleading validation error). **Unknown keys are now errors** listing each key and line (for example a misspelled `max_paralel`), where before they were silently ignored. Syntax errors name their line. All of these exit with code 2. Koanf and its dependencies (copystructure, reflectwalk, mapstructure, fsnotify) are removed in favor of go-toml directly. **Migration:** run `dox list` once; fix or remove any key it reports as unknown, and quote string values.
+
 ### Added
 
 - Gitea, Forgejo and Codeberg sources (`type = "gitea"`, alias `"codeberg"`; inferred for hosts containing codeberg, gitea or forgejo; default host `codeberg.org`). They are commit-pinned, find the folder's tree with non-recursive `git/trees` listings (2 calls for a top-level folder), and list changes with paginated recursive trees, then download raw files or one repository archive. Tokens come from `tokens.<host>` or `GITEA_TOKEN`. Only `type = "git"` and unknown hosts without a type remain unsupported.
