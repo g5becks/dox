@@ -22,6 +22,7 @@ const (
 	sourceTypeGitLab   = "gitlab"
 	sourceTypeCodeberg = "codeberg"
 	sourceTypeGit      = "git"
+	githubHost         = "github.com"
 	sourceTypeURL      = "url"
 )
 
@@ -219,7 +220,7 @@ func isGitSource(sourceType string) bool {
 func applyGitSourceDefaults(src Source, globalExcludes []string) Source {
 	// Default host to github.com if not specified
 	if src.Host == "" {
-		src.Host = "github.com"
+		src.Host = githubHost
 	}
 
 	// Normalize type based on host if type is generic "git"
@@ -319,6 +320,9 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 	if err := validateSourcePaths(sourceName, sourceCfg); err != nil {
 		return err
 	}
+	if err := validateSupportedProvider(sourceName, sourceCfg); err != nil {
+		return err
+	}
 	// Validate that source has either repo or url (not both, not neither)
 	hasRepo := sourceCfg.Repo != ""
 	hasURL := sourceCfg.URL != ""
@@ -378,6 +382,45 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 	return nil
 }
 
+// validateSupportedProvider rejects git hosting providers that dox cannot
+// sync yet. Before v0.5.0 every repo source is fetched from api.github.com,
+// so accepting another host would query (or sync) the wrong repository.
+func validateSupportedProvider(sourceName string, sourceCfg Source) error {
+	switch sourceCfg.Type {
+	case sourceTypeGitLab, sourceTypeCodeberg, sourceTypeGit:
+		return unsupportedProviderError(
+			sourceName,
+			fmt.Sprintf("source type %q", sourceCfg.Type),
+			map[string]any{fieldType: sourceCfg.Type},
+		)
+	}
+	if sourceCfg.Repo == "" {
+		return nil
+	}
+	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
+	if host != "" && host != githubHost {
+		return unsupportedProviderError(
+			sourceName,
+			fmt.Sprintf("host %q", sourceCfg.Host),
+			map[string]any{fieldName: "host", fieldValue: sourceCfg.Host},
+		)
+	}
+	return nil
+}
+
+func unsupportedProviderError(sourceName, what string, fields map[string]any) error {
+	fields[fieldSource] = sourceName
+	fields[errs.LegacyCodeField] = errs.LegacyConfigInvalid
+	return errs.New(
+		errs.Config,
+		fmt.Sprintf("%s for source %q is not supported yet (planned for v0.5.0)", what, sourceName),
+		errs.WithHint(
+			"dox currently syncs github.com repositories and direct URLs; remove 'host'/'type' or use a 'url' source",
+		),
+		errs.WithFields(fields),
+	)
+}
+
 func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldError) error {
 	field := strings.ToLower(fe.Field())
 
@@ -386,7 +429,7 @@ func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldE
 		return errs.New(
 			errs.Config,
 			fmt.Sprintf("unknown source type %q for source %q", sourceCfg.Type, sourceName),
-			errs.WithHint("Supported types: github, gitlab, codeberg, git, url (or omit 'type' to infer)"),
+			errs.WithHint("Supported types: github, url (or omit 'type' to infer)"),
 			errs.WithFields(
 				map[string]any{
 					fieldSource:          sourceName,

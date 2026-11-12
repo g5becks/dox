@@ -204,7 +204,7 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid gitlab source",
+			name: "gitlab source not supported yet",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
@@ -214,9 +214,10 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
+			wantErrContains: "not supported yet (planned for v0.5.0)",
 		},
 		{
-			name: "valid codeberg source",
+			name: "codeberg source not supported yet",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
@@ -226,6 +227,7 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
+			wantErrContains: "not supported yet (planned for v0.5.0)",
 		},
 		{
 			name: "valid url source",
@@ -301,6 +303,32 @@ func TestConfigValidate(t *testing.T) {
 				},
 			},
 			wantErrContains: "unknown source type",
+		},
+		{
+			name: "git type not supported yet",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "git", Repo: "owner/repo", Path: "docs", Host: "git.company.com"},
+				},
+			},
+			wantErrContains: `source type "git" for source "project" is not supported yet`,
+		},
+		{
+			name: "non-github host not supported yet",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "github", Repo: "owner/repo", Path: "docs", Host: "github.mycorp.com"},
+				},
+			},
+			wantErrContains: `host "github.mycorp.com" for source "project" is not supported yet`,
+		},
+		{
+			name: "explicit github.com host accepted",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "github", Repo: "owner/repo", Path: "docs", Host: "GitHub.com"},
+				},
+			},
 		},
 	}
 

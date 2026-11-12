@@ -139,23 +139,9 @@ excludes = [
 # exclude = ["custom-pattern/**"]                    # optional (adds to global excludes, no duplicates)
 # out = "custom-dir-name"                             # optional (default: source key name)
 
-# --- GitLab - specify host to use gitlab.com ---
-# [sources.gitlab-project]
-# repo = "owner/repo"
-# path = "docs"
-# host = "gitlab.com"                                # triggers gitlab type inference
-
-# --- Codeberg - specify host to use codeberg.org ---
-# [sources.codeberg-project]
-# repo = "owner/repo"
-# path = "documentation"
-# host = "codeberg.org"
-
-# --- Self-Hosted Git (GitHub Enterprise, GitLab CE/EE, Gitea, etc.) ---
-# [sources.internal-docs]
-# repo = "company/documentation"
-# path = "guides"
-# host = "git.company.com"
+# --- Planned (v0.5.0): GitLab, Codeberg/Gitea and self-hosted hosts ---
+# Only github.com repositories are supported today; any other 'host' fails
+# validation with "not supported yet".
 
 # --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]

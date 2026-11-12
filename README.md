@@ -176,9 +176,6 @@ dox add goreleaser --repo goreleaser/goreleaser --path www/docs
 # URL source (type inferred from --url)
 dox add hono --url https://hono.dev/llms-full.txt
 
-# GitLab source (specify host)
-dox add myproject --repo owner/repo --path docs --host gitlab.com
-
 # Overwrite existing source
 dox add goreleaser --repo goreleaser/goreleaser --path www/docs --force
 ```
@@ -354,9 +351,9 @@ envelope to `stderr`:
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `type` | No | Inferred from `repo` | `github`, `gitlab`, `codeberg`, or `git` |
+| `type` | No | Inferred from `repo` | `github` (other git hosts are planned for v0.5.0) |
 | `repo` | Yes | — | Repository in `owner/repo` format |
-| `host` | No | `github.com` | Git hosting domain |
+| `host` | No | `github.com` | Git hosting domain; only `github.com` is supported in v0.4.0 |
 | `path` | Yes | — | Path to directory or file in repo |
 | `ref` | No | Default branch | Branch, tag, or commit SHA |
 | `patterns` | No | `["**/*.md", "**/*.mdx", "**/*.txt"]` | Glob patterns for files to include |
@@ -372,25 +369,12 @@ Must have either `repo` or `url`, not both.
 [sources.docs]
 repo = "owner/repo"
 path = "docs"
-
-# GitLab
-[sources.docs]
-repo = "owner/repo"
-path = "docs"
-host = "gitlab.com"
-
-# Codeberg
-[sources.docs]
-repo = "owner/repo"
-path = "docs"
-host = "codeberg.org"
-
-# Self-hosted (GitHub Enterprise, GitLab CE/EE, Gitea, etc.)
-[sources.internal-docs]
-repo = "company/documentation"
-path = "guides"
-host = "git.company.com"
 ```
+
+**Planned (v0.5.0):** GitLab, Codeberg/Gitea/Forgejo and self-hosted hosts
+(including GitHub Enterprise). Until then, `type = "gitlab"`, `"codeberg"` or
+`"git"`, and any `host` other than `github.com`, fail validation with
+"not supported yet" (exit code 2) instead of silently querying github.com.
 
 ### URL Sources
 
@@ -438,7 +422,7 @@ excludes = [
 ]
 ```
 
-- Global excludes apply to all git sources (GitHub, GitLab, Codeberg, self-hosted)
+- Global excludes apply to all git sources
 - Global excludes do **not** apply to URL sources
 - Per-source `exclude` patterns add to (not replace) global excludes
 - Duplicate patterns are automatically removed
