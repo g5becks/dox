@@ -33,6 +33,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Added
 
+- Project-pinned Buildx and a temporary Docker dispatcher make local snapshot image builds reproducible without a global Docker plugin installation.
+
 - Audit regression cases with an explicit known-failure registry; unexpected successes require removing the corresponding entries before release.
 
 - End-to-end CLI testscript coverage and reusable fake GitHub fault-injection and JSON-golden helpers.

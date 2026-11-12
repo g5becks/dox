@@ -59,6 +59,7 @@ go mod tidy -diff
 (cd tools && go mod tidy -diff)
 (cd tools/beads && go mod tidy -diff)
 (cd tools/actionlint && go mod tidy -diff)
+(cd tools/buildx && go mod tidy -diff)
 ```
 
 Lint must report zero issues. Formatting, modernization, and tidy checks must
@@ -90,6 +91,10 @@ shared with GitHub in `scripts/ci-check.sh`; tools are built with Go 1.27.4 thro
 Analyzers and project build/vet/race/fix/tidy checks use the selected matrix Go
 version. Native Windows execution remains a GitHub-only check. GitHub Actions currently cannot run because of the account's
 billing lock; report local results honestly rather than claiming an Actions run.
+
+Local snapshot image builds use the pinned Buildx dispatcher in
+`scripts/with-buildx.sh`; see [tools/README.md](tools/README.md) for invocation
+and temporary artifact-directory requirements.
 
 ## Test strategy
 

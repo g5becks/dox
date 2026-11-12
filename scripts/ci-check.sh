@@ -29,6 +29,7 @@ if [[ "${1:-}" == windows-cross ]]; then
 fi
 
 GOTOOLCHAIN=go1.27.4 go tool -modfile=tools/actionlint/go.mod actionlint
+GOTOOLCHAIN=go1.27.4 go tool -modfile=tools/buildx/go.mod -n buildx >/dev/null
 project_go build ./...
 project_go vet ./...
 CGO_ENABLED=0 tool golangci-lint run
@@ -54,4 +55,5 @@ project_go mod tidy -diff
 (cd tools && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
 (cd tools/beads && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
 (cd tools/actionlint && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
+(cd tools/buildx && GOTOOLCHAIN=go1.27.4 go mod tidy -diff)
 echo 'Native quality checks: PASS'

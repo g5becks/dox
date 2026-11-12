@@ -35,6 +35,7 @@ jobs:
             tools/go.sum
             tools/beads/go.sum
             tools/actionlint/go.sum
+            tools/buildx/go.sum
       - name: Vet, lint, race/coverage, vulnerabilities, fix, format, and tidy
         run: DOX_GO_TOOLCHAIN=$(GOTOOLCHAIN=local go env GOVERSION) bash scripts/ci-check.sh
       - name: Build image and sync an HTTPS documentation source

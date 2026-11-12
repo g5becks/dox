@@ -60,6 +60,7 @@ go mod tidy -diff
 (cd tools && go mod tidy -diff)
 (cd tools/beads && go mod tidy -diff)
 (cd tools/actionlint && go mod tidy -diff)
+(cd tools/buildx && go mod tidy -diff)
 ```
 
 Lint must report zero issues; formatting, fix, and tidy checks must produce no
