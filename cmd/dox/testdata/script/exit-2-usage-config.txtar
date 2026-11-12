@@ -1,0 +1,14 @@
+# Exit code 2 (usage/config) for invalid CLI usage and invalid configuration.
+doxexit 2 files
+stderr '^expected 1 argument, got 0$'
+stderr '^hint: Usage: dox files <collection>$'
+
+doxexit 2 sync --config invalid.toml
+stderr 'unsafe local path "\."'
+stderr '^hint: Use a relative path inside the configured output directory$'
+
+-- invalid.toml --
+output = "."
+[sources.docs]
+type = "url"
+url = "https://example.invalid/guide.txt"

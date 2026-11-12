@@ -1,0 +1,173 @@
+[
+  {
+    "Path": "testdata/outline/basic.md",
+    "Result": {
+      "Description": "Fixture Title - Fixture description",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Main title",
+            "line": 5
+          },
+          {
+            "level": 2,
+            "text": "Section",
+            "line": 9
+          },
+          {
+            "level": 2,
+            "text": "Final heading",
+            "line": 16
+          }
+        ]
+      },
+      "Lines": 17
+    }
+  },
+  {
+    "Path": "testdata/outline/fences.md",
+    "Result": {
+      "Description": "Real",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Real",
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "After fence",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 14
+    }
+  },
+  {
+    "Path": "testdata/outline/inline.md",
+    "Result": {
+      "Description": "Strong and and link - Paragraph with emphasis and and a label.",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Strong and and link",
+            "line": 1
+          }
+        ]
+      },
+      "Lines": 4
+    }
+  },
+  {
+    "Path": "testdata/outline/positions.mdx",
+    "Result": {
+      "Description": "Component",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Actual Heading",
+            "line": 2
+          },
+          {
+            "level": 2,
+            "text": "Details",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 13
+    }
+  },
+  {
+    "Path": "testdata/outline/toml.md",
+    "Result": {
+      "Description": "Actual title",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Actual title",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 9
+    }
+  },
+  {
+    "Path": "../../testdata/sample.md",
+    "Result": {
+      "Description": "Sample Documentation - This is a sample markdown file for testing.",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Sample Documentation",
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Installation",
+            "line": 5
+          },
+          {
+            "level": 2,
+            "text": "Usage",
+            "line": 13
+          },
+          {
+            "level": 3,
+            "text": "Advanced Usage",
+            "line": 22
+          }
+        ]
+      },
+      "Lines": 25
+    }
+  },
+  {
+    "Path": "../../testdata/sample.mdx",
+    "Result": {
+      "Description": "Sample MDX - Testing MDX parsing",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Sample MDX Documentation",
+            "line": 3
+          },
+          {
+            "level": 2,
+            "text": "Features",
+            "line": 7
+          },
+          {
+            "level": 2,
+            "text": "API Reference",
+            "line": 12
+          }
+        ]
+      },
+      "Lines": 20
+    }
+  }
+]

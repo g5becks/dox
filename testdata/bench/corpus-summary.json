@@ -1,0 +1,35 @@
+{
+  "files": 3661,
+  "bytes": 23490248,
+  "collections": {
+    "arktype": {
+      "files": 34,
+      "bytes": 186669
+    },
+    "bun": {
+      "files": 1,
+      "bytes": 2070979
+    },
+    "db": {
+      "files": 1036,
+      "bytes": 9309542
+    },
+    "mise": {
+      "files": 441,
+      "bytes": 3238663
+    },
+    "query": {
+      "files": 1670,
+      "bytes": 5466837
+    },
+    "router": {
+      "files": 248,
+      "bytes": 1685142
+    },
+    "vitest": {
+      "files": 231,
+      "bytes": 1532416
+    }
+  },
+  "bun_sha256": "3b87dca4793adbeebc2d382a55640021ef643aa74c975dc5aba9482da19043a8"
+}

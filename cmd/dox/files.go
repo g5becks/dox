@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 )
 
@@ -23,16 +24,16 @@ func newFilesCommand() *cli.Command {
 		ArgsUsage: "<collection>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output as JSON",
+				Name:  formatJSON,
+				Usage: helpJSON,
 			},
 			&cli.IntFlag{
-				Name:  "limit",
+				Name:  flagLimit,
 				Usage: "Show first N files (0 = use config default)",
 			},
 			&cli.BoolFlag{
@@ -58,20 +59,22 @@ func newFilesCommand() *cli.Command {
 
 func filesAction(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() != 1 {
-		return oops.
-			Code("INVALID_ARGS").
-			Hint("Usage: dox files <collection>").
-			Errorf("expected 1 argument, got %d", cmd.Args().Len())
+		return errs.New(
+			errs.Usage,
+			fmt.Sprintf("expected 1 argument, got %d", cmd.Args().Len()),
+			errs.WithHint("Usage: dox files <collection>"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	collectionName := cmd.Args().First()
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadCommandConfig(cmd, configPath)
 	if err != nil {
 		return err
 	}
@@ -83,11 +86,14 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 
 	collection, ok := m.Collections[collectionName]
 	if !ok {
-		return oops.
-			Code("COLLECTION_NOT_FOUND").
-			With("collection", collectionName).
-			Hint("Run 'dox collections' to see available collections").
-			Errorf("collection %q not found", collectionName)
+		return errs.New(
+			errs.NotFound,
+			fmt.Sprintf("collection %q not found", collectionName),
+			errs.WithHint("Run 'dox collections' to see available collections"),
+			errs.WithFields(
+				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
+			),
+		)
 	}
 
 	limit := resolveLimit(cmd, cfg)
@@ -105,7 +111,7 @@ func filesAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	switch format {
-	case "json":
+	case formatJSON:
 		return outputFilesJSON(files)
 	case "csv":
 		return outputFilesCSV(files, fields, descLength)
@@ -118,15 +124,15 @@ func resolveLimit(cmd *cli.Command, cfg *config.Config) int {
 	if cmd.Bool("all") {
 		return 0
 	}
-	if cmd.IsSet("limit") {
-		return cmd.Int("limit")
+	if cmd.IsSet(flagLimit) {
+		return cmd.Int(flagLimit)
 	}
 	return cfg.Display.DefaultLimit
 }
 
 func resolveFormat(cmd *cli.Command, cfg *config.Config) string {
-	if cmd.Bool("json") {
-		return "json"
+	if jsonEnabled(cmd) {
+		return formatJSON
 	}
 	if cmd.IsSet("format") {
 		return cmd.String("format")
@@ -153,9 +159,11 @@ func outputFilesJSON(files []manifest.FileInfo) error {
 	encoder.SetIndent("", "  ")
 
 	if err := encoder.Encode(files); err != nil {
-		return oops.
-			Code("JSON_ERROR").
-			Wrapf(err, "encoding files")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding files: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
+		)
 	}
 
 	return nil
@@ -166,9 +174,11 @@ func outputFilesCSV(files []manifest.FileInfo, fields []string, descLength int) 
 	defer w.Flush()
 
 	if err := w.Write(fields); err != nil {
-		return oops.
-			Code("CSV_ERROR").
-			Wrapf(err, "writing CSV header")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("writing CSV header: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
+		)
 	}
 
 	for _, file := range files {
@@ -177,9 +187,11 @@ func outputFilesCSV(files []manifest.FileInfo, fields []string, descLength int) 
 			row[i] = getFieldValue(file, field, descLength)
 		}
 		if err := w.Write(row); err != nil {
-			return oops.
-				Code("CSV_ERROR").
-				Wrapf(err, "writing CSV row")
+			return errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("writing CSV row: %w", err),
+				errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
+			)
 		}
 	}
 
@@ -224,9 +236,9 @@ func outputFilesTable(
 
 func getFieldValue(file manifest.FileInfo, field string, descLength int) string {
 	switch field {
-	case "path":
+	case fieldPath:
 		return file.Path
-	case "type":
+	case fieldType:
 		return file.Type
 	case "lines":
 		return strconv.Itoa(file.Lines)

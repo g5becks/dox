@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 
-	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 )
 
@@ -21,16 +21,16 @@ func newCollectionsCommand() *cli.Command {
 		Usage: "List all documentation collections",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "config",
+				Name:    flagConfig,
 				Aliases: []string{"c"},
-				Usage:   "Path to config file",
+				Usage:   helpConfig,
 			},
 			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output as JSON",
+				Name:  formatJSON,
+				Usage: helpJSON,
 			},
 			&cli.IntFlag{
-				Name:  "limit",
+				Name:  flagLimit,
 				Usage: "Limit number of results (0 = all)",
 			},
 		},
@@ -49,12 +49,12 @@ type collectionOutput struct {
 }
 
 func collectionsAction(_ context.Context, cmd *cli.Command) error {
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadCommandConfig(cmd, configPath)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 	}
 	sort.Strings(names)
 
-	limit := cmd.Int("limit")
+	limit := cmd.Int(flagLimit)
 	if limit > 0 && len(names) > limit {
 		names = names[:limit]
 	}
@@ -89,7 +89,7 @@ func collectionsAction(_ context.Context, cmd *cli.Command) error {
 		})
 	}
 
-	if cmd.Bool("json") {
+	if jsonEnabled(cmd) {
 		return outputCollectionsJSON(collections)
 	}
 
@@ -101,9 +101,11 @@ func outputCollectionsJSON(collections []collectionOutput) error {
 	encoder.SetIndent("", "  ")
 
 	if err := encoder.Encode(collections); err != nil {
-		return oops.
-			Code("JSON_ERROR").
-			Wrapf(err, "encoding collections")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding collections: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
+		)
 	}
 
 	return nil

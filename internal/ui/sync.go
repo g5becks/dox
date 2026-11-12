@@ -75,6 +75,13 @@ func (p *SyncPrinter) HandleEvent(e doxsync.Event) {
 			p.s.yellow.Sprint("⚠"),
 			e.Err,
 		)
+
+	case doxsync.EventWarning:
+		fmt.Fprintf(p.w, "%s %s: %s\n",
+			p.s.yellow.Sprint("⚠"),
+			p.s.bold.Sprint(e.Source),
+			e.Warning,
+		)
 	}
 }
 

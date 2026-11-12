@@ -1,14 +1,16 @@
 package manifest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/samber/oops"
-
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
 	"github.com/g5becks/dox/internal/parser"
 )
 
@@ -18,9 +20,10 @@ const (
 )
 
 type Manifest struct {
-	Version     string                 `json:"version"`
-	Generated   time.Time              `json:"generated"`
-	Collections map[string]*Collection `json:"collections"`
+	ParserVersion int                    `json:"parser_version,omitempty"`
+	Version       string                 `json:"version"`
+	Generated     time.Time              `json:"generated"`
+	Collections   map[string]*Collection `json:"collections"`
 }
 
 type Collection struct {
@@ -38,6 +41,7 @@ type Collection struct {
 }
 
 type FileInfo struct {
+	SHA           string               `json:"sha,omitempty"`
 	Path          string               `json:"path"`
 	Type          string               `json:"type"`
 	Size          int64                `json:"size"`
@@ -62,26 +66,35 @@ func Load(outputDir string) (*Manifest, error) {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, oops.
-				Code("MANIFEST_NOT_FOUND").
-				With("path", manifestPath).
-				Hint("Run 'dox sync' to generate the manifest").
-				Errorf("manifest not found at %q", manifestPath)
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("manifest not found at %q", manifestPath),
+				errs.WithHint("Run 'dox sync' to generate the manifest"),
+				errs.WithFields(
+					map[string]any{fieldPath: manifestPath, errs.LegacyCodeField: errs.LegacyManifestNotFound},
+				),
+			)
 		}
 
-		return nil, oops.
-			Code("MANIFEST_READ_ERROR").
-			With("path", manifestPath).
-			Wrapf(err, "reading manifest file")
+		return nil, errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("reading manifest file: %w", err),
+			errs.WithFields(
+				map[string]any{fieldPath: manifestPath, errs.LegacyCodeField: errs.LegacyManifestReadError},
+			),
+		)
 	}
 
 	m := &Manifest{}
 	if unmarshalErr := json.Unmarshal(data, m); unmarshalErr != nil {
-		return nil, oops.
-			Code("MANIFEST_CORRUPTED").
-			With("path", manifestPath).
-			Hint("Delete .dox/manifest.json and run 'dox sync'").
-			Wrapf(unmarshalErr, "parsing manifest file")
+		return nil, errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("parsing manifest file: %w", unmarshalErr),
+			errs.WithHint("Delete .dox/manifest.json and run 'dox sync'"),
+			errs.WithFields(
+				map[string]any{fieldPath: manifestPath, errs.LegacyCodeField: errs.LegacyManifestCorrupted},
+			),
+		)
 	}
 
 	if m.Collections == nil {
@@ -93,65 +106,52 @@ func Load(outputDir string) (*Manifest, error) {
 
 func (m *Manifest) Save(outputDir string) error {
 	if m == nil {
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			Hint("Initialize manifest before saving").
-			Errorf("cannot save nil manifest")
+		return m.SaveRoot(nil)
 	}
-
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			With("path", outputDir).
-			Wrapf(err, "creating manifest directory")
-	}
-
-	data, err := json.MarshalIndent(m, "", "  ")
+	root, err := fsutil.OpenDir(outputDir)
 	if err != nil {
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			Wrapf(err, "encoding manifest")
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("creating manifest directory: %w", err),
+			errs.WithFields(map[string]any{fieldPath: outputDir, errs.LegacyCodeField: errs.LegacyManifestWriteError}),
+		)
+	}
+	defer root.Close()
+	return m.SaveRoot(root)
+}
+
+// SaveRoot writes state through an already anchored output directory.
+func (m *Manifest) SaveRoot(root *os.Root) error {
+	return m.SaveRootContext(context.Background(), root)
+}
+
+// SaveRootContext checks cancellation before atomically publishing a compact snapshot.
+func (m *Manifest) SaveRootContext(ctx context.Context, root *os.Root) error {
+	if m == nil {
+		return errs.New(
+			errs.Internal,
+			"cannot save nil manifest",
+			errs.WithHint("Initialize manifest before saving"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyManifestWriteError}),
+		)
 	}
 
+	data, err := json.Marshal(m)
+	if err != nil {
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("encoding manifest: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyManifestWriteError}),
+		)
+	}
 	data = append(data, '\n')
-	manifestPath := Path(outputDir)
-
-	tempFile, err := os.CreateTemp(outputDir, ManifestFile+".*.tmp")
-	if err != nil {
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			With("path", outputDir).
-			Wrapf(err, "creating temporary manifest file")
+	if atomicWriteErr := fsutil.AtomicWriteContext(ctx, root, ManifestFile, data); atomicWriteErr != nil {
+		return errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("writing manifest: %w", atomicWriteErr),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyManifestWriteError}),
+		)
 	}
-
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = os.Remove(tempPath)
-	}()
-
-	if _, writeErr := tempFile.Write(data); writeErr != nil {
-		_ = tempFile.Close()
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			With("path", tempPath).
-			Wrapf(writeErr, "writing temporary manifest file")
-	}
-
-	if closeErr := tempFile.Close(); closeErr != nil {
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			With("path", tempPath).
-			Wrapf(closeErr, "closing temporary manifest file")
-	}
-
-	if renameErr := os.Rename(tempPath, manifestPath); renameErr != nil {
-		return oops.
-			Code("MANIFEST_WRITE_ERROR").
-			With("from", tempPath).
-			With("to", manifestPath).
-			Wrapf(renameErr, "replacing manifest file")
-	}
-
 	return nil
 }
 

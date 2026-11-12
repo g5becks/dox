@@ -162,13 +162,23 @@ func TestConfigOutputDir(t *testing.T) {
 		Output:    ".dox",
 	}
 
-	gotDefaultOut := cfg.OutputDir("goreleaser", config.Source{})
+	paths, err := cfg.Paths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotDefaultOut, err := paths.Source("goreleaser", config.Source{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	wantDefaultOut := filepath.Join("/tmp/project", ".dox", "goreleaser")
 	if gotDefaultOut != wantDefaultOut {
 		t.Fatalf("OutputDir() default = %q, want %q", gotDefaultOut, wantDefaultOut)
 	}
 
-	gotCustomOut := cfg.OutputDir("goreleaser", config.Source{Out: "go/goreleaser"})
+	gotCustomOut, err := paths.Source("goreleaser", config.Source{Out: "go/goreleaser"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	wantCustomOut := filepath.Join("/tmp/project", ".dox", "go/goreleaser")
 	if gotCustomOut != wantCustomOut {
 		t.Fatalf("OutputDir() custom = %q, want %q", gotCustomOut, wantCustomOut)
@@ -194,7 +204,7 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid gitlab source",
+			name: "gitlab source not supported yet",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
@@ -204,9 +214,10 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
+			wantErrContains: "not supported yet (planned for v0.5.0)",
 		},
 		{
-			name: "valid codeberg source",
+			name: "codeberg source not supported yet",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
@@ -216,6 +227,7 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
+			wantErrContains: "not supported yet (planned for v0.5.0)",
 		},
 		{
 			name: "valid url source",
@@ -291,6 +303,93 @@ func TestConfigValidate(t *testing.T) {
 				},
 			},
 			wantErrContains: "unknown source type",
+		},
+		{
+			name: "max_per_host above limit",
+			cfg: &config.Config{
+				MaxPerHost: 65,
+				Sources:    map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid max_per_host 65",
+		},
+		{
+			name: "max_per_host negative",
+			cfg: &config.Config{
+				MaxPerHost: -1,
+				Sources:    map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid max_per_host -1",
+		},
+		{
+			name: "max_parallel above limit",
+			cfg: &config.Config{
+				MaxParallel: 101,
+				Sources:     map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid max_parallel 101",
+		},
+		{
+			name: "max_parallel negative",
+			cfg: &config.Config{
+				MaxParallel: -1,
+				Sources:     map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid max_parallel -1",
+		},
+		{
+			name: "max_parallel at upper limit",
+			cfg: &config.Config{
+				MaxParallel: 100,
+				Sources:     map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+		},
+		{
+			name: "download_concurrency above limit",
+			cfg: &config.Config{
+				DownloadConcurrency: 65,
+				Sources:             map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+			wantErrContains: "invalid download_concurrency 65",
+		},
+		{
+			name: "download_concurrency within limit",
+			cfg: &config.Config{
+				DownloadConcurrency: 4,
+				Sources:             map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+		},
+		{
+			name: "max_per_host within limit",
+			cfg: &config.Config{
+				MaxPerHost: 8,
+				Sources:    map[string]config.Source{"docs": {Type: "url", URL: "https://example.com/a.txt"}},
+			},
+		},
+		{
+			name: "git type not supported yet",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "git", Repo: "owner/repo", Path: "docs", Host: "git.company.com"},
+				},
+			},
+			wantErrContains: `source type "git" for source "project" is not supported yet`,
+		},
+		{
+			name: "non-github host not supported yet",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "github", Repo: "owner/repo", Path: "docs", Host: "github.mycorp.com"},
+				},
+			},
+			wantErrContains: `host "github.mycorp.com" for source "project" is not supported yet`,
+		},
+		{
+			name: "explicit github.com host accepted",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "github", Repo: "owner/repo", Path: "docs", Host: "GitHub.com"},
+				},
+			},
 		},
 	}
 

@@ -1,0 +1,9 @@
+audit C3_add_infer success add x --repo acme/docs --path docs
+# The baseline stops at the known failure; grep only runs on a real pass.
+grep '^\[sources\.x\]$' dox.toml
+grep '^type = "github"$' dox.toml
+grep '^repo = "acme/docs"$' dox.toml
+grep '^path = "docs"$' dox.toml
+
+-- dox.toml --
+output = ".dox"

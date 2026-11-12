@@ -1,8 +1,6 @@
 package source_test
 
 import (
-	"context"
-	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,23 +48,22 @@ func TestBuildFileMapFiltersByBaseAndPatterns(t *testing.T) {
 		Patterns: []string{"**/*.md", "**/*.txt"},
 		Exclude:  []string{"**/skip.md"},
 	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
-		"/repos/acme/widgets/git/trees/main?recursive=1": {
+		"/repos/acme/widgets/git/trees/main:docs?recursive=1": {
 			Body: `{
   "sha": "tree-sha",
   "truncated": false,
   "tree": [
-    {"path":"docs/getting-started.md","type":"blob","sha":"sha-1"},
-    {"path":"docs/skip.md","type":"blob","sha":"sha-2"},
-    {"path":"docs/sub/notes.txt","type":"blob","sha":"sha-3"},
-    {"path":"docs/ignored.go","type":"blob","sha":"sha-4"},
-    {"path":"other/outside.md","type":"blob","sha":"sha-5"},
-    {"path":"docs/subdir","type":"tree","sha":"sha-tree"}
+    {"path":"getting-started.md","type":"blob","sha":"sha-1"},
+    {"path":"skip.md","type":"blob","sha":"sha-2"},
+    {"path":"sub/notes.txt","type":"blob","sha":"sha-3"},
+    {"path":"ignored.go","type":"blob","sha":"sha-4"},
+    {"path":"subdir","type":"tree","sha":"sha-tree"}
   ]
 }`,
 		},
 	}), "main")
 
-	result, err := src.Sync(context.Background(), t.TempDir(), nil, source.SyncOptions{DryRun: true})
+	result, err := src.Sync(t.Context(), t.TempDir(), nil, source.SyncOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -96,14 +93,14 @@ func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
 		Path:     "docs",
 		Patterns: []string{"**/*.md", "**/*.txt"},
 	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
-		"/repos/acme/widgets/git/trees/main?recursive=1": {
+		"/repos/acme/widgets/git/trees/main:docs?recursive=1": {
 			Body: `{
   "sha": "tree-new",
   "truncated": false,
   "tree": [
-    {"path":"docs/a.md","type":"blob","sha":"sha-a-new"},
-    {"path":"docs/b.txt","type":"blob","sha":"sha-b"},
-    {"path":"docs/ignored.go","type":"blob","sha":"sha-go"}
+    {"path":"a.md","type":"blob","sha":"sha-a-new"},
+    {"path":"b.txt","type":"blob","sha":"sha-b"},
+    {"path":"ignored.go","type":"blob","sha":"sha-go"}
   ]
 }`,
 		},
@@ -118,7 +115,7 @@ func TestSyncDirectoryDryRunComputesDiff(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{DryRun: true})
+	result, err := src.Sync(t.Context(), t.TempDir(), prevLock, source.SyncOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -144,7 +141,7 @@ func TestSyncDirectorySkipsWhenTreeSHAUnchanged(t *testing.T) {
 		Path:     "docs",
 		Patterns: []string{"**/*.md"},
 	}, source.NewMockGitHubClient(t, map[string]source.MockHTTPResponse{
-		"/repos/acme/widgets/git/trees/main?recursive=1": {
+		"/repos/acme/widgets/git/trees/main:docs?recursive=1": {
 			Body: `{"sha":"tree-same","truncated":false,"tree":[]}`,
 		},
 	}), "main")
@@ -157,7 +154,7 @@ func TestSyncDirectorySkipsWhenTreeSHAUnchanged(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), t.TempDir(), prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -171,7 +168,6 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 	t.Parallel()
 
 	destDir := t.TempDir()
-	encoded := base64.StdEncoding.EncodeToString([]byte("hello docs"))
 
 	src := source.TestableGitHubSource(t, "widgets", config.Source{
 		Repo: "acme/widgets",
@@ -181,7 +177,8 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 			Body: `{"type":"file","sha":"blob-1"}`,
 		},
 		"/repos/acme/widgets/git/blobs/blob-1": {
-			Body: `{"encoding":"base64","content":"` + encoded + `"}`,
+			Body:       "hello docs",
+			WantAccept: "application/vnd.github.raw",
 		},
 	}), "main")
 
@@ -192,7 +189,7 @@ func TestSyncSingleFileDownloadsChangedBlob(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), destDir, prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), destDir, prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -232,7 +229,7 @@ func TestSyncSingleFileSkipsWhenSHAUnchanged(t *testing.T) {
 		},
 	}
 
-	result, err := src.Sync(context.Background(), destDir, prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), destDir, prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}

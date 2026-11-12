@@ -1,0 +1,49 @@
+httpserve guide.md
+envsubst config.in dox.toml
+dox sync
+dox cat docs guide.md --line 3 --limit 1 --no-line-numbers
+stdout '^needle$'
+dox cat docs guide.md:3 --limit 1 --no-line-numbers
+stdout '^needle$'
+dox cat docs guide.md --line 1 --limit 1 --no-line-numbers
+stdout '^# Heading$'
+dox outline docs guide.md --json
+stdout '"line": 1'
+dox search needle --content --json
+stdout '"line": 3'
+dox cat docs guide.md:3 --limit 1 --json
+stdout '"line": 3'
+stdout '"offset": 2'
+stdout '"content": "needle"'
+dox cat docs guide.md --offset 2 --limit 1 --no-line-numbers
+stdout '^needle$'
+stderr 'deprecated.*v0.6.0.*--line'
+dox cat docs guide.md --offset 0 --limit 1 --no-line-numbers
+stdout '^# Heading$'
+stderr 'deprecated'
+dox cat docs guide.md --line 999 --no-line-numbers
+! stdout .
+! dox cat docs guide.md --line 0
+stderr 'positive'
+! dox cat docs guide.md --line -1
+stderr 'positive'
+! dox cat docs guide.md:0
+stderr 'positive'
+! dox cat docs guide.md --offset -1
+stderr 'nonnegative'
+! dox cat docs guide.md:3 --line 3
+stderr 'one location'
+! dox cat docs guide.md --line 3 --offset 2
+stderr 'one location'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.md"
+filename = "guide.md"
+-- guide.md --
+# Heading
+
+needle
+outro

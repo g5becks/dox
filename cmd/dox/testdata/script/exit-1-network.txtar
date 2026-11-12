@@ -1,0 +1,17 @@
+# Exit code 1 (runtime/network) when all sources fail to download.
+httpfail 500
+envsubst config.in dox.toml
+doxexit 1 sync
+stderr '1 source\(s\) failed during sync'
+
+doxexit 1 sync --verbose
+stderr 'fields: failed_sources=1 legacy_code=DOWNLOAD_FAILED'
+stderr 'cause: url source returned non-success status 500'
+stderr 'cause: HTTP status 500'
+
+-- config.in --
+output = ".dox"
+[sources.broken]
+type = "url"
+url = "$FAIL_SERVER/guide.txt"
+filename = "guide.txt"

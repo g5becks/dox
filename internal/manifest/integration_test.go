@@ -1,7 +1,6 @@
 package manifest_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,7 +36,8 @@ func TestFullWorkflowIntegration(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"test-collection": {
 				Type: "github",
@@ -48,7 +48,7 @@ func TestFullWorkflowIntegration(t *testing.T) {
 	}
 
 	// Generate manifest
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -72,21 +72,12 @@ func TestFullWorkflowIntegration(t *testing.T) {
 		t.Errorf("expected %d files, got %d", len(files), len(coll.Files))
 	}
 
-	// Verify each file
+	// Verify each file independently, including its non-zero size.
 	for name := range files {
-		found := false
-		for _, f := range coll.Files {
-			if filepath.Base(f.Path) == name {
-				found = true
-				if f.Size == 0 {
-					t.Errorf("file %s has zero size", name)
-				}
-				break
-			}
-		}
-		if !found {
-			t.Errorf("file %s not found in manifest", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assertWorkflowFile(t, coll, name)
+		})
 	}
 }
 
@@ -109,7 +100,8 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"docs": {
 				Type: "github",
@@ -120,7 +112,7 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 
 	// Generate
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -190,7 +182,8 @@ func TestMixedFileTypes(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"mixed": {
 				Type: "github",
@@ -200,7 +193,7 @@ func TestMixedFileTypes(t *testing.T) {
 		},
 	}
 
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -244,7 +237,8 @@ func TestEmptyCollection(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"empty": {
 				Type: "github",
@@ -254,7 +248,7 @@ func TestEmptyCollection(t *testing.T) {
 		},
 	}
 
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -299,7 +293,8 @@ Content here.
 	}
 
 	cfg := &config.Config{
-		Output: doxDir,
+		ConfigDir: tmpDir,
+		Output:    doxDir,
 		Sources: map[string]config.Source{
 			"meta": {
 				Type: "github",
@@ -309,7 +304,7 @@ Content here.
 		},
 	}
 
-	if err := manifest.Generate(context.Background(), cfg, nil); err != nil {
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
 
@@ -344,4 +339,17 @@ Content here.
 	if f.Type != "md" {
 		t.Errorf("got type %q, want md", f.Type)
 	}
+}
+
+func assertWorkflowFile(t *testing.T, coll *manifest.Collection, name string) {
+	t.Helper()
+	for _, file := range coll.Files {
+		if filepath.Base(file.Path) == name {
+			if file.Size == 0 {
+				t.Errorf("file %s has zero size", name)
+			}
+			return
+		}
+	}
+	t.Errorf("file %s not found in manifest", name)
 }

@@ -1,0 +1,38 @@
+# Non-GitHub hosts and unsupported provider types fail config validation with
+# exit 2 before any network request (audit C4, dox-deb.17).
+doxexit 2 sync --config gitlab-host.toml
+stderr 'host "gitlab.com" for source "docs" is not supported yet \(planned for v0.5.0\)'
+stderr '^hint: dox currently syncs github.com repositories and direct URLs'
+
+doxexit 2 sync --config codeberg-host.toml
+stderr 'host "codeberg.org" for source "docs" is not supported yet'
+
+doxexit 2 sync --config enterprise-host.toml
+stderr 'host "github.mycorp.com" for source "docs" is not supported yet'
+
+doxexit 2 sync --config gitlab-type.toml
+stderr 'source type "gitlab" for source "docs" is not supported yet'
+
+doxexit 2 list --config gitlab-host.toml
+stderr 'not supported yet'
+
+-- gitlab-host.toml --
+[sources.docs]
+repo = "acme/docs"
+path = "docs"
+host = "gitlab.com"
+-- codeberg-host.toml --
+[sources.docs]
+repo = "acme/docs"
+path = "docs"
+host = "codeberg.org"
+-- enterprise-host.toml --
+[sources.docs]
+repo = "acme/docs"
+path = "docs"
+host = "github.mycorp.com"
+-- gitlab-type.toml --
+[sources.docs]
+type = "gitlab"
+repo = "acme/docs"
+path = "docs"

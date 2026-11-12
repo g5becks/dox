@@ -1,6 +1,8 @@
 package search_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -333,6 +335,24 @@ func TestContent_EmptyQuery(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error for empty query")
+	}
+}
+
+func TestContent_HonorsContextCancellation(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	setupContentTestFiles(t, tmpDir)
+	m := buildContentTestManifest(tmpDir)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := search.ContentContext(ctx, m, search.ContentOptions{
+		OutputDir: tmpDir,
+		Query:     "Hello",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ContentContext() error = %v, want context.Canceled", err)
 	}
 }
 

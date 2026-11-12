@@ -3,6 +3,7 @@ package parser_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/g5becks/dox/internal/parser"
@@ -65,17 +66,7 @@ func TestCrossParserIntegration(t *testing.T) {
 				t.Fatalf("failed to read test file: %v", err)
 			}
 
-			var foundParser parser.Parser
-			for _, p := range parsers {
-				if p.CanParse(tt.file) {
-					foundParser = p
-					break
-				}
-			}
-
-			if foundParser == nil {
-				t.Fatal("no parser found for file")
-			}
+			foundParser := parserForFile(t, parsers, tt.file)
 
 			result, err := foundParser.Parse(tt.file, content)
 			if err != nil {
@@ -221,17 +212,7 @@ func TestParserRoundTrip(t *testing.T) {
 				t.Fatalf("failed to read file: %v", err)
 			}
 
-			var p parser.Parser
-			for _, candidate := range parsers {
-				if candidate.CanParse(file) {
-					p = candidate
-					break
-				}
-			}
-
-			if p == nil {
-				t.Fatal("no parser found")
-			}
+			p := parserForFile(t, parsers, file)
 
 			// Parse twice, results should be identical
 			result1, err := p.Parse(file, content)
@@ -244,30 +225,22 @@ func TestParserRoundTrip(t *testing.T) {
 				t.Fatalf("second parse failed: %v", err)
 			}
 
-			if result1.Description != result2.Description {
-				t.Errorf("description mismatch")
-			}
-
-			if result1.Lines != result2.Lines {
-				t.Errorf("lines mismatch: %d vs %d", result1.Lines, result2.Lines)
-			}
-
-			// Compare outlines
-			if (result1.Outline == nil) != (result2.Outline == nil) {
-				t.Error("outline presence mismatch")
-			}
-
-			if result1.Outline != nil && result2.Outline != nil {
-				if len(result1.Outline.Headings) != len(result2.Outline.Headings) {
-					t.Errorf("headings count mismatch: %d vs %d",
-						len(result1.Outline.Headings), len(result2.Outline.Headings))
+			t.Run("identical results", func(t *testing.T) {
+				if !reflect.DeepEqual(result1, result2) {
+					t.Errorf("parse results differ: first=%+v, second=%+v", result1, result2)
 				}
-
-				if len(result1.Outline.Exports) != len(result2.Outline.Exports) {
-					t.Errorf("exports count mismatch: %d vs %d",
-						len(result1.Outline.Exports), len(result2.Outline.Exports))
-				}
-			}
+			})
 		})
 	}
+}
+
+func parserForFile(t *testing.T, parsers []parser.Parser, file string) parser.Parser {
+	t.Helper()
+	for _, candidate := range parsers {
+		if candidate.CanParse(file) {
+			return candidate
+		}
+	}
+	t.Fatalf("no parser found for %s", file)
+	return nil
 }

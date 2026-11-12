@@ -1,0 +1,32 @@
+# Exit code 4 (not found), hints, --verbose fields/cause chain, and --json error golden.
+doxexit 4 sync nope
+stderr '^source "nope" not found in config$'
+stderr '^hint: Run .dox list. to see configured sources$'
+
+doxexit 4 sync --verbose nope
+stderr '^source "nope" not found in config$'
+stderr '^hint: Run .dox list. to see configured sources$'
+stderr '^fields: legacy_code=SOURCE_NOT_FOUND source=nope$'
+stderr '^cause: source not found$'
+
+doxexit 4 sync --json nope
+! stdout .
+jsoncmp stderr want-error.json
+
+-- dox.toml --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "https://example.invalid/guide.txt"
+-- want-error.json --
+{
+  "error": {
+    "code": "not_found",
+    "message": "source \"nope\" not found in config",
+    "hint": "Run 'dox list' to see configured sources",
+    "fields": {
+      "legacy_code": "SOURCE_NOT_FOUND",
+      "source": "nope"
+    }
+  }
+}

@@ -43,7 +43,7 @@ archives:
   - id: default
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -82,69 +82,54 @@ nfpms:
       - src: ./CONTRIBUTING.md
         dst: /usr/share/doc/dox/CONTRIBUTING.md
 
-brews:
+homebrew_casks:
   - repository:
       owner: g5becks
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
     homepage: https://github.com/g5becks/dox
     description: Fetch library documentation files for AI agents and indexing tools
-    license: MIT
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    install: |-
-      bin.install "dox"
-    test: |-
-      system "#{bin}/dox", "--version"
+    binaries: [dox]
+    hooks:
+      post:
+        install_steps: |
+          run "{{ .StagedPath }}/dox", args: ["--version"]
 
-dockers:
-  - image_templates:
-      - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"
-      - "ghcr.io/g5becks/dox:latest-amd64"
-    use: buildx
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Fetch library documentation files for AI agents"
-      - "--label=org.opencontainers.image.url=https://github.com/g5becks/dox"
-      - "--label=org.opencontainers.image.source=https://github.com/g5becks/dox"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.licenses=MIT"
+# The main entry publishes a multi-platform index; compatibility entries retain
+# the public per-architecture tags. Snapshots already add architecture suffixes.
+dockers_v2:
+  - id: image
+    images: [ghcr.io/g5becks/dox]
+    tags: ["{{ .Version }}", latest]
+    platforms: [linux/amd64, linux/arm64]
     dockerfile: Dockerfile
-
-  - image_templates:
-      - "ghcr.io/g5becks/dox:{{ .Version }}-arm64"
-      - "ghcr.io/g5becks/dox:latest-arm64"
-    use: buildx
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.description=Fetch library documentation files for AI agents"
-      - "--label=org.opencontainers.image.url=https://github.com/g5becks/dox"
-      - "--label=org.opencontainers.image.source=https://github.com/g5becks/dox"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.licenses=MIT"
+    labels: &image_labels
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: Fetch library documentation files for AI agents
+      org.opencontainers.image.url: https://github.com/g5becks/dox
+      org.opencontainers.image.source: https://github.com/g5becks/dox
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: MIT
+  - id: image-amd64
+    images: [ghcr.io/g5becks/dox]
+    tags: ["{{ .Version }}-amd64", latest-amd64]
+    platforms: [linux/amd64]
     dockerfile: Dockerfile
-
-docker_manifests:
-  - name_template: "ghcr.io/g5becks/dox:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/g5becks/dox:{{ .Version }}-amd64"
-      - "ghcr.io/g5becks/dox:{{ .Version }}-arm64"
-
-  - name_template: "ghcr.io/g5becks/dox:latest"
-    image_templates:
-      - "ghcr.io/g5becks/dox:latest-amd64"
-      - "ghcr.io/g5becks/dox:latest-arm64"
+    labels: *image_labels
+    disable: "{{ .IsSnapshot }}"
+  - id: image-arm64
+    images: [ghcr.io/g5becks/dox]
+    tags: ["{{ .Version }}-arm64", latest-arm64]
+    platforms: [linux/arm64]
+    dockerfile: Dockerfile
+    labels: *image_labels
+    disable: "{{ .IsSnapshot }}"
 
 checksum:
   name_template: "checksums.txt"
@@ -190,7 +175,7 @@ release:
 
     **Homebrew (macOS/Linux):**
     ```bash
-    brew install g5becks/tap/dox
+    brew install --cask g5becks/tap/dox
     ```
 
     **Download Binary:**

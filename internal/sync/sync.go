@@ -2,16 +2,21 @@ package sync
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	stdsync "sync"
+	"time"
 
-	"github.com/samber/oops"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/source"
@@ -20,13 +25,15 @@ import (
 const (
 	cpuMultiplier         = 4  // Multiply CPU count for I/O-bound parallelism
 	minDefaultParallelism = 10 // Minimum parallelism even on low-core machines
+	maxDefaultParallelism = 16 // Bound the computed fallback; explicit choices are not capped
+	fieldFailedSources    = "failed_sources"
 )
 
 // getDefaultMaxParallel returns a smart default for I/O-bound operations.
-// Since syncing is network I/O (not CPU-bound), we can be aggressive.
+// The fallback balances network overlap with bounded resource use.
 func getDefaultMaxParallel() int {
 	cpus := runtime.NumCPU()
-	return max(cpus*cpuMultiplier, minDefaultParallelism)
+	return min(max(cpus*cpuMultiplier, minDefaultParallelism), maxDefaultParallelism)
 }
 
 // EventKind identifies the type of sync progress event.
@@ -36,14 +43,16 @@ const (
 	EventSourceStart EventKind = iota
 	EventSourceDone
 	EventManifestError
+	EventWarning
 )
 
 // Event is emitted during sync to report per-source progress.
 type Event struct {
-	Kind   EventKind
-	Source string
-	Result *source.SyncResult // nil for start events
-	Err    error              // non-nil if source failed
+	Kind    EventKind
+	Source  string
+	Warning string
+	Result  *source.SyncResult // nil for start events
+	Err     error              // non-nil if source failed
 }
 
 // RunResult contains aggregate counts from a completed sync run.
@@ -56,12 +65,18 @@ type RunResult struct {
 }
 
 type Options struct {
-	SourceNames []string
-	Force       bool
-	DryRun      bool
-	MaxParallel int
-	Clean       bool
-	OnEvent     func(Event) // optional; nil = silent
+	outputRoot *os.Root
+	httpClient *http.Client
+	// downloadConcurrency comes from config download_concurrency (0 = source default).
+	downloadConcurrency int
+	sourceDir           string
+	SourceNames         []string
+	Force               bool
+	DryRun              bool
+	MaxParallel         int
+	Timeout             time.Duration
+	Clean               bool
+	OnEvent             func(Event) // optional; nil = silent
 }
 
 type runState struct {
@@ -71,19 +86,30 @@ type runState struct {
 
 func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
 	if cfg == nil {
-		return nil, oops.
-			Code("CONFIG_INVALID").
-			Errorf("config is required")
+		return nil, errs.New(
+			errs.Config,
+			"config is required",
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
-	outputDir := resolveOutputRoot(cfg)
-	if opts.Clean && !opts.DryRun {
-		if err := os.RemoveAll(outputDir); err != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("path", outputDir).
-				Wrapf(err, "cleaning output directory")
+	paths, err := cfg.Paths()
+	if err != nil {
+		return nil, err
+	}
+	for name, sourceCfg := range cfg.Sources {
+		if _, pathErr := paths.SourceDir(name, sourceCfg); pathErr != nil {
+			return nil, pathErr
 		}
+	}
+	outputDir := paths.Output()
+	if !opts.DryRun {
+		root, rootErr := prepareOutput(paths, opts)
+		if rootErr != nil {
+			return nil, rootErr
+		}
+		defer root.Close()
+		opts.outputRoot = root
 	}
 
 	lock, err := lockfile.Load(outputDir)
@@ -96,46 +122,16 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
-	maxParallel := opts.MaxParallel
-	if maxParallel <= 0 {
-		// Check if config specifies a default, otherwise use smart default
-		if cfg.MaxParallel > 0 {
-			maxParallel = cfg.MaxParallel
-		} else {
-			maxParallel = getDefaultMaxParallel()
-		}
-	}
-
 	emit := opts.OnEvent
 	if emit == nil {
 		emit = func(Event) {}
 	}
-
-	results := make(map[string]runState, len(sourceNames))
-	var resultsMu stdsync.Mutex
-	token := resolveGitHubToken(cfg)
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(maxParallel)
-
-	for _, sourceName := range sourceNames {
-		sourceCfg := cfg.Sources[sourceName]
-		destinationDir := resolveSourceOutputDir(outputDir, sourceName, sourceCfg)
-		previousLock := lock.GetEntry(sourceName)
-
-		group.Go(func() error {
-			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, opts, emit)
-			resultsMu.Lock()
-			results[sourceName] = state
-			resultsMu.Unlock()
-			return nil
-		})
+	results, err := executeSources(ctx, cfg, opts, sourceNames, lock, emit)
+	if err != nil {
+		return nil, err
 	}
 
-	if waitErr := group.Wait(); waitErr != nil {
-		return nil, oops.Wrapf(waitErr, "waiting for source sync workers")
-	}
-
-	errorCount, downloadedCount, deletedCount, skippedCount := processResults(
+	errorCount, downloadedCount, deletedCount, skippedCount, firstErr := processResults(
 		lock,
 		sourceNames,
 		results,
@@ -143,18 +139,8 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	)
 
 	if !opts.DryRun {
-		if saveErr := lock.Save(outputDir); saveErr != nil {
-			return nil, saveErr
-		}
-
-		// Generate manifest (non-fatal)
-		if genErr := manifest.Generate(ctx, cfg, lock); genErr != nil {
-			if opts.OnEvent != nil {
-				opts.OnEvent(Event{
-					Kind: EventManifestError,
-					Err:  genErr,
-				})
-			}
+		if commitErr := commitSync(ctx, cfg, lock, opts.outputRoot, emit); commitErr != nil {
+			return nil, commitErr
 		}
 	}
 
@@ -167,13 +153,154 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	if errorCount > 0 {
-		return runResult, oops.
-			Code("DOWNLOAD_FAILED").
-			With("failed_sources", errorCount).
-			Errorf("%d source(s) failed during sync", errorCount)
+		return runResult, buildSyncFailure(ctx, errorCount, len(sourceNames), firstErr)
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return runResult, errs.Wrap(
+			errs.Interrupted,
+			fmt.Errorf("sync interrupted: %w", context.Canceled),
+			errs.WithFields(
+				map[string]any{fieldFailedSources: errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+			),
+		)
 	}
 
 	return runResult, nil
+}
+
+func buildSyncFailure(ctx context.Context, errorCount, totalSources int, firstErr error) error {
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(firstErr, context.Canceled) {
+		return errs.Wrap(
+			errs.Interrupted,
+			fmt.Errorf("sync interrupted: %w", context.Canceled),
+			errs.WithFields(
+				map[string]any{fieldFailedSources: errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+			),
+		)
+	}
+
+	code := errs.Network
+	var hint string
+	if detail, ok := errors.AsType[*errs.Error](firstErr); ok {
+		hint = detail.Hint
+		if detail.Code != "" {
+			code = detail.Code
+		}
+	}
+	if errorCount < totalSources {
+		code = errs.PartialFailure
+	}
+
+	return errs.New(
+		code,
+		fmt.Sprintf("%d source(s) failed during sync", errorCount),
+		errs.WithHint(hint),
+		errs.WithFields(
+			map[string]any{fieldFailedSources: errorCount, errs.LegacyCodeField: errs.LegacyDownloadFailed},
+		),
+		errs.WithCause(firstErr),
+	)
+}
+
+func resolveMaxParallel(cfg *config.Config, opts Options) int {
+	maxParallel := opts.MaxParallel
+	if maxParallel <= 0 {
+		// Check if config specifies a default, otherwise use smart default
+		if cfg.MaxParallel > 0 {
+			maxParallel = cfg.MaxParallel
+		} else {
+			maxParallel = getDefaultMaxParallel()
+		}
+	}
+
+	return maxParallel
+}
+
+func resolveTimeout(cfg *config.Config, opts Options) time.Duration {
+	if opts.Timeout > 0 {
+		return opts.Timeout
+	}
+	if cfg != nil {
+		return cfg.TimeoutDuration()
+	}
+	return httpx.DefaultTimeout
+}
+
+func executeSources(
+	ctx context.Context,
+	cfg *config.Config,
+	opts Options,
+	sourceNames []string,
+	lock *lockfile.LockFile,
+	emit func(Event),
+) (map[string]runState, error) {
+	results := make(map[string]runState, len(sourceNames))
+	var resultsMu stdsync.Mutex
+	token := resolveGitHubToken(cfg)
+	timeout := resolveTimeout(cfg, opts)
+	perHost := 0
+	if cfg != nil {
+		perHost = cfg.MaxPerHost
+		opts.downloadConcurrency = cfg.DownloadConcurrency
+	}
+	// One client for the whole run: its pooled transport reuses connections per
+	// host, and its limiter bounds concurrent requests to each host.
+	httpClient := httpx.NewClientWithOptions(httpx.Options{Timeout: timeout, PerHostLimit: perHost})
+	defer httpClient.CloseIdleConnections()
+	opts.Timeout = timeout
+	opts.httpClient = httpClient
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(resolveMaxParallel(cfg, opts))
+
+	paths, pathErr := cfg.Paths()
+	if pathErr != nil {
+		return nil, pathErr
+	}
+	for _, sourceName := range sourceNames {
+		sourceCfg := cfg.Sources[sourceName]
+		destinationDir, sourceErr := paths.Source(sourceName, sourceCfg)
+		if sourceErr != nil {
+			return nil, sourceErr
+		}
+		sourceDir, sourceErr := paths.SourceDir(sourceName, sourceCfg)
+		if sourceErr != nil {
+			return nil, sourceErr
+		}
+		sourceOpts := opts
+		sourceOpts.sourceDir = sourceDir
+		previousLock := lock.GetEntry(sourceName)
+
+		group.Go(func() error {
+			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, sourceOpts, emit)
+			resultsMu.Lock()
+			results[sourceName] = state
+			resultsMu.Unlock()
+			return nil
+		})
+	}
+
+	if waitErr := group.Wait(); waitErr != nil {
+		return nil, fmt.Errorf("waiting for source sync workers: %w", waitErr)
+	}
+
+	return results, nil
+}
+
+func commitSync(
+	ctx context.Context,
+	cfg *config.Config,
+	lock *lockfile.LockFile,
+	root *os.Root,
+	emit func(Event),
+) error {
+	if err := lock.SaveRoot(root); err != nil {
+		return err
+	}
+	// Manifest failures are reported but do not fail the sync.
+	if err := manifest.GenerateRoot(ctx, cfg, lock, root); err != nil && ctx.Err() == nil {
+		emit(Event{Kind: EventManifestError, Err: err})
+	}
+	return nil
 }
 
 func syncSource(
@@ -190,19 +317,22 @@ func syncSource(
 
 	emit(Event{Kind: EventSourceStart, Source: sourceName})
 
-	src, newErr := source.New(sourceName, sourceCfg, token)
+	sourceCtx, cancel := httpx.SourceContext(ctx, opts.Timeout)
+	defer cancel()
+
+	src, newErr := source.NewWithHTTPClient(sourceName, sourceCfg, token, opts.httpClient)
 	if newErr != nil {
 		state.err = newErr
 	} else {
 		defer src.Close()
-		state.result, state.err = src.Sync(
-			ctx,
+		state.result, state.err = syncPreparedSource(
+			sourceCtx,
+			src,
+			sourceName,
 			destinationDir,
 			previousLock,
-			source.SyncOptions{
-				Force:  opts.Force,
-				DryRun: opts.DryRun,
-			},
+			opts,
+			emit,
 		)
 	}
 
@@ -235,11 +365,13 @@ func resolveSourceNames(
 
 	for _, sourceName := range requestedNames {
 		if _, ok := sourceConfigs[sourceName]; !ok {
-			return nil, oops.
-				Code("SOURCE_NOT_FOUND").
-				With("source", sourceName).
-				Hint("Run 'dox list' to see configured sources").
-				Errorf("source %q not found in config", sourceName)
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("source %q not found in config", sourceName),
+				errs.WithHint("Run 'dox list' to see configured sources"),
+				errs.WithFields(map[string]any{"source": sourceName, errs.LegacyCodeField: errs.LegacySourceNotFound}),
+				errs.WithCause(errs.ErrSourceNotFound),
+			)
 		}
 
 		if _, exists := seen[sourceName]; exists {
@@ -265,20 +397,41 @@ func resolveGitHubToken(cfg *config.Config) string {
 	return os.Getenv("GH_TOKEN")
 }
 
-func resolveOutputRoot(cfg *config.Config) string {
-	if filepath.IsAbs(cfg.Output) {
-		return cfg.Output
+func syncPreparedSource(
+	ctx context.Context,
+	src source.Source,
+	sourceName string,
+	destinationDir string,
+	previousLock *lockfile.LockEntry,
+	opts Options,
+	emit func(Event),
+) (*source.SyncResult, error) {
+	var sourceRoot *os.Root
+	if !opts.DryRun {
+		if err := opts.outputRoot.MkdirAll(opts.sourceDir, fsutil.DirMode); err != nil {
+			return nil, err
+		}
+		root, err := opts.outputRoot.OpenRoot(opts.sourceDir)
+		if err != nil {
+			return nil, err
+		}
+		defer root.Close()
+		sourceRoot = root
 	}
-
-	return filepath.Join(cfg.ConfigDir, cfg.Output)
-}
-
-func resolveSourceOutputDir(outputRoot string, sourceName string, sourceCfg config.Source) string {
-	if sourceCfg.Out != "" {
-		return filepath.Join(outputRoot, sourceCfg.Out)
-	}
-
-	return filepath.Join(outputRoot, sourceName)
+	return src.Sync(
+		ctx,
+		destinationDir,
+		previousLock,
+		source.SyncOptions{
+			Force:               opts.Force,
+			DryRun:              opts.DryRun,
+			Root:                sourceRoot,
+			DownloadConcurrency: opts.downloadConcurrency,
+			OnWarning: func(msg string) {
+				emit(Event{Kind: EventWarning, Source: sourceName, Warning: msg})
+			},
+		},
+	)
 }
 
 func processResults(
@@ -286,16 +439,20 @@ func processResults(
 	sourceNames []string,
 	results map[string]runState,
 	dryRun bool,
-) (int, int, int, int) {
+) (int, int, int, int, error) {
 	errorCount := 0
 	downloadedCount := 0
 	deletedCount := 0
 	skippedCount := 0
+	var firstErr error
 
 	for _, sourceName := range sourceNames {
 		state := results[sourceName]
 		if state.err != nil {
 			errorCount++
+			if firstErr == nil {
+				firstErr = state.err
+			}
 			continue
 		}
 
@@ -314,5 +471,23 @@ func processResults(
 		}
 	}
 
-	return errorCount, downloadedCount, deletedCount, skippedCount
+	return errorCount, downloadedCount, deletedCount, skippedCount, firstErr
+}
+
+func prepareOutput(paths *config.Paths, opts Options) (*os.Root, error) {
+	root, err := paths.OpenOutput(!opts.Clean)
+	if err != nil {
+		return nil, err
+	}
+	if opts.Clean {
+		if cleanErr := config.CleanOutput(root); cleanErr != nil {
+			_ = root.Close()
+			return nil, cleanErr
+		}
+	}
+	if markErr := config.MarkOutput(root); markErr != nil {
+		_ = root.Close()
+		return nil, markErr
+	}
+	return root, nil
 }

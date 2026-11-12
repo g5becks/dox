@@ -2,15 +2,22 @@ package sync_test
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/sync"
 )
 
 func TestRunWithNilConfigReturnsError(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	opts := sync.Options{}
 
 	_, err := sync.Run(ctx, nil, opts)
@@ -51,6 +58,9 @@ func TestResolveSourceNamesValidatesRequested(t *testing.T) {
 	_, err := sync.ResolveSourceNames(sources, []string{"missing"})
 	if err == nil {
 		t.Fatal("ResolveSourceNames() with invalid source: got nil error, want non-nil")
+	}
+	if !errors.Is(err, errs.ErrSourceNotFound) {
+		t.Fatalf("source sentinel missing: %v", err)
 	}
 }
 
@@ -167,7 +177,12 @@ func TestResolveOutputRoot(t *testing.T) {
 				ConfigDir: tc.configDir,
 			}
 
-			result := sync.ResolveOutputRoot(cfg)
+			cfg.AllowExternalOutput = tc.wantAbs
+			paths, err := cfg.Paths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := paths.Output()
 
 			if tc.wantAbs {
 				if result != tc.output {
@@ -213,10 +228,151 @@ func TestResolveSourceOutputDir(t *testing.T) {
 				Out: tc.sourceOut,
 			}
 
-			result := sync.ResolveSourceOutputDir(tc.outputRoot, tc.sourceName, sourceCfg)
+			paths, err := config.NewPaths(filepath.Dir(tc.outputRoot), filepath.Base(tc.outputRoot), false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := paths.Source(tc.sourceName, sourceCfg)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if result != tc.want {
 				t.Errorf("ResolveSourceOutputDir() = %q, want %q", result, tc.want)
 			}
 		})
+	}
+}
+
+func TestParallelPrecedence(t *testing.T) {
+	t.Parallel()
+	computed := min(max(4*runtime.NumCPU(), 10), 16)
+	for _, tc := range []struct {
+		name                   string
+		flag, configured, want int
+	}{
+		{"flag wins", 7, 20, 7},
+		{"config wins when flag unset", 0, 20, 20},
+		{"computed fallback", 0, 0, computed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := sync.ResolveMaxParallel(
+				&config.Config{MaxParallel: tc.configured},
+				sync.Options{MaxParallel: tc.flag},
+			)
+			if got != tc.want {
+				t.Fatalf("parallel=%d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTimeoutAndStalledSourceIsolation(t *testing.T) {
+	t.Parallel()
+	project := t.TempDir()
+	output := filepath.Join(project, ".dox")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/fast.txt" {
+			_, _ = w.Write([]byte("fast content\n"))
+			return
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := &config.Config{
+		ConfigDir: project,
+		Output:    output,
+		Timeout:   "200ms",
+		Sources: map[string]config.Source{
+			"fast": {Type: "url", URL: server.URL + "/fast.txt", Filename: "fast.txt"},
+			"slow": {Type: "url", URL: server.URL + "/slow.txt", Filename: "slow.txt"},
+		},
+	}
+
+	start := time.Now()
+	result, err := sync.Run(t.Context(), cfg, sync.Options{MaxParallel: 2})
+	elapsed := time.Since(start)
+	if elapsed > 1200*time.Millisecond {
+		t.Fatalf("sync.Run took %v, want <= 1.2s (200ms timeout + 1s)", elapsed)
+	}
+	if err == nil {
+		t.Fatal("expected partial failure error from stalled source")
+	}
+	if result == nil || result.Downloaded != 1 || result.Errors != 1 {
+		t.Fatalf("unexpected RunResult: %+v", result)
+	}
+	lock, loadErr := lockfile.Load(output)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if lock.GetEntry("fast") == nil {
+		t.Fatal("expected completed 'fast' source lock entry to be saved")
+	}
+	if lock.GetEntry("slow") != nil {
+		t.Fatal("did not expect stalled 'slow' source lock entry to be saved")
+	}
+}
+
+func TestCancellationSavesCompletedSources(t *testing.T) {
+	t.Parallel()
+	project := t.TempDir()
+	output := filepath.Join(project, ".dox")
+
+	fastDone := make(chan struct{})
+	slowStarted := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/fast.txt" {
+			_, _ = w.Write([]byte("fast content\n"))
+			return
+		}
+		<-fastDone
+		select {
+		case slowStarted <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go func() {
+		<-slowStarted
+		cancel()
+	}()
+
+	cfg := &config.Config{
+		ConfigDir: project,
+		Output:    output,
+		Sources: map[string]config.Source{
+			"fast": {Type: "url", URL: server.URL + "/fast.txt", Filename: "fast.txt"},
+			"slow": {Type: "url", URL: server.URL + "/slow.txt", Filename: "slow.txt"},
+		},
+	}
+
+	_, err := sync.Run(ctx, cfg, sync.Options{
+		MaxParallel: 2,
+		OnEvent: func(e sync.Event) {
+			if e.Kind == sync.EventSourceDone && e.Source == "fast" {
+				close(fastDone)
+			}
+		},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("sync.Run() error = %v, want context.Canceled", err)
+	}
+	detail, ok := errors.AsType[*errs.Error](err)
+	if !ok || detail.Code != errs.Interrupted {
+		t.Fatalf("expected errs.Interrupted, got %+v", detail)
+	}
+	lock, loadErr := lockfile.Load(output)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if lock.GetEntry("fast") == nil {
+		t.Fatal("expected completed 'fast' source lock entry to be saved on cancellation")
 	}
 }

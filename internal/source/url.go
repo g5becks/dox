@@ -2,47 +2,64 @@ package source
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"maps"
 	"net/http"
 	neturl "net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"time"
 
-	"github.com/samber/oops"
-	"resty.dev/v3"
-
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
 type urlSource struct {
-	name     string
-	source   config.Source
-	filename string
-	client   *resty.Client
+	name       string
+	source     config.Source
+	filename   string
+	http       *http.Client
+	ownsClient bool
+	timeout    time.Duration
 }
 
 func NewURL(name string, cfg config.Source) (Source, error) {
+	return newURLSourceWithHTTP(name, cfg, nil)
+}
+
+func newURLSourceWithHTTP(name string, cfg config.Source, httpClient *http.Client) (Source, error) {
 	filename := cfg.Filename
 	if filename == "" {
 		filename = filenameFromURL(name, cfg.URL)
 	}
 
-	client := resty.New()
+	if err := config.ValidatePath(filename); err != nil {
+		return nil, err
+	}
+	ownsClient := httpClient == nil
+	if ownsClient {
+		httpClient = httpx.NewClient(httpx.DefaultTimeout)
+	}
 
 	return &urlSource{
-		name:     name,
-		source:   cfg,
-		filename: filename,
-		client:   client,
+		name:       name,
+		source:     cfg,
+		filename:   filename,
+		http:       httpClient,
+		ownsClient: ownsClient,
+		timeout:    httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
+// Close releases idle connections of a client this source created; a shared
+// client belongs to the caller.
 func (s *urlSource) Close() error {
-	return s.client.Close()
+	if s.ownsClient {
+		s.http.CloseIdleConnections()
+	}
+	return nil
 }
 
 func (s *urlSource) Sync(
@@ -51,34 +68,54 @@ func (s *urlSource) Sync(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	request := s.client.R().SetContext(ctx)
-	if !opts.Force && prevLock != nil {
-		if prevLock.ETag != "" {
-			request.SetHeader("If-None-Match", prevLock.ETag)
-		}
-		if prevLock.LastMod != "" {
-			request.SetHeader("If-Modified-Since", prevLock.LastMod)
-		}
-	}
+	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
+	defer cancel()
 
-	response, err := request.Get(s.source.URL)
-	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("source", s.name).
-			With("url", s.source.URL).
-			Wrapf(err, "downloading url source")
+	method := http.MethodGet
+	if opts.DryRun {
+		// A dry run only needs to know whether the document changed.
+		method = http.MethodHead
 	}
+	response, err := s.send(sourceCtx, method, prevLock, opts)
+	if err == nil && opts.DryRun &&
+		(response.StatusCode == http.StatusMethodNotAllowed || response.StatusCode == http.StatusNotImplemented) {
+		// HEAD unsupported: ask for at most one byte and never read it.
+		_ = response.Body.Close()
+		response, err = s.send(sourceCtx, http.MethodGet, prevLock, opts, "Range", "bytes=0-0")
+	}
+	if err == nil {
+		defer response.Body.Close()
+		return s.handleResponse(sourceCtx, response, destDir, prevLock, opts)
+	}
+	return nil, errs.Wrap(
+		errs.Network,
+		fmt.Errorf("downloading url source: %w", err),
+		errs.WithFields(
+			map[string]any{
+				fieldSource:          s.name,
+				sourceTypeURL:        s.source.URL,
+				errs.LegacyCodeField: errs.LegacyDownloadFailed,
+			},
+		),
+	)
+}
 
-	if response.StatusCode() == http.StatusNotModified {
+func (s *urlSource) handleResponse(
+	ctx context.Context,
+	response *http.Response,
+	destDir string,
+	prevLock *lockfile.LockEntry,
+	opts SyncOptions,
+) (*SyncResult, error) {
+	if response.StatusCode == http.StatusNotModified {
 		lock := cloneLockEntry(prevLock)
 		if lock == nil {
 			lock = &lockfile.LockEntry{
-				Type: "url",
+				Type: sourceTypeURL,
 			}
 		}
 
-		lock.Type = "url"
+		lock.Type = sourceTypeURL
 		lock.SyncedAt = time.Now().UTC()
 
 		return &SyncResult{
@@ -87,45 +124,50 @@ func (s *urlSource) Sync(
 		}, nil
 	}
 
-	if response.StatusCode() < http.StatusOK || response.StatusCode() >= http.StatusMultipleChoices {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("source", s.name).
-			With("url", s.source.URL).
-			With("status", response.StatusCode()).
-			Errorf("url source returned non-success status %d", response.StatusCode())
-	}
-
-	filePath := filepath.Join(destDir, s.filename)
-	content, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("source", s.name).
-			With("url", s.source.URL).
-			Wrapf(err, "reading response body")
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, errs.New(
+			errs.Network,
+			fmt.Sprintf("url source returned non-success status %d", response.StatusCode),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          s.name,
+					sourceTypeURL:        s.source.URL,
+					fieldStatus:          response.StatusCode,
+					errs.LegacyCodeField: errs.LegacyDownloadFailed,
+				},
+			),
+			errs.WithCause(&errs.HTTPStatusError{Code: response.StatusCode}),
+		)
 	}
 
 	if !opts.DryRun {
-		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", destDir).
-				Wrapf(mkdirErr, "creating destination directory")
+		root, rootErr := destinationRoot(destDir, opts)
+		if rootErr != nil {
+			return nil, rootErr
 		}
-
-		if writeErr := writeFileAtomic(filePath, content); writeErr != nil {
-			return nil, writeErr
+		defer root.Close()
+		// Stream to a temporary file and rename, never holding the body in memory.
+		if writeErr := fsutil.AtomicWriteReader(ctx, root, s.filename, response.Body); writeErr != nil {
+			return nil, errs.Wrap(
+				errs.Network,
+				fmt.Errorf("downloading url source: %w", writeErr),
+				errs.WithFields(
+					map[string]any{
+						fieldSource:          s.name,
+						sourceTypeURL:        s.source.URL,
+						errs.LegacyCodeField: errs.LegacyDownloadFailed,
+					},
+				),
+			)
 		}
 	}
 
 	return &SyncResult{
 		Downloaded: 1,
 		LockEntry: &lockfile.LockEntry{
-			Type:     "url",
-			ETag:     response.Header().Get("ETag"),
-			LastMod:  response.Header().Get("Last-Modified"),
+			Type:     sourceTypeURL,
+			ETag:     response.Header.Get("ETag"),
+			LastMod:  response.Header.Get("Last-Modified"),
 			SyncedAt: time.Now().UTC(),
 		},
 	}, nil
@@ -143,46 +185,6 @@ func filenameFromURL(sourceName string, rawURL string) string {
 	return sourceName + ".txt"
 }
 
-func writeFileAtomic(path string, content []byte) error {
-	dir := filepath.Dir(path)
-	tempFile, err := os.CreateTemp(dir, ".dox-url-*.tmp")
-	if err != nil {
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(err, "creating temporary file")
-	}
-
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = os.Remove(tempPath)
-	}()
-
-	if _, writeErr := tempFile.Write(content); writeErr != nil {
-		_ = tempFile.Close()
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(writeErr, "writing temporary file")
-	}
-
-	if closeErr := tempFile.Close(); closeErr != nil {
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(closeErr, "closing temporary file")
-	}
-
-	if renameErr := os.Rename(tempPath, path); renameErr != nil {
-		return oops.
-			Code("WRITE_FAILED").
-			With("path", path).
-			Wrapf(renameErr, "replacing destination file")
-	}
-
-	return nil
-}
-
 func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {
 	if entry == nil {
 		return nil
@@ -195,4 +197,32 @@ func cloneLockEntry(entry *lockfile.LockEntry) *lockfile.LockEntry {
 	}
 
 	return &cloned
+}
+
+// send issues one request with the conditional headers from the previous
+// sync; extra is optional header name/value pairs.
+func (s *urlSource) send(
+	ctx context.Context,
+	method string,
+	prevLock *lockfile.LockEntry,
+	opts SyncOptions,
+	extra ...string,
+) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(ctx, method, s.source.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("User-Agent", userAgent)
+	if !opts.Force && prevLock != nil {
+		if prevLock.ETag != "" {
+			request.Header.Set("If-None-Match", prevLock.ETag)
+		}
+		if prevLock.LastMod != "" {
+			request.Header.Set("If-Modified-Since", prevLock.LastMod)
+		}
+	}
+	for index := 0; index+1 < len(extra); index += 2 {
+		request.Header.Set(extra[index], extra[index+1])
+	}
+	return s.http.Do(request)
 }

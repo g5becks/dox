@@ -5,20 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
+	"time"
 
-	"github.com/samber/oops"
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
 )
-
-const defaultParallel = 3
 
 const initTemplate = `# dox.toml - Documentation source configuration
 # Docs: https://github.com/g5becks/dox
@@ -27,17 +29,31 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # GLOBAL SETTINGS
 # ============================================================================
 
-# Directory where docs will be downloaded (relative to this file)
+# Directory below this config where docs will be downloaded (relative path)
+# Use a dedicated directory, never ".", "..", or a filesystem root.
+# A separate external directory requires: dox --allow-external-output <command>
 # Default: ".dox"
 # output = ".dox"
 
-# GitHub token for higher API rate limits (5000/hr vs 60/hr unauthenticated)
+# GitHub token for private repos and higher API rate limits (5000/hr vs 60/hr).
+# Public syncs need few API calls (2 per GitHub directory source; files come
+# from raw/archive URLs), so most setups work without one.
 # Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
 # github_token = ""
 
-# Max parallel source syncs (default: 4x CPU cores, min 10)
+# Max parallel source syncs, 1-100 (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
 # max_parallel = 20
+#
+# Max concurrent HTTP requests to one host across all sources (default: 16)
+# max_per_host = 16
+#
+# Max concurrent file downloads within one GitHub source (default: 8)
+# download_concurrency = 8
+
+# Per-source sync and HTTP request timeout (default: "30s")
+# Override per-command with: dox sync --timeout 30s
+# timeout = "30s"
 
 # ============================================================================
 # GLOBAL EXCLUDES (applied to all git hosting sources)
@@ -131,23 +147,9 @@ excludes = [
 # exclude = ["custom-pattern/**"]                    # optional (adds to global excludes, no duplicates)
 # out = "custom-dir-name"                             # optional (default: source key name)
 
-# --- GitLab - specify host to use gitlab.com ---
-# [sources.gitlab-project]
-# repo = "owner/repo"
-# path = "docs"
-# host = "gitlab.com"                                # triggers gitlab type inference
-
-# --- Codeberg - specify host to use codeberg.org ---
-# [sources.codeberg-project]
-# repo = "owner/repo"
-# path = "documentation"
-# host = "codeberg.org"
-
-# --- Self-Hosted Git (GitHub Enterprise, GitLab CE/EE, Gitea, etc.) ---
-# [sources.internal-docs]
-# repo = "company/documentation"
-# path = "guides"
-# host = "git.company.com"
+# --- Planned (v0.5.0): GitLab, Codeberg/Gitea and self-hosted hosts ---
+# Only github.com repositories are supported today; any other 'host' fails
+# validation with "not supported yet".
 
 # --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]
@@ -164,21 +166,38 @@ var (
 )
 
 func main() {
-	if err := run(os.Args); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := run(ctx, os.Args)
+	stop()
+	if err != nil {
+		os.Exit(renderError(os.Stderr, err, os.Args))
 	}
 }
 
-func run(args []string) error {
-	return newRootCommand().Run(context.Background(), args)
+func run(ctx context.Context, args []string) error {
+	return newRootCommand().Run(ctx, args)
 }
 
 func newRootCommand() *cli.Command {
-	return &cli.Command{
-		Name:    "dox",
-		Usage:   "Sync framework and library docs to local files",
-		Version: versionString(),
+	root := &cli.Command{
+		Name:        "dox",
+		Usage:       "Sync framework and library docs to local files",
+		Description: rootDescription,
+		Version:     versionString(),
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  flagAllowExternalOutput,
+				Usage: "Allow output outside the config directory (never the config directory or filesystem root)",
+			},
+			&cli.BoolFlag{
+				Name:  formatJSON,
+				Usage: helpJSON,
+			},
+			&cli.BoolFlag{
+				Name:  flagVerbose,
+				Usage: "Show error context fields and cause chain",
+			},
+		},
 		Commands: []*cli.Command{
 			newSyncCommand(),
 			newListCommand(),
@@ -190,6 +209,20 @@ func newRootCommand() *cli.Command {
 			newCatCommand(),
 			newOutlineCommand(),
 			newSearchCommand(),
+			newVersionCommand(),
+		},
+	}
+	attachUsageHandlers(root)
+	return root
+}
+
+func newVersionCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "version",
+		Usage: "Print the version",
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			cli.ShowVersion(cmd.Root())
+			return nil
 		},
 	}
 }
@@ -200,17 +233,21 @@ func newSyncCommand() *cli.Command {
 		Usage:     "Sync configured documentation sources",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{
 				Name:    "force",
 				Aliases: []string{"f"},
 				Usage:   "Force refresh and skip freshness checks",
 			},
-			&cli.BoolFlag{Name: "clean", Usage: "Delete output directory before syncing"},
+			&cli.BoolFlag{Name: "clean", Usage: "Clear owned output contents before syncing"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
 			&cli.IntFlag{
 				Name: "parallel", Aliases: []string{"p"},
-				Usage: "Maximum parallel source syncs", Value: defaultParallel,
+				Usage: "Maximum parallel source syncs (0 uses config or computed default)",
+			},
+			&cli.StringFlag{
+				Name:  "timeout",
+				Usage: "Per-source sync and request timeout (for example, 30s; overrides config timeout)",
 			},
 		},
 		Action: syncAction,
@@ -222,7 +259,7 @@ func newListCommand() *cli.Command {
 		Name:  "list",
 		Usage: "List configured sources and status",
 		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "json", Usage: "Emit JSON output"},
+			&cli.BoolFlag{Name: formatJSON, Usage: "Emit JSON output"},
 			&cli.BoolFlag{
 				Name:    "verbose",
 				Aliases: []string{"v"},
@@ -232,7 +269,7 @@ func newListCommand() *cli.Command {
 				Name:  "files",
 				Usage: "Include file counts from local output directories",
 			},
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 		},
 		Action: listAction,
 	}
@@ -245,20 +282,20 @@ func newAddCommand() *cli.Command {
 		ArgsUsage: "<name>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "type",
-				Aliases:  []string{"t"},
-				Usage:    "Source type: github or url",
-				Required: true,
+				Name:    fieldType,
+				Aliases: []string{"t"},
+				Usage:   "Source type: github or url (default: inferred from --repo or --url)",
 			},
-			&cli.StringFlag{Name: "repo", Usage: "Repository in owner/repo format"},
-			&cli.StringFlag{Name: "path", Usage: "Path within repository"},
-			&cli.StringFlag{Name: "ref", Usage: "Branch, tag, or commit SHA"},
+			&cli.StringFlag{Name: "repo", Aliases: []string{"r"}, Usage: "Repository in owner/repo format"},
+			&cli.StringFlag{Name: "host", Usage: "Git host (only github.com is supported until v0.5.0)"},
+			&cli.StringFlag{Name: fieldPath, Aliases: []string{"p"}, Usage: "Path within repository"},
+			&cli.StringFlag{Name: "ref", Aliases: []string{"R"}, Usage: "Branch, tag, or commit SHA"},
 			&cli.StringSliceFlag{Name: "patterns", Usage: "Include glob pattern (repeatable)"},
 			&cli.StringSliceFlag{Name: "exclude", Usage: "Exclude glob pattern (repeatable)"},
-			&cli.StringFlag{Name: "url", Usage: "Source URL"},
+			&cli.StringFlag{Name: fieldURL, Aliases: []string{"u"}, Usage: "Source URL"},
 			&cli.StringFlag{Name: "filename", Usage: "Output filename for URL source"},
 			&cli.StringFlag{Name: "out", Usage: "Custom output subdirectory"},
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{Name: "force", Usage: "Overwrite an existing source with the same name"},
 		},
 		Action: addAction,
@@ -271,7 +308,7 @@ func newCleanCommand() *cli.Command {
 		Usage:     "Remove downloaded documentation output",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}, Usage: "Path to config file"},
+			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 		},
 		Action: cleanAction,
 	}
@@ -286,23 +323,40 @@ func newInitCommand() *cli.Command {
 }
 
 func syncAction(ctx context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
 
-	printer := ui.NewSyncPrinter(cmd.Bool("dry-run"))
+	var timeout time.Duration
+	if rawTimeout := cmd.String("timeout"); rawTimeout != "" {
+		parsedTimeout, parseErr := httpx.ParseTimeout(errs.Usage, rawTimeout)
+		if parseErr != nil {
+			return parseErr
+		}
+		timeout = parsedTimeout
+	}
+
+	var onEvent func(doxsync.Event)
+	var printer *ui.SyncPrinter
+	if !jsonEnabled(cmd) {
+		printer = ui.NewSyncPrinter(cmd.Bool("dry-run"))
+		onEvent = printer.HandleEvent
+	}
 
 	result, runErr := doxsync.Run(ctx, cfg, doxsync.Options{
 		SourceNames: commandArgs(cmd),
 		Force:       cmd.Bool("force"),
 		DryRun:      cmd.Bool("dry-run"),
 		MaxParallel: cmd.Int("parallel"),
+		Timeout:     timeout,
 		Clean:       cmd.Bool("clean"),
-		OnEvent:     printer.HandleEvent,
+		OnEvent:     onEvent,
 	})
 
-	printer.PrintSummary(result)
+	if printer != nil {
+		printer.PrintSummary(result)
+	}
 
 	return runErr
 }
@@ -317,12 +371,16 @@ func commandArgs(cmd *cli.Command) []string {
 }
 
 func listAction(_ context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
 
-	lock, err := lockfile.Load(resolveOutputRoot(cfg))
+	paths, pathErr := cfg.Paths()
+	if pathErr != nil {
+		return pathErr
+	}
+	lock, err := lockfile.Load(paths.Output())
 	if err != nil {
 		return err
 	}
@@ -337,6 +395,10 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	statuses := make([]ui.SourceStatus, 0, len(sourceNames))
 	for _, sourceName := range sourceNames {
 		sourceCfg := cfg.Sources[sourceName]
+		sourceOutput, sourceErr := paths.Source(sourceName, sourceCfg)
+		if sourceErr != nil {
+			return sourceErr
+		}
 		status := ui.SourceStatus{
 			Name:      sourceName,
 			Type:      sourceCfg.Type,
@@ -345,7 +407,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 			URL:       sourceCfg.URL,
 			Ref:       sourceCfg.Ref,
 			Patterns:  sourceCfg.Patterns,
-			OutputDir: cfg.OutputDir(sourceName, sourceCfg),
+			OutputDir: sourceOutput,
 			Status:    "not synced",
 		}
 
@@ -354,7 +416,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 			status.Status = "synced"
 			status.SyncedAt = lockEntry.SyncedAt
 			status.FileCount = len(lockEntry.Files)
-			if lockEntry.Type == "url" && status.FileCount == 0 {
+			if lockEntry.Type == fieldURL && status.FileCount == 0 {
 				status.FileCount = 1
 			}
 		}
@@ -371,8 +433,8 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return ui.RenderSourceList(statuses, ui.ListOptions{
-		JSON:    cmd.Bool("json"),
-		Verbose: cmd.Bool("verbose"),
+		JSON:    jsonEnabled(cmd),
+		Verbose: verboseEnabled(cmd),
 		Files:   includeFiles,
 	})
 }
@@ -397,44 +459,44 @@ func countFiles(root string) (int, error) {
 			return 0, nil
 		}
 
-		return 0, oops.
-			Code("WRITE_FAILED").
-			With("path", root).
-			Wrapf(err, "counting files")
+		return 0, errs.Wrap(
+			errs.Internal,
+			fmt.Errorf("counting files: %w", err),
+			errs.WithFields(map[string]any{fieldPath: root, errs.LegacyCodeField: errs.LegacyWriteFailed}),
+		)
 	}
 
 	return count, nil
 }
 
-func resolveOutputRoot(cfg *config.Config) string {
-	if filepath.IsAbs(cfg.Output) {
-		return cfg.Output
-	}
-
-	return filepath.Join(cfg.ConfigDir, cfg.Output)
-}
-
 func initAction(_ context.Context, _ *cli.Command) error {
 	for _, configName := range []string{"dox.toml", ".dox.toml"} {
 		if _, err := os.Stat(configName); err == nil {
-			return oops.
-				Code("CONFIG_WRITE_ERROR").
-				With("path", configName).
-				Hint("Remove the existing file or edit it directly").
-				Errorf("config file already exists at %q", configName)
+			return errs.New(
+				errs.Config,
+				fmt.Sprintf("config file already exists at %q", configName),
+				errs.WithHint("Remove the existing file or edit it directly"),
+				errs.WithFields(
+					map[string]any{fieldPath: configName, errs.LegacyCodeField: errs.LegacyConfigWriteError},
+				),
+			)
 		} else if !os.IsNotExist(err) {
-			return oops.
-				Code("CONFIG_WRITE_ERROR").
-				With("path", configName).
-				Wrapf(err, "checking config path")
+			return errs.Wrap(
+				errs.Config,
+				fmt.Errorf("checking config path: %w", err),
+				errs.WithFields(
+					map[string]any{fieldPath: configName, errs.LegacyCodeField: errs.LegacyConfigWriteError},
+				),
+			)
 		}
 	}
 
 	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o600); err != nil {
-		return oops.
-			Code("CONFIG_WRITE_ERROR").
-			With("path", "dox.toml").
-			Wrapf(err, "writing starter config")
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("writing starter config: %w", err),
+			errs.WithFields(map[string]any{fieldPath: "dox.toml", errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+		)
 	}
 
 	return nil
@@ -443,39 +505,46 @@ func initAction(_ context.Context, _ *cli.Command) error {
 func addAction(_ context.Context, cmd *cli.Command) error {
 	sourceName := strings.TrimSpace(cmd.Args().First())
 	if sourceName == "" {
-		return oops.
-			Code("CONFIG_INVALID").
-			Hint("Usage: dox add <name> --type <github|url> ...").
-			Errorf("source name is required")
+		return errs.New(
+			errs.Config,
+			"source name is required",
+			errs.WithHint("Usage: dox add <name> --repo owner/repo --path docs | --url https://..."),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
+	if nameErr := validateAddSourceName(sourceName); nameErr != nil {
+		return nameErr
 	}
 
-	configPath, err := resolveConfigPath(cmd.String("config"))
+	configPath, err := resolveConfigPath(cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := loadCommandConfig(cmd, configPath)
 	if err != nil {
 		return err
 	}
 
 	_, exists := cfg.Sources[sourceName]
 	if exists && !cmd.Bool("force") {
-		return oops.
-			Code("SOURCE_EXISTS").
-			With("source", sourceName).
-			Hint("Use --force to overwrite the existing source definition").
-			Errorf("source %q already exists", sourceName)
+		return errs.New(
+			errs.Usage,
+			fmt.Sprintf("source %q already exists", sourceName),
+			errs.WithHint("Use --force to overwrite the existing source definition"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacySourceExists}),
+		)
 	}
 
 	newSource := config.Source{
-		Type:     cmd.String("type"),
+		Type:     cmd.String(fieldType),
 		Repo:     cmd.String("repo"),
-		Path:     cmd.String("path"),
+		Host:     cmd.String("host"),
+		Path:     cmd.String(fieldPath),
 		Ref:      cmd.String("ref"),
 		Patterns: cmd.StringSlice("patterns"),
 		Exclude:  cmd.StringSlice("exclude"),
-		URL:      cmd.String("url"),
+		URL:      cmd.String(fieldURL),
 		Filename: cmd.String("filename"),
 		Out:      cmd.String("out"),
 	}
@@ -489,14 +558,18 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	if valErr := validationConfig.Validate(); valErr != nil {
 		return valErr
 	}
+	// Persist only the inferred type; other defaults (patterns, host) stay
+	// implicit so later default changes still apply to this source.
+	newSource.Type = validationConfig.Sources[sourceName].Type
 
 	section := renderSourceSection(sourceName, newSource)
 	fileData, err := os.ReadFile(configPath)
 	if err != nil {
-		return oops.
-			Code("CONFIG_WRITE_ERROR").
-			With("path", configPath).
-			Wrapf(err, "reading config file")
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("reading config file: %w", err),
+			errs.WithFields(map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+		)
 	}
 
 	fileContent := string(fileData)
@@ -510,11 +583,12 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		updatedContent = appendSourceSection(fileContent, section)
 	}
 
-	if writeErr := os.WriteFile(configPath, []byte(updatedContent), 0o600); writeErr != nil {
-		return oops.
-			Code("CONFIG_WRITE_ERROR").
-			With("path", configPath).
-			Wrapf(writeErr, "writing config file")
+	if writeErr := writeConfig(configPath, updatedContent); writeErr != nil {
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("writing config file: %w", writeErr),
+			errs.WithFields(map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+		)
 	}
 
 	return nil
@@ -524,14 +598,17 @@ func resolveConfigPath(configPath string) (string, error) {
 	if configPath != "" {
 		if _, err := os.Stat(configPath); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				return "", oops.
-					Code("CONFIG_NOT_FOUND").
-					With("path", configPath).
-					Hint("Create the file first or pass a valid --config path").
-					Errorf("config file %q does not exist", configPath)
+				return "", errs.New(
+					errs.NotFound,
+					fmt.Sprintf("config file %q does not exist", configPath),
+					errs.WithHint("Create the file first or pass a valid --config path"),
+					errs.WithFields(
+						map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigNotFound},
+					),
+				)
 			}
 
-			return "", oops.Wrapf(err, "checking config file %q", configPath)
+			return "", fmt.Errorf("checking config file %q: %w", configPath, err)
 		}
 
 		return configPath, nil
@@ -540,148 +617,69 @@ func resolveConfigPath(configPath string) (string, error) {
 	return config.FindConfigFile()
 }
 
-func renderSourceSection(sourceName string, sourceCfg config.Source) string {
-	lines := []string{
-		fmt.Sprintf("[sources.%s]", sourceName),
-		fmt.Sprintf("type = %q", sourceCfg.Type),
-	}
-
-	if sourceCfg.Type == "github" {
-		lines = append(lines, fmt.Sprintf("repo = %q", sourceCfg.Repo))
-		lines = append(lines, fmt.Sprintf("path = %q", sourceCfg.Path))
-
-		if sourceCfg.Ref != "" {
-			lines = append(lines, fmt.Sprintf("ref = %q", sourceCfg.Ref))
-		}
-		if len(sourceCfg.Patterns) > 0 {
-			lines = append(
-				lines,
-				fmt.Sprintf("patterns = %s", formatTOMLStringArray(sourceCfg.Patterns)),
-			)
-		}
-		if len(sourceCfg.Exclude) > 0 {
-			lines = append(
-				lines,
-				fmt.Sprintf("exclude = %s", formatTOMLStringArray(sourceCfg.Exclude)),
-			)
-		}
-	}
-
-	if sourceCfg.Type == "url" {
-		lines = append(lines, fmt.Sprintf("url = %q", sourceCfg.URL))
-		if sourceCfg.Filename != "" {
-			lines = append(lines, fmt.Sprintf("filename = %q", sourceCfg.Filename))
-		}
-	}
-
-	if sourceCfg.Out != "" {
-		lines = append(lines, fmt.Sprintf("out = %q", sourceCfg.Out))
-	}
-
-	return strings.Join(lines, "\n") + "\n"
-}
-
-func formatTOMLStringArray(values []string) string {
-	parts := make([]string, 0, len(values))
-	for _, value := range values {
-		parts = append(parts, fmt.Sprintf("%q", value))
-	}
-
-	return "[" + strings.Join(parts, ", ") + "]"
-}
-
-func appendSourceSection(fileContent string, section string) string {
-	trimmed := strings.TrimRight(fileContent, "\n")
-	if trimmed == "" {
-		return section
-	}
-
-	return trimmed + "\n\n" + section
-}
-
-func replaceSourceSection(fileContent string, sourceName string, section string) (string, error) {
-	lines := strings.Split(fileContent, "\n")
-	header := fmt.Sprintf("[sources.%s]", sourceName)
-
-	start := -1
-	for idx, line := range lines {
-		if strings.TrimSpace(line) == header {
-			start = idx
-			break
-		}
-	}
-
-	if start == -1 {
-		return "", oops.
-			Code("SOURCE_NOT_FOUND").
-			With("source", sourceName).
-			Errorf("source %q section not found in config", sourceName)
-	}
-
-	end := len(lines)
-	for idx := start + 1; idx < len(lines); idx++ {
-		if strings.HasPrefix(strings.TrimSpace(lines[idx]), "[sources.") {
-			end = idx
-			break
-		}
-	}
-
-	newLines := make([]string, 0, len(lines))
-	newLines = append(newLines, lines[:start]...)
-	newLines = append(newLines, strings.Split(strings.TrimRight(section, "\n"), "\n")...)
-	newLines = append(newLines, lines[end:]...)
-
-	return strings.TrimRight(strings.Join(newLines, "\n"), "\n") + "\n", nil
-}
-
 func cleanAction(_ context.Context, cmd *cli.Command) error {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
 	}
-
-	selectedSources := commandArgs(cmd)
-	outputDir := resolveOutputRoot(cfg)
-	if len(selectedSources) == 0 {
-		if removeErr := os.RemoveAll(outputDir); removeErr != nil {
-			return oops.
-				Code("WRITE_FAILED").
-				With("path", outputDir).
-				Wrapf(removeErr, "removing output directory")
-		}
-
-		return nil
-	}
-
-	lock, err := lockfile.Load(outputDir)
+	paths, err := cfg.Paths()
 	if err != nil {
 		return err
 	}
-
-	for _, sourceName := range selectedSources {
-		sourceCfg, ok := cfg.Sources[sourceName]
+	root, err := paths.OpenOutput(false)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if requireOwnedErr := config.RequireOwned(root); requireOwnedErr != nil {
+		return requireOwnedErr
+	}
+	selected := commandArgs(cmd)
+	if len(selected) == 0 {
+		return config.CleanOutput(root)
+	}
+	lock, err := lockfile.Load(paths.Output())
+	if err != nil {
+		return err
+	}
+	// Validate the complete selection before deleting any collection.
+	directories := make([]string, len(selected))
+	wholeOutput := false
+	for index, name := range selected {
+		sourceCfg, ok := cfg.Sources[name]
 		if !ok {
-			return oops.
-				Code("SOURCE_NOT_FOUND").
-				With("source", sourceName).
-				Hint("Run 'dox list' to view configured sources").
-				Errorf("source %q not found in config", sourceName)
+			return errs.New(
+				errs.NotFound,
+				fmt.Sprintf("source %q not found in config", name),
+				errs.WithHint("Run 'dox list' to view configured sources"),
+				errs.WithCause(errs.ErrSourceNotFound),
+			)
 		}
-
-		if removeErr := os.RemoveAll(cfg.OutputDir(sourceName, sourceCfg)); removeErr != nil {
-			return oops.
-				Code("WRITE_FAILED").
-				With("path", cfg.OutputDir(sourceName, sourceCfg)).
-				With("source", sourceName).
-				Wrapf(removeErr, "removing source output directory")
+		directory, pathErr := paths.SourceDir(name, sourceCfg)
+		if pathErr != nil {
+			return pathErr
 		}
-
-		lock.RemoveEntry(sourceName)
+		if directory == "." {
+			wholeOutput = true
+		}
+		directories[index] = directory
 	}
-
-	return lock.Save(outputDir)
+	if wholeOutput {
+		return config.CleanOutput(root)
+	}
+	for index, directory := range directories {
+		if removeAllErr := root.RemoveAll(directory); removeAllErr != nil {
+			return fmt.Errorf("removing source output directory: %w", removeAllErr)
+		}
+		lock.RemoveEntry(selected[index])
+	}
+	return lock.SaveRoot(root)
 }
 
 func versionString() string {
 	return fmt.Sprintf("%s (commit %s, built %s)", version, commit, buildTime)
+}
+
+func loadCommandConfig(cmd *cli.Command, path string) (*config.Config, error) {
+	return config.LoadWithOptions(path, config.LoadOptions{AllowExternalOutput: cmd.Bool(flagAllowExternalOutput)})
 }

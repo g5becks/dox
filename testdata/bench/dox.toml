@@ -1,0 +1,52 @@
+# Reproducible audit corpus. Every upstream reference is an immutable commit.
+output = "docs"
+max_parallel = 3
+
+[sources.mise]
+type = "github"
+repo = "jdx/mise"
+path = "docs"
+ref = "0e757f881769901d5f50ca729dc838e265520911"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]
+
+[sources.vitest]
+type = "github"
+repo = "vitest-dev/vitest"
+path = "docs"
+ref = "9fd1f22a42337c49414804e2bdb7a7d71bc9cc44"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]
+
+[sources.query]
+type = "github"
+repo = "TanStack/query"
+path = "docs"
+ref = "8f6da1e2a1b5e9afd774cd12bd3865df5c432984"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]
+
+[sources.router]
+type = "github"
+repo = "TanStack/router"
+path = "docs"
+ref = "113b1a1f08e330ff8c7dca5a0d419772035050ba"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]
+
+[sources.db]
+type = "github"
+repo = "TanStack/db"
+path = "docs"
+ref = "a2ba396d54eae1afff28755866c8a4bc6cb8bf07"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]
+
+[sources.arktype]
+type = "github"
+repo = "arktypeio/arktype"
+path = "ark/docs/content/docs"
+ref = "326cdce3b188d627fc219cf75ce5d929fd18e8c1"
+patterns = ["**/*.md", "**/*.mdx", "**/*.txt"]
+
+# bun.sh publishes this generated file outside its Git tree. Use an immutable
+# MIT-licensed archive of that file; see README.md for upstream provenance.
+[sources.bun]
+type = "url"
+url = "https://raw.githubusercontent.com/reclear-io/llmref/505462c6eb75db46b5012b06d2866d0f11d6e024/registry/bun/1.3.14/llms-full.txt"
+filename = "llms-full.txt"

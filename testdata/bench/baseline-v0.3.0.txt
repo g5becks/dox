@@ -1,0 +1,101 @@
+# v0.3.0 c316379; Go 1.27.4; Apple M5; GOMAXPROCS=10; 3 x benchtime=1x
+goos: darwin
+goarch: arm64
+pkg: github.com/g5becks/dox/internal/manifest
+cpu: Apple M5
+BenchmarkManifestGenerateFull-10    	       1	 735191333 ns/op	277166040 B/op	 2234880 allocs/op
+BenchmarkManifestGenerateFull-10    	       1	 710795708 ns/op	277359040 B/op	 2234910 allocs/op
+BenchmarkManifestGenerateFull-10    	       1	 679767834 ns/op	277570776 B/op	 2234967 allocs/op
+BenchmarkManifestGenerateNoop-10    	       1	 705744000 ns/op	277380800 B/op	 2234909 allocs/op
+BenchmarkManifestGenerateNoop-10    	       1	 691479167 ns/op	277549176 B/op	 2234914 allocs/op
+BenchmarkManifestGenerateNoop-10    	       1	 708066708 ns/op	277023656 B/op	 2234826 allocs/op
+PASS
+ok  	github.com/g5becks/dox/internal/manifest	9.578s
+goos: darwin
+goarch: arm64
+pkg: github.com/g5becks/dox/internal/parser
+cpu: Apple M5
+BenchmarkOutlinePathological/256KiB-10         	       1	  43510458 ns/op	   6.02 MB/s	  773504 B/op	      24 allocs/op
+BenchmarkOutlinePathological/256KiB-10         	       1	  31924625 ns/op	   8.21 MB/s	  773504 B/op	      24 allocs/op
+BenchmarkOutlinePathological/256KiB-10         	       1	  26494292 ns/op	   9.89 MB/s	  773504 B/op	      24 allocs/op
+BenchmarkOutlinePathological/1024KiB-10        	       1	 414386084 ns/op	   2.53 MB/s	 3091904 B/op	      24 allocs/op
+BenchmarkOutlinePathological/1024KiB-10        	       1	 443143750 ns/op	   2.37 MB/s	 3091904 B/op	      24 allocs/op
+BenchmarkOutlinePathological/1024KiB-10        	       1	 486506500 ns/op	   2.16 MB/s	 3097240 B/op	      31 allocs/op
+BenchmarkOutlineLargeMarkdown/64KiB-10         	       1	   1902250 ns/op	  34.45 MB/s	  475456 B/op	    4330 allocs/op
+BenchmarkOutlineLargeMarkdown/64KiB-10         	       1	   1546042 ns/op	  42.39 MB/s	  475648 B/op	    4332 allocs/op
+BenchmarkOutlineLargeMarkdown/64KiB-10         	       1	   2401458 ns/op	  27.29 MB/s	  438416 B/op	    4325 allocs/op
+BenchmarkOutlineLargeMarkdown/256KiB-10        	       1	  20800833 ns/op	  12.60 MB/s	 1776696 B/op	   16283 allocs/op
+BenchmarkOutlineLargeMarkdown/256KiB-10        	       1	  20242375 ns/op	  12.95 MB/s	 1739512 B/op	   16277 allocs/op
+BenchmarkOutlineLargeMarkdown/256KiB-10        	       1	  21057750 ns/op	  12.45 MB/s	 1739432 B/op	   16276 allocs/op
+BenchmarkOutlineLargeMarkdown/512KiB-10        	       1	 205571291 ns/op	   2.55 MB/s	 3917216 B/op	   36567 allocs/op
+BenchmarkOutlineLargeMarkdown/512KiB-10        	       1	 203098250 ns/op	   2.58 MB/s	 3915616 B/op	   36564 allocs/op
+BenchmarkOutlineLargeMarkdown/512KiB-10        	       1	 206130583 ns/op	   2.54 MB/s	 3952688 B/op	   36569 allocs/op
+BenchmarkOutlineLargeMarkdown/2022KiB-10       	       1	38999616458 ns/op	   0.05 MB/s	17679824 B/op	  171056 allocs/op
+BenchmarkOutlineLargeMarkdown/2022KiB-10       	       1	39507749667 ns/op	   0.05 MB/s	17715904 B/op	  171050 allocs/op
+BenchmarkOutlineLargeMarkdown/2022KiB-10       	       1	38948019500 ns/op	   0.05 MB/s	17530192 B/op	  171020 allocs/op
+PASS
+ok  	github.com/g5becks/dox/internal/parser	119.848s
+goos: darwin
+goarch: arm64
+pkg: github.com/g5becks/dox/internal/search
+cpu: Apple M5
+BenchmarkSearchContentLiteral-10    	       1	 427937500 ns/op	98421256 B/op	  286455 allocs/op
+BenchmarkSearchContentLiteral-10    	       1	 111009750 ns/op	98405072 B/op	  286434 allocs/op
+BenchmarkSearchContentLiteral-10    	       1	 113000666 ns/op	98405088 B/op	  286435 allocs/op
+BenchmarkSearchContentRegex-10      	       1	 300238917 ns/op	65021192 B/op	   40178 allocs/op
+BenchmarkSearchContentRegex-10      	       1	 284092958 ns/op	65317528 B/op	   40203 allocs/op
+BenchmarkSearchContentRegex-10      	       1	 270245000 ns/op	65169528 B/op	   40192 allocs/op
+BenchmarkSearchMetadata-10          	       1	  14505167 ns/op	32129688 B/op	   12317 allocs/op
+BenchmarkSearchMetadata-10          	       1	  13022500 ns/op	32129688 B/op	   12317 allocs/op
+BenchmarkSearchMetadata-10          	       1	  12931541 ns/op	32129688 B/op	   12317 allocs/op
+PASS
+ok  	github.com/g5becks/dox/internal/search	1.958s
+2026/11/10 23:02:49.759614 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:49.811614 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:49.864015 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:49.915549 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:49.968458 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.020745 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.073924 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.127486 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.180744 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.232442 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.283875 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.337566 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.390630 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.442658 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.494333 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.546319 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.598281 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.650751 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.702421 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.754840 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.807290 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.859730 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.910953 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:50.963383 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.015505 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.067878 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.120295 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.172761 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.225075 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.277476 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.328016 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.380444 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.432860 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.485282 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.537697 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.590143 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+2026/11/10 23:02:51.642572 WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS
+goos: darwin
+goarch: arm64
+pkg: github.com/g5becks/dox/internal/source
+cpu: Apple M5
+BenchmarkGitHubDirectory/35files-10         	       1	1953250792 ns/op	        37.00 REST/op	        50.00 latency-ms	         1.953 s/sync	  800240 B/op	    5797 allocs/op
+BenchmarkGitHubDirectory/35files-10         	       1	1946920542 ns/op	        37.00 REST/op	        50.00 latency-ms	         1.947 s/sync	  726848 B/op	    5488 allocs/op
+BenchmarkGitHubDirectory/35files-10         	       1	1950320500 ns/op	        37.00 REST/op	        50.00 latency-ms	         1.950 s/sync	  725736 B/op	    5515 allocs/op
+BenchmarkGitHubDirectory/108files-10        	       1	5769332250 ns/op	       110.0 REST/op	        50.00 latency-ms	         5.769 s/sync	 2086864 B/op	   15954 allocs/op
+BenchmarkGitHubDirectory/108files-10        	       1	5739264875 ns/op	       110.0 REST/op	        50.00 latency-ms	         5.739 s/sync	 2059824 B/op	   15904 allocs/op
+BenchmarkGitHubDirectory/108files-10        	       1	5799246083 ns/op	       110.0 REST/op	        50.00 latency-ms	         5.799 s/sync	 2084960 B/op	   15972 allocs/op
+PASS
+ok  	github.com/g5becks/dox/internal/source	23.352s

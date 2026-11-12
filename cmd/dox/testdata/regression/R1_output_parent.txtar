@@ -1,0 +1,10 @@
+mkdir project
+cp dox.in project/dox.toml
+cp sentinel project/sentinel
+cd project
+audit R1_output_parent refuse sentinel clean
+
+-- dox.in --
+output = ".."
+-- sentinel --
+keep me

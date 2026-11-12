@@ -1,0 +1,25 @@
+# Numeric config limits are enforced at load time with exit 2 (dox-deb.36).
+doxexit 2 list --config parallel.toml
+stderr 'invalid max_parallel 1000'
+stderr 'hint: Use a value from 1 to 100'
+
+doxexit 2 list --config perhost.toml
+stderr 'invalid max_per_host 65'
+
+dox list --config ok.toml
+stdout 'docs'
+
+-- parallel.toml --
+max_parallel = 1000
+[sources.docs]
+url = "https://example.com/guide.txt"
+-- perhost.toml --
+max_per_host = 65
+[sources.docs]
+url = "https://example.com/guide.txt"
+-- ok.toml --
+max_parallel = 100
+max_per_host = 64
+download_concurrency = 64
+[sources.docs]
+url = "https://example.com/guide.txt"

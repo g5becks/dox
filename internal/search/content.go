@@ -1,14 +1,19 @@
 package search
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"unicode/utf8"
 
-	"github.com/samber/oops"
-
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/parser"
 )
@@ -32,25 +37,38 @@ type ContentOptions struct {
 	Limit      int
 }
 
-type matcher func(string) bool
+type matcher func([]byte) bool
 
 // Content performs literal or regex search across synced file contents.
 func Content(m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error) {
+	return ContentContext(context.Background(), m, opts)
+}
+
+// ContentContext performs literal or regex search across synced file contents, honoring ctx cancellation.
+func ContentContext(ctx context.Context, m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	query := strings.TrimSpace(opts.Query)
 	if query == "" {
-		return nil, oops.
-			Code("INVALID_ARGS").
-			Hint("Provide a non-empty search query").
-			Errorf("search query cannot be empty")
+		return nil, errs.New(
+			errs.Usage,
+			"search query cannot be empty",
+			errs.WithHint("Provide a non-empty search query"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	if opts.Collection != "" {
 		if _, exists := m.Collections[opts.Collection]; !exists {
-			return nil, oops.
-				Code("COLLECTION_NOT_FOUND").
-				With("collection", opts.Collection).
-				Hint("Run 'dox collections' to see available collections").
-				Errorf("collection %q not found", opts.Collection)
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("collection %q not found", opts.Collection),
+				errs.WithHint("Run 'dox collections' to see available collections"),
+				errs.WithFields(
+					map[string]any{"collection": opts.Collection, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
+				),
+			)
 		}
 	}
 
@@ -65,30 +83,127 @@ func Content(m *manifest.Manifest, opts ContentOptions) ([]ContentResult, error)
 	}
 	sort.Strings(names)
 
-	results := make([]ContentResult, 0)
+	files, err := contentFiles(ctx, m, opts, names)
+	if err != nil {
+		return nil, err
+	}
+	return scanContentFiles(ctx, files, opts.Limit, match)
+}
+
+type contentFile struct {
+	path       string
+	collection string
+	relative   string
+}
+
+func contentFiles(
+	ctx context.Context,
+	m *manifest.Manifest,
+	opts ContentOptions,
+	names []string,
+) ([]contentFile, error) {
+	var files []contentFile
 	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if opts.Collection != "" && name != opts.Collection {
 			continue
 		}
-
 		coll := m.Collections[name]
 		for _, file := range coll.Files {
-			filePath := filepath.Join(opts.OutputDir, coll.Dir, file.Path)
-
-			matches, scanErr := scanFile(filePath, name, file.Path, match)
-			if scanErr != nil {
-				continue
+			if err := ctx.Err(); err != nil {
+				return nil, err
 			}
-
-			results = append(results, matches...)
-
-			if opts.Limit > 0 && len(results) >= opts.Limit {
-				return results[:opts.Limit], nil
-			}
+			files = append(
+				files,
+				contentFile{
+					path:       filepath.Join(opts.OutputDir, coll.Dir, file.Path),
+					collection: name,
+					relative:   file.Path,
+				},
+			)
 		}
 	}
+	return files, nil
+}
 
-	return results, nil
+func scanContentFiles(ctx context.Context, files []contentFile, limit int, match matcher) ([]ContentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	const maxWorkers = 8
+	count := min(maxWorkers, runtime.GOMAXPROCS(0), len(files))
+	chunks := make([][]ContentResult, len(files))
+	jobs := make(chan int)
+	var batch, workers sync.WaitGroup
+	startContentWorkers(ctx, count, files, chunks, jobs, &batch, &workers, match, limit)
+	defer func() { close(jobs); workers.Wait() }()
+	total := 0
+	// Process bounded windows so a limit stops scheduling after at most one window.
+	const windowMultiplier = 8
+	window := count
+	if limit <= 0 {
+		window *= windowMultiplier
+	}
+	for first := 0; first < len(files); first += window {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		end := min(first+window, len(files))
+		batch.Add(end - first)
+		for index := first; index < end; index++ {
+			jobs <- index
+		}
+		batch.Wait()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		for _, chunk := range chunks[first:end] {
+			total += len(chunk)
+		}
+		if limit > 0 && total >= limit {
+			total = limit
+			break
+		}
+	}
+	return flattenContentChunks(chunks, total), nil
+}
+
+func startContentWorkers(
+	ctx context.Context,
+	count int,
+	files []contentFile,
+	chunks [][]ContentResult,
+	jobs <-chan int,
+	batch, workers *sync.WaitGroup,
+	match matcher,
+	limit int,
+) {
+	for range count {
+		workers.Go(func() {
+			var scratch bytes.Buffer
+			for index := range jobs {
+				if ctx.Err() == nil {
+					file := files[index]
+					chunks[index], _ = scanFile(ctx, file.path, file.collection, file.relative, match, &scratch, limit)
+				}
+				batch.Done()
+			}
+		})
+	}
+}
+
+func flattenContentChunks(chunks [][]ContentResult, total int) []ContentResult {
+	results := make([]ContentResult, total)
+	position := 0
+	for _, chunk := range chunks {
+		position += copy(results[position:], chunk)
+		if position == total {
+			break
+		}
+	}
+	return results
 }
 
 func buildMatcher(query string, useRegex bool) (matcher, error) {
@@ -96,23 +211,57 @@ func buildMatcher(query string, useRegex bool) (matcher, error) {
 		pattern := "(?i)" + query
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			return nil, oops.
-				Code("SEARCH_ERROR").
-				With("pattern", query).
-				Hint("Check regex syntax").
-				Wrapf(err, "invalid regex pattern")
+			return nil, errs.Wrap(
+				errs.Internal,
+				fmt.Errorf("invalid regex pattern: %w", err),
+				errs.WithHint("Check regex syntax"),
+				errs.WithFields(map[string]any{"pattern": query, errs.LegacyCodeField: errs.LegacySearchError}),
+			)
 		}
-		return re.MatchString, nil
+		return re.Match, nil
 	}
 
 	lowerQuery := strings.ToLower(query)
-	return func(line string) bool {
-		return strings.Contains(strings.ToLower(line), lowerQuery)
+	// The ASCII fast path is equivalent to the old lowercase comparison.
+	// Unicode uses the exact original semantics (simple folding differs for İ/ſ/ς).
+	asciiQuery := isASCII([]byte(lowerQuery))
+	firstVariants := lowerQuery[:1]
+	if firstVariants[0] >= 'a' && firstVariants[0] <= 'z' {
+		firstVariants += string(firstVariants[0] - ('a' - 'A'))
+	}
+	return func(line []byte) bool {
+		if asciiQuery && isASCII(line) {
+			return containsASCII(line, []byte(lowerQuery), firstVariants)
+		}
+		return strings.Contains(strings.ToLower(string(line)), lowerQuery)
 	}, nil
 }
 
-func scanFile(filePath, collection, relPath string, match matcher) ([]ContentResult, error) {
-	info, err := os.Stat(filePath)
+func isASCII(text []byte) bool {
+	for _, b := range text {
+		if b >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
+func scanFile(
+	ctx context.Context,
+	filePath, collection, relPath string,
+	match matcher,
+	scratch *bytes.Buffer,
+	limit int,
+) ([]ContentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
@@ -121,31 +270,64 @@ func scanFile(filePath, collection, relPath string, match matcher) ([]ContentRes
 		return nil, nil
 	}
 
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
+	const readBufferSpare = 512
+	scratch.Reset()
+	scratch.Grow(int(info.Size()) + readBufferSpare)
+	if _, readErr := scratch.ReadFrom(file); readErr != nil {
+		return nil, readErr
 	}
-
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return nil, cancelErr
+	}
+	content := scratch.Bytes()
 	if parser.IsBinary(content) {
 		return nil, nil
 	}
-
-	lines := strings.Split(string(content), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-
 	var results []ContentResult
-	for i, line := range lines {
+	lineNumber := 0
+	for raw := range bytes.Lines(content) {
+		if cancelErr := ctx.Err(); cancelErr != nil {
+			return nil, cancelErr
+		}
+		lineNumber++
+		line := bytes.TrimSuffix(raw, []byte{'\n'})
 		if match(line) {
-			results = append(results, ContentResult{
-				Collection: collection,
-				Path:       relPath,
-				Line:       i + 1,
-				Text:       line,
-			})
+			results = append(
+				results,
+				ContentResult{Collection: collection, Path: relPath, Line: lineNumber, Text: string(line)},
+			)
+			if limit > 0 && len(results) >= limit {
+				break
+			}
 		}
 	}
 
 	return results, nil
+}
+
+func containsASCII(line, query []byte, firstVariants string) bool {
+	for len(line) >= len(query) {
+		index := bytes.IndexAny(line, firstVariants)
+		if index < 0 || len(line)-index < len(query) {
+			return false
+		}
+		line = line[index:]
+		if equalASCII(line[:len(query)], query) {
+			return true
+		}
+		line = line[1:]
+	}
+	return false
+}
+
+func equalASCII(text, lowerQuery []byte) bool {
+	for index, b := range text {
+		if b >= 'A' && b <= 'Z' {
+			b += 'a' - 'A'
+		}
+		if b != lowerQuery[index] {
+			return false
+		}
+	}
+	return true
 }

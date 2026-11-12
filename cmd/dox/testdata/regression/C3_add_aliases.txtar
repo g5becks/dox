@@ -1,0 +1,8 @@
+audit C3_add_aliases success add x -r acme/docs -p docs
+# The baseline stops at the known failure; grep only runs on a real pass.
+grep '^type = "github"$' dox.toml
+grep '^repo = "acme/docs"$' dox.toml
+grep '^path = "docs"$' dox.toml
+
+-- dox.toml --
+output = ".dox"

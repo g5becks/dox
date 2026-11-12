@@ -1,0 +1,17 @@
+mkdir .dox/docs
+cp guide.txt .dox/docs/guide.txt
+manifest
+audit C6_line_roundtrip line
+
+-- dox.toml --
+output = ".dox"
+[display]
+line_numbers = false
+[sources.docs]
+type = "url"
+url = "https://example.invalid/guide.txt"
+filename = "guide.txt"
+-- guide.txt --
+intro
+needle
+outro

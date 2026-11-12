@@ -1,12 +1,14 @@
 package search
 
 import (
+	"context"
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/sahilm/fuzzy"
-	"github.com/samber/oops"
 
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 )
 
@@ -112,64 +114,75 @@ func fileEntries(collection string, file manifest.FileInfo) []indexEntry {
 }
 
 func buildIndex(m *manifest.Manifest, collection string) searchIndex {
+	index, _ := buildIndexContext(context.Background(), m, collection)
+	return index
+}
+
+func buildIndexContext(ctx context.Context, m *manifest.Manifest, collection string) (searchIndex, error) {
 	names := sortedCollectionNames(m)
 	var entries []indexEntry
 	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return searchIndex{}, err
+		}
 		if collection != "" && name != collection {
 			continue
 		}
 
 		coll := m.Collections[name]
 		for _, file := range coll.Files {
+			if err := ctx.Err(); err != nil {
+				return searchIndex{}, err
+			}
 			entries = append(entries, fileEntries(name, file)...)
 		}
 	}
 
-	return searchIndex{entries: entries}
+	return searchIndex{entries: entries}, nil
 }
 
 // Metadata performs fuzzy search across manifest metadata fields.
 func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, error) {
+	return MetadataContext(context.Background(), m, opts)
+}
+
+// MetadataContext performs fuzzy search across manifest metadata fields, honoring ctx cancellation.
+func MetadataContext(ctx context.Context, m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	query := strings.TrimSpace(opts.Query)
 	if query == "" {
-		return nil, oops.
-			Code("INVALID_ARGS").
-			Hint("Provide a non-empty search query").
-			Errorf("search query cannot be empty")
+		return nil, errs.New(
+			errs.Usage,
+			"search query cannot be empty",
+			errs.WithHint("Provide a non-empty search query"),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+		)
 	}
 
 	if opts.Collection != "" {
 		if _, exists := m.Collections[opts.Collection]; !exists {
-			return nil, oops.
-				Code("COLLECTION_NOT_FOUND").
-				With("collection", opts.Collection).
-				Hint("Run 'dox collections' to see available collections").
-				Errorf("collection %q not found", opts.Collection)
+			return nil, errs.New(
+				errs.NotFound,
+				fmt.Sprintf("collection %q not found", opts.Collection),
+				errs.WithHint("Run 'dox collections' to see available collections"),
+				errs.WithFields(
+					map[string]any{"collection": opts.Collection, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
+				),
+			)
 		}
 	}
 
-	index := buildIndex(m, opts.Collection)
+	index, err := buildIndexContext(ctx, m, opts.Collection)
+	if err != nil {
+		return nil, err
+	}
 	matches := fuzzy.FindFrom(query, index)
 
-	deduped := make(map[string]MetadataResult)
-	for _, match := range matches {
-		if match.Score < 0 {
-			continue
-		}
-		entry := index.entries[match.Index]
-		key := entry.Collection + "\x00" + entry.Path
-
-		if existing, exists := deduped[key]; !exists || match.Score > existing.Score {
-			deduped[key] = MetadataResult{
-				Collection:  entry.Collection,
-				Path:        entry.Path,
-				Type:        entry.Type,
-				Description: entry.Description,
-				MatchField:  entry.MatchField,
-				MatchValue:  entry.MatchValue,
-				Score:       match.Score,
-			}
-		}
+	deduped, err := dedupeMetadataMatches(ctx, index, matches)
+	if err != nil {
+		return nil, err
 	}
 
 	results := make([]MetadataResult, 0, len(deduped))
@@ -192,4 +205,35 @@ func Metadata(m *manifest.Manifest, opts MetadataOptions) ([]MetadataResult, err
 	}
 
 	return results, nil
+}
+
+func dedupeMetadataMatches(
+	ctx context.Context,
+	index searchIndex,
+	matches fuzzy.Matches,
+) (map[string]MetadataResult, error) {
+	deduped := make(map[string]MetadataResult)
+	for _, match := range matches {
+		if cancelErr := ctx.Err(); cancelErr != nil {
+			return nil, cancelErr
+		}
+		if match.Score < 0 {
+			continue
+		}
+		entry := index.entries[match.Index]
+		key := entry.Collection + "\x00" + entry.Path
+
+		if existing, exists := deduped[key]; !exists || match.Score > existing.Score {
+			deduped[key] = MetadataResult{
+				Collection:  entry.Collection,
+				Path:        entry.Path,
+				Type:        entry.Type,
+				Description: entry.Description,
+				MatchField:  entry.MatchField,
+				MatchValue:  entry.MatchValue,
+				Score:       match.Score,
+			}
+		}
+	}
+	return deduped, nil
 }

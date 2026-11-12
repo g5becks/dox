@@ -1,0 +1,178 @@
+[
+  {
+    "Path": "testdata/outline/fences.md",
+    "Before": {
+      "Description": "Real",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Real",
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "After fence",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 14
+    },
+    "After": {
+      "Description": "Real",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Real",
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "After fence",
+            "line": 13
+          }
+        ]
+      },
+      "Lines": 14
+    },
+    "Reason": "Closing fences must match opening marker and length; actual After fence heading is line13, not line6."
+  },
+  {
+    "Path": "testdata/outline/positions.mdx",
+    "Before": {
+      "Description": "Component",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Actual Heading",
+            "line": 2
+          },
+          {
+            "level": 2,
+            "text": "Details",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 13
+    },
+    "After": {
+      "Description": "Component",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Actual Heading",
+            "line": 8
+          },
+          {
+            "level": 2,
+            "text": "Details",
+            "line": 12
+          }
+        ]
+      },
+      "Lines": 13
+    },
+    "Reason": "MDX filtering preserves YAML and import source lines; headings are lines8/12, not2/6."
+  },
+  {
+    "Path": "testdata/outline/toml.md",
+    "Before": {
+      "Description": "Actual title",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Actual title",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 9
+    },
+    "After": {
+      "Description": "TOML title - TOML description",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Actual title",
+            "line": 6
+          }
+        ]
+      },
+      "Lines": 9
+    },
+    "Reason": "TOML frontmatter title/description is now decoded, rather than treated as body text."
+  },
+  {
+    "Path": "../../testdata/sample.mdx",
+    "Before": {
+      "Description": "Sample MDX - Testing MDX parsing",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Sample MDX Documentation",
+            "line": 3
+          },
+          {
+            "level": 2,
+            "text": "Features",
+            "line": 7
+          },
+          {
+            "level": 2,
+            "text": "API Reference",
+            "line": 12
+          }
+        ]
+      },
+      "Lines": 20
+    },
+    "After": {
+      "Description": "Sample MDX - Testing MDX parsing",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Sample MDX Documentation",
+            "line": 8
+          },
+          {
+            "level": 2,
+            "text": "Features",
+            "line": 12
+          },
+          {
+            "level": 2,
+            "text": "API Reference",
+            "line": 17
+          }
+        ]
+      },
+      "Lines": 20
+    },
+    "Reason": "MDX frontmatter and imports no longer shift the original source positions."
+  }
+]

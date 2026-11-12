@@ -4,8 +4,7 @@ package sync
 
 //nolint:gochecknoglobals // Test-only exports
 var (
-	ResolveSourceNames     = resolveSourceNames
-	ResolveGitHubToken     = resolveGitHubToken
-	ResolveOutputRoot      = resolveOutputRoot
-	ResolveSourceOutputDir = resolveSourceOutputDir
+	ResolveSourceNames = resolveSourceNames
+	ResolveGitHubToken = resolveGitHubToken
+	ResolveMaxParallel = resolveMaxParallel
 )

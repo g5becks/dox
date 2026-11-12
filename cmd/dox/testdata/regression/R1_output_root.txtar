@@ -1,0 +1,8 @@
+# Never execute a destructive root clean, even on the failing baseline.
+audit R1_output_root invalid-config dox.toml
+exists sentinel
+
+-- dox.toml --
+output = "/"
+-- sentinel --
+keep me

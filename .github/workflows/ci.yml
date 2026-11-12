@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: ${{ matrix.os }} / Go ${{ matrix.go }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ['1.26.x', '1.27.x']
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+            tools/beads/go.sum
+            tools/actionlint/go.sum
+            tools/buildx/go.sum
+      - name: Vet, lint, race/coverage, vulnerabilities, fix, format, and tidy
+        run: DOX_GO_TOOLCHAIN=$(GOTOOLCHAIN=local go env GOVERSION) bash scripts/ci-check.sh
+      - name: Build image and sync an HTTPS documentation source
+        if: matrix.os == 'ubuntu-latest'
+        run: DOX_GO_TOOLCHAIN=$(GOTOOLCHAIN=local go env GOVERSION) bash scripts/container-smoke.sh

@@ -1,7 +1,7 @@
 package source_test
 
 import (
-	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/source"
 )
@@ -51,7 +52,7 @@ func TestURLSyncDownloadsFileAndUpdatesLock(t *testing.T) {
 		URL: "https://example.test/llms-full.txt",
 	})
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		headers := http.Header{}
 		headers.Set("ETag", `"abc123"`)
 		headers.Set("Last-Modified", "Tue, 15 Jan 2024 10:30:00 GMT")
@@ -61,7 +62,7 @@ func TestURLSyncDownloadsFileAndUpdatesLock(t *testing.T) {
 
 	destDir := t.TempDir()
 
-	result, err := src.Sync(context.Background(), destDir, nil, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), destDir, nil, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -98,7 +99,7 @@ func TestURLSyncSendsConditionalHeadersAndSkips304(t *testing.T) {
 	var ifNoneMatch string
 	var ifModifiedSince string
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		ifNoneMatch = req.Header.Get("If-None-Match")
 		ifModifiedSince = req.Header.Get("If-Modified-Since")
 
@@ -112,7 +113,7 @@ func TestURLSyncSendsConditionalHeadersAndSkips304(t *testing.T) {
 		SyncedAt: time.Now().UTC(),
 	}
 
-	result, err := src.Sync(context.Background(), t.TempDir(), prevLock, source.SyncOptions{})
+	result, err := src.Sync(t.Context(), t.TempDir(), prevLock, source.SyncOptions{})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -137,13 +138,13 @@ func TestURLSyncDryRunDoesNotWriteFile(t *testing.T) {
 		URL: "https://example.test/llms-full.txt",
 	})
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		return source.NewHTTPResponse(req, http.StatusOK, "dry-run-content", nil)
 	}))
 
 	destDir := t.TempDir()
 
-	result, err := src.Sync(context.Background(), destDir, nil, source.SyncOptions{DryRun: true})
+	result, err := src.Sync(t.Context(), destDir, nil, source.SyncOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -164,16 +165,20 @@ func TestURLSyncReturnsErrorOnFailureStatus(t *testing.T) {
 		URL: "https://example.test/llms-full.txt",
 	})
 
-	setClient(source.NewMockRestyClient(func(req *http.Request) *http.Response {
+	setClient(source.NewMockHTTPClient(func(req *http.Request) *http.Response {
 		return source.NewHTTPResponse(req, http.StatusBadGateway, "gateway error", nil)
 	}))
 
-	_, err := src.Sync(context.Background(), t.TempDir(), nil, source.SyncOptions{})
+	_, err := src.Sync(t.Context(), t.TempDir(), nil, source.SyncOptions{})
 	if err == nil {
 		t.Fatalf("Sync() error = nil, want non-nil")
 	}
 
 	if !strings.Contains(err.Error(), "non-success status") {
 		t.Fatalf("Sync() error = %q, expected status error", err.Error())
+	}
+	status, ok := errors.AsType[*errs.HTTPStatusError](err)
+	if !ok || status.Code != http.StatusBadGateway {
+		t.Fatalf("status cause missing: %+v", status)
 	}
 }

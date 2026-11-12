@@ -2,42 +2,61 @@ package source
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
+	"maps"
+	"net/http"
 	neturl "net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/samber/oops"
-	"resty.dev/v3"
 
 	"github.com/g5becks/dox/internal/config"
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/fsutil"
+	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 )
 
 const (
 	sourceTypeGitHub    = "github"
 	githubAPIBaseURL    = "https://api.github.com"
+	githubAPIVersion    = "2022-11-28"
+	githubJSONMediaType = "application/vnd.github+json"
+	githubRawMediaType  = "application/vnd.github.raw"
+	gitObjectBlob       = "blob"
 	userAgent           = "dox"
 	httpRetryCount      = 3
-	httpRetryMaxWaitSec = 5
 	rateLimitWarnThresh = 10
 )
 
 type githubSource struct {
-	name        string
-	source      config.Source
-	owner       string
-	repo        string
-	client      *resty.Client
-	resolvedRef string
-	warnedLowRL bool
+	name              string
+	source            config.Source
+	owner             string
+	repo              string
+	http              *http.Client
+	ownsClient        bool
+	apiBase           string
+	rawBase           string
+	codeloadBase      string
+	token             string
+	timeout           time.Duration
+	maxRetries        int
+	retriesConfigured bool
+	retryBaseWait     time.Duration
+	maxRateLimitWait  time.Duration
+	resolvedRef       string
+	resolvedCommit    string
+	tarballMinFiles   int
+	tarballByteBudget int64
+	warnedLowRL       atomic.Bool
+	onWarning         func(string)
 }
 
 type githubTreeResponse struct {
@@ -50,10 +69,7 @@ type githubTreeEntry struct {
 	Path string `json:"path"`
 	Type string `json:"type"`
 	SHA  string `json:"sha"`
-}
-
-type githubRepoResponse struct {
-	DefaultBranch string `json:"default_branch"`
+	Size int64  `json:"size"`
 }
 
 type githubContentResponse struct {
@@ -61,28 +77,42 @@ type githubContentResponse struct {
 	SHA  string `json:"sha"`
 }
 
-type githubBlobResponse struct {
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"`
+func newGitHubSource(name string, cfg config.Source, token string) (Source, error) {
+	return newGitHubSourceWithHTTP(name, cfg, token, nil)
 }
 
-func newGitHubSource(name string, cfg config.Source, token string) (Source, error) {
+func newGitHubSourceWithHTTP(name string, cfg config.Source, token string, httpClient *http.Client) (Source, error) {
 	owner, repo, err := parseRepo(cfg.Repo)
 	if err != nil {
 		return nil, err
 	}
+	ownsClient := httpClient == nil
+	if ownsClient {
+		httpClient = httpx.NewClient(httpx.DefaultTimeout)
+	}
 
 	return &githubSource{
-		name:   name,
-		source: cfg,
-		owner:  owner,
-		repo:   repo,
-		client: newGitHubClient(token),
+		name:         name,
+		source:       cfg,
+		owner:        owner,
+		repo:         repo,
+		http:         httpClient,
+		ownsClient:   ownsClient,
+		apiBase:      githubAPIBaseURL,
+		rawBase:      githubRawBaseURL,
+		codeloadBase: githubCodeloadBaseURL,
+		token:        token,
+		timeout:      httpx.NormalizeTimeout(httpClient.Timeout),
 	}, nil
 }
 
+// Close releases idle connections of a client this source created; a shared
+// client belongs to the caller.
 func (s *githubSource) Close() error {
-	return s.client.Close()
+	if s.ownsClient {
+		s.http.CloseIdleConnections()
+	}
+	return nil
 }
 
 func (s *githubSource) Sync(
@@ -91,11 +121,15 @@ func (s *githubSource) Sync(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
+	s.onWarning = opts.OnWarning
+	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
+	defer cancel()
+
 	if isSingleFilePath(s.source.Path) {
-		return s.syncSingleFile(ctx, destDir, prevLock, opts)
+		return s.syncSingleFile(sourceCtx, destDir, prevLock, opts)
 	}
 
-	return s.syncDirectory(ctx, destDir, prevLock, opts)
+	return s.syncDirectory(sourceCtx, destDir, prevLock, opts)
 }
 
 func (s *githubSource) syncSingleFile(
@@ -104,14 +138,14 @@ func (s *githubSource) syncSingleFile(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	ref, err := s.resolveRef(ctx)
+	ref, commit, err := s.resolveCommit(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	filePath := normalizeRepoPath(s.source.Path)
 	relativePath := path.Base(filePath)
-	sha, err := s.fetchContentSHA(ctx, ref, filePath)
+	sha, err := s.fetchContentSHA(ctx, commit, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +163,7 @@ func (s *githubSource) syncSingleFile(
 
 		lockEntry.Type = sourceTypeGitHub
 		lockEntry.RefResolved = ref
+		lockEntry.Commit = commit
 		lockEntry.SyncedAt = time.Now().UTC()
 
 		return &SyncResult{
@@ -143,16 +178,12 @@ func (s *githubSource) syncSingleFile(
 			return nil, fetchErr
 		}
 
-		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", filepath.Dir(localPath)).
-				Wrapf(mkdirErr, "creating destination directory")
+		root, rootErr := destinationRoot(destDir, opts)
+		if rootErr != nil {
+			return nil, rootErr
 		}
-
-		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
+		defer root.Close()
+		if writeErr := fsutil.AtomicWrite(root, filepath.FromSlash(relativePath), content); writeErr != nil {
 			return nil, writeErr
 		}
 	}
@@ -162,6 +193,7 @@ func (s *githubSource) syncSingleFile(
 		LockEntry: &lockfile.LockEntry{
 			Type:        sourceTypeGitHub,
 			RefResolved: ref,
+			Commit:      commit,
 			SyncedAt:    time.Now().UTC(),
 			Files: map[string]string{
 				relativePath: sha,
@@ -176,17 +208,20 @@ func (s *githubSource) syncDirectory(
 	prevLock *lockfile.LockEntry,
 	opts SyncOptions,
 ) (*SyncResult, error) {
-	ref, err := s.resolveRef(ctx)
+	ref, commit, err := s.resolveCommit(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tree, err := s.fetchTree(ctx, ref)
+	// Fetch only the configured folder's tree ("<commit>:<path>") and compare
+	// its own SHA, so commits elsewhere in the repository keep the fast path.
+	tree, err := s.fetchFolderTree(ctx, commit)
 	if err != nil {
 		return nil, err
 	}
+	folderSHA := tree.SHA
 
-	if !opts.Force && prevLock != nil && prevLock.TreeSHA == tree.SHA {
+	if !opts.Force && prevLock != nil && prevLock.TreeSHA == folderSHA {
 		lockEntry := cloneLockEntry(prevLock)
 		if lockEntry == nil {
 			lockEntry = &lockfile.LockEntry{Type: sourceTypeGitHub}
@@ -194,6 +229,7 @@ func (s *githubSource) syncDirectory(
 
 		lockEntry.Type = sourceTypeGitHub
 		lockEntry.RefResolved = ref
+		lockEntry.Commit = commit
 		lockEntry.SyncedAt = time.Now().UTC()
 
 		return &SyncResult{
@@ -202,9 +238,13 @@ func (s *githubSource) syncDirectory(
 		}, nil
 	}
 
-	newFiles, err := s.buildFileMap(tree.Tree)
+	remoteFiles, err := s.buildFileMap(tree.Tree)
 	if err != nil {
 		return nil, err
+	}
+	newFiles := make(map[string]string, len(remoteFiles))
+	for relativePath, file := range remoteFiles {
+		newFiles[relativePath] = file.sha
 	}
 
 	oldFiles := map[string]string{}
@@ -216,19 +256,21 @@ func (s *githubSource) syncDirectory(
 	toDelete := diffDeletes(oldFiles, newFiles)
 
 	if !opts.DryRun {
-		if mkdirErr := os.MkdirAll(destDir, 0o750); mkdirErr != nil {
-			return nil, oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", destDir).
-				Wrapf(mkdirErr, "creating destination directory")
+		root, rootErr := destinationRoot(destDir, opts)
+		if rootErr != nil {
+			return nil, rootErr
 		}
-
-		if downloadErr := s.downloadFiles(ctx, destDir, toDownload); downloadErr != nil {
+		defer root.Close()
+		changed := make(map[string]remoteFile, len(toDownload))
+		for relativePath := range toDownload {
+			changed[relativePath] = remoteFiles[relativePath]
+		}
+		if downloadErr := s.downloadChanged(
+			ctx, root, commit, changed, s.downloadConcurrency(opts),
+		); downloadErr != nil {
 			return nil, downloadErr
 		}
-
-		if deleteErr := s.deleteStaleFiles(destDir, toDelete); deleteErr != nil {
+		if deleteErr := s.deleteStaleFiles(root, toDelete); deleteErr != nil {
 			return nil, deleteErr
 		}
 	}
@@ -238,142 +280,52 @@ func (s *githubSource) syncDirectory(
 		Deleted:    len(toDelete),
 		LockEntry: &lockfile.LockEntry{
 			Type:        sourceTypeGitHub,
-			TreeSHA:     tree.SHA,
+			TreeSHA:     folderSHA,
 			RefResolved: ref,
+			Commit:      commit,
 			SyncedAt:    time.Now().UTC(),
 			Files:       newFiles,
 		},
 	}, nil
 }
 
-func (s *githubSource) downloadFiles(ctx context.Context, destDir string, toDownload map[string]string) error {
-	for _, relativePath := range sortedKeys(toDownload) {
-		sha := toDownload[relativePath]
-		content, fetchErr := s.fetchBlobContent(ctx, sha)
-		if fetchErr != nil {
-			return fetchErr
+func (s *githubSource) deleteStaleFiles(root *os.Root, toDelete map[string]struct{}) error {
+	for _, relativePath := range slices.Sorted(maps.Keys(toDelete)) {
+		local := filepath.FromSlash(relativePath)
+		if err := config.ValidatePath(local); err != nil {
+			return err
 		}
-
-		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if mkdirErr := os.MkdirAll(filepath.Dir(localPath), 0o750); mkdirErr != nil {
-			return oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", filepath.Dir(localPath)).
-				Wrapf(mkdirErr, "creating destination directory")
+		if err := root.Remove(local); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("deleting stale file: %w", err)
 		}
-
-		if writeErr := writeFileAtomic(localPath, content); writeErr != nil {
-			return writeErr
-		}
+		cleanupEmptyDirs(root, filepath.Dir(local))
 	}
-
 	return nil
 }
 
-func (s *githubSource) deleteStaleFiles(destDir string, toDelete map[string]struct{}) error {
-	for _, relativePath := range sortedKeys(toDelete) {
-		localPath := filepath.Join(destDir, filepath.FromSlash(relativePath))
-		if removeErr := os.Remove(localPath); removeErr != nil && !os.IsNotExist(removeErr) {
-			return oops.
-				Code("WRITE_FAILED").
-				With("source", s.name).
-				With("path", localPath).
-				Wrapf(removeErr, "deleting stale file")
-		}
-
-		cleanupEmptyDirs(filepath.Dir(localPath), destDir)
-	}
-
-	return nil
-}
-
-func (s *githubSource) resolveRef(ctx context.Context) (string, error) {
-	if s.resolvedRef != "" {
-		return s.resolvedRef, nil
-	}
-
-	if s.source.Ref != "" {
-		s.resolvedRef = s.source.Ref
-		return s.resolvedRef, nil
-	}
-
-	endpoint := fmt.Sprintf("/repos/%s/%s", s.owner, s.repo)
-	result := &githubRepoResponse{}
-
-	response, err := s.client.R().
-		SetContext(ctx).
-		SetResult(result).
-		Get(endpoint)
-	if err != nil {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			Wrapf(err, "fetching repository metadata")
-	}
-
-	if !response.IsSuccess() {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("status", response.StatusCode()).
-			Hint("Check that the repository exists and is accessible").
-			Errorf("github API returned status %d for repository metadata", response.StatusCode())
-	}
-
-	if rlErr := s.checkRateLimit(response); rlErr != nil {
-		return "", rlErr
-	}
-
-	if result.DefaultBranch == "" {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			Errorf("github repository metadata did not include default branch")
-	}
-
-	s.resolvedRef = result.DefaultBranch
-	return s.resolvedRef, nil
-}
-
-func (s *githubSource) fetchTree(ctx context.Context, ref string) (*githubTreeResponse, error) {
+func (s *githubSource) fetchTree(ctx context.Context, ref string, recursive bool) (*githubTreeResponse, error) {
 	endpoint := fmt.Sprintf("/repos/%s/%s/git/trees/%s", s.owner, s.repo, neturl.PathEscape(ref))
 	result := &githubTreeResponse{}
-
-	response, err := s.client.R().
-		SetContext(ctx).
-		SetQueryParam("recursive", "1").
-		SetResult(result).
-		Get(endpoint)
-	if err != nil {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("ref", ref).
-			Wrapf(err, "fetching tree")
+	var query map[string]string
+	if recursive {
+		query = map[string]string{"recursive": "1"}
 	}
 
-	if !response.IsSuccess() {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("ref", ref).
-			With("status", response.StatusCode()).
-			Hint("Check repository, path, and ref in your config").
-			Errorf("github API returned status %d for tree", response.StatusCode())
-	}
-
-	if rlErr := s.checkRateLimit(response); rlErr != nil {
-		return nil, rlErr
-	}
-
-	if result.Truncated {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("ref", ref).
-			Hint("Narrow the configured path to reduce tree size").
-			Errorf("github returned a truncated tree; contents fallback is not implemented")
+	if err := s.doGitHubGet(ctx, githubRequestSpec{
+		endpoint:   endpoint,
+		query:      query,
+		result:     result,
+		errContext: "fetching tree",
+		statusDesc: "tree",
+		statusHint: "Check repository, path, and ref in your config",
+		legacyCode: errs.LegacyGithubAPIError,
+		fields: map[string]any{
+			fieldRepo:            s.source.Repo,
+			fieldRef:             ref,
+			errs.LegacyCodeField: errs.LegacyGithubAPIError,
+		},
+	}); err != nil {
+		return nil, err
 	}
 
 	return result, nil
@@ -383,104 +335,74 @@ func (s *githubSource) fetchContentSHA(ctx context.Context, ref string, filePath
 	endpoint := fmt.Sprintf("/repos/%s/%s/contents/%s", s.owner, s.repo, escapeRepoPath(filePath))
 	result := &githubContentResponse{}
 
-	response, err := s.client.R().
-		SetContext(ctx).
-		SetQueryParam("ref", ref).
-		SetResult(result).
-		Get(endpoint)
-	if err != nil {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("path", filePath).
-			Wrapf(err, "fetching content metadata")
-	}
-
-	if !response.IsSuccess() {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("path", filePath).
-			With("status", response.StatusCode()).
-			Hint("Check repository path and ref in your config").
-			Errorf("github API returned status %d for content metadata", response.StatusCode())
-	}
-
-	if rlErr := s.checkRateLimit(response); rlErr != nil {
-		return "", rlErr
+	if err := s.doGitHubGet(ctx, githubRequestSpec{
+		endpoint:   endpoint,
+		query:      map[string]string{fieldRef: ref},
+		result:     result,
+		errContext: "fetching content metadata",
+		statusDesc: "content metadata",
+		statusHint: "Check repository path and ref in your config",
+		legacyCode: errs.LegacyGithubAPIError,
+		fields: map[string]any{
+			fieldRepo:            s.source.Repo,
+			fieldPath:            filePath,
+			errs.LegacyCodeField: errs.LegacyGithubAPIError,
+		},
+	}); err != nil {
+		return "", err
 	}
 
 	if result.Type != "file" || result.SHA == "" {
-		return "", oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("path", filePath).
-			Errorf("expected file metadata for %q", filePath)
+		return "", errs.New(
+			errs.Network,
+			fmt.Sprintf("expected file metadata for %q", filePath),
+			errs.WithFields(
+				map[string]any{
+					fieldRepo:            s.source.Repo,
+					fieldPath:            filePath,
+					errs.LegacyCodeField: errs.LegacyGithubAPIError,
+				},
+			),
+		)
 	}
 
 	return result.SHA, nil
 }
 
+// fetchBlobContent downloads one blob as raw bytes (no JSON or base64).
 func (s *githubSource) fetchBlobContent(ctx context.Context, sha string) ([]byte, error) {
 	endpoint := fmt.Sprintf("/repos/%s/%s/git/blobs/%s", s.owner, s.repo, sha)
-	result := &githubBlobResponse{}
+	var content []byte
 
-	response, err := s.client.R().
-		SetContext(ctx).
-		SetResult(result).
-		Get(endpoint)
-	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			Wrapf(err, "downloading blob")
-	}
-
-	if !response.IsSuccess() {
-		return nil, oops.
-			Code("GITHUB_API_ERROR").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			With("status", response.StatusCode()).
-			Errorf("github API returned status %d for blob", response.StatusCode())
-	}
-
-	if rlErr := s.checkRateLimit(response); rlErr != nil {
-		return nil, rlErr
-	}
-
-	if result.Encoding != "base64" {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			Errorf("unsupported blob encoding %q", result.Encoding)
-	}
-
-	normalized := strings.ReplaceAll(result.Content, "\n", "")
-	content, err := base64.StdEncoding.DecodeString(normalized)
-	if err != nil {
-		return nil, oops.
-			Code("DOWNLOAD_FAILED").
-			With("repo", s.source.Repo).
-			With("sha", sha).
-			Wrapf(err, "decoding blob content")
+	if err := s.doGitHubGet(ctx, githubRequestSpec{
+		endpoint:   endpoint,
+		accept:     githubRawMediaType,
+		raw:        &content,
+		errContext: "downloading blob",
+		statusDesc: gitObjectBlob,
+		legacyCode: errs.LegacyDownloadFailed,
+		fields: map[string]any{
+			fieldRepo:            s.source.Repo,
+			fieldSHA:             sha,
+			errs.LegacyCodeField: errs.LegacyDownloadFailed,
+		},
+	}); err != nil {
+		return nil, err
 	}
 
 	return content, nil
 }
 
-func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]string, error) {
+func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]remoteFile, error) {
 	basePath := normalizeRepoPath(s.source.Path)
 	patterns := s.source.Patterns
 	if len(patterns) == 0 {
 		patterns = config.DefaultPatterns()
 	}
 
-	files := make(map[string]string)
+	files := make(map[string]remoteFile)
 	for _, entry := range treeEntries {
-		if entry.Type != "blob" || entry.Path == "" || entry.SHA == "" {
+		if entry.Type != gitObjectBlob || entry.Path == "" || entry.SHA == "" {
 			continue
 		}
 
@@ -498,7 +420,7 @@ func (s *githubSource) buildFileMap(treeEntries []githubTreeEntry) (map[string]s
 			continue
 		}
 
-		files[relativePath] = entry.SHA
+		files[relativePath] = remoteFile{repoPath: normalizeRepoPath(entry.Path), sha: entry.SHA, size: entry.Size}
 	}
 
 	return files, nil
@@ -527,16 +449,6 @@ func diffDeletes(oldFiles map[string]string, newFiles map[string]string) map[str
 	}
 
 	return toDelete
-}
-
-func sortedKeys[T any](values map[string]T) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-
-	slices.Sort(keys)
-	return keys
 }
 
 func relativePathWithinBase(remotePath string, basePath string) (string, bool) {
@@ -578,11 +490,17 @@ func matchesAny(patterns []string, candidate string) (bool, error) {
 	for _, pattern := range patterns {
 		matched, err := doublestar.PathMatch(pattern, candidate)
 		if err != nil {
-			return false, oops.
-				Code("CONFIG_INVALID").
-				With("pattern", pattern).
-				With("path", candidate).
-				Wrapf(err, "invalid glob pattern")
+			return false, errs.Wrap(
+				errs.Config,
+				fmt.Errorf("invalid glob pattern: %w", err),
+				errs.WithFields(
+					map[string]any{
+						"pattern":            pattern,
+						fieldPath:            candidate,
+						errs.LegacyCodeField: errs.LegacyConfigInvalid,
+					},
+				),
+			)
 		}
 
 		if matched {
@@ -593,21 +511,12 @@ func matchesAny(patterns []string, candidate string) (bool, error) {
 	return false, nil
 }
 
-func cleanupEmptyDirs(startDir string, stopDir string) {
-	current := startDir
-	cleanStop := filepath.Clean(stopDir)
-
-	for current != cleanStop && current != "." && current != string(filepath.Separator) {
-		entries, err := os.ReadDir(current)
-		if err != nil || len(entries) != 0 {
+func cleanupEmptyDirs(root *os.Root, directory string) {
+	for directory != "." && filepath.IsLocal(directory) {
+		if err := root.Remove(directory); err != nil {
 			return
 		}
-
-		if removeErr := os.Remove(current); removeErr != nil {
-			return
-		}
-
-		current = filepath.Dir(current)
+		directory = filepath.Dir(directory)
 	}
 }
 
@@ -658,56 +567,13 @@ func escapeRepoPath(repoPath string) string {
 func parseRepo(repo string) (string, string, error) {
 	parts := strings.Split(repo, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", oops.
-			Code("CONFIG_INVALID").
-			With("repo", repo).
-			Hint("Expected repo format: owner/repo").
-			Errorf("invalid github repo format %q", repo)
+		return "", "", errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid github repo format %q", repo),
+			errs.WithHint("Expected repo format: owner/repo"),
+			errs.WithFields(map[string]any{fieldRepo: repo, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	return parts[0], parts[1], nil
-}
-
-func newGitHubClient(token string) *resty.Client {
-	client := resty.New()
-	client.SetBaseURL(githubAPIBaseURL)
-	client.SetHeader("Accept", "application/vnd.github.v3+json")
-	client.SetHeader("User-Agent", userAgent)
-	client.SetRetryCount(httpRetryCount)
-	client.SetRetryWaitTime(1 * time.Second)
-	client.SetRetryMaxWaitTime(httpRetryMaxWaitSec * time.Second)
-
-	if token != "" {
-		client.SetAuthToken(token)
-	}
-
-	return client
-}
-
-func (s *githubSource) checkRateLimit(response *resty.Response) error {
-	remainingRaw := response.Header().Get("X-Ratelimit-Remaining")
-	if remainingRaw == "" {
-		return nil
-	}
-
-	remaining, err := strconv.Atoi(remainingRaw)
-	if err != nil {
-		return nil //nolint:nilerr // Non-critical header parsing; malformed value is safely ignored.
-	}
-
-	if remaining == 0 {
-		reset := response.Header().Get("X-Ratelimit-Reset")
-		return oops.
-			Code("GITHUB_RATE_LIMIT").
-			With("repo", s.source.Repo).
-			With("reset", reset).
-			Hint("Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits").
-			Errorf("github API rate limit exhausted")
-	}
-
-	if remaining <= rateLimitWarnThresh && !s.warnedLowRL {
-		s.warnedLowRL = true
-	}
-
-	return nil
 }

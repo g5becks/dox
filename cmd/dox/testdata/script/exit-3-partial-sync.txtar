@@ -1,0 +1,21 @@
+# Exit code 3 (partial sync failure) when at least one source succeeds and one fails.
+httpserve guide.txt
+httpfail 502
+envsubst config.in dox.toml
+doxexit 3 sync
+stderr '1 source\(s\) failed during sync'
+exists .dox/good/guide.txt
+
+-- config.in --
+output = ".dox"
+[sources.good]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+
+[sources.bad]
+type = "url"
+url = "$FAIL_SERVER/missing.txt"
+filename = "missing.txt"
+-- guide.txt --
+good content

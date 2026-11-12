@@ -2,22 +2,33 @@ package config
 
 import (
 	"errors"
-	"path/filepath"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/samber/oops"
+
+	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/httpx"
 )
 
 const (
-	DefaultOutput = ".dox"
-	repoPartCount = 2
+	DefaultOutput  = ".dox"
+	DefaultTimeout = "30s"
+	repoPartCount  = 2
+	// maxPerHostLimit caps max_per_host, the per-host HTTP concurrency bound.
+	maxPerHostLimit = 64
+	// maxParallelLimit caps max_parallel, the concurrent source sync bound.
+	maxParallelLimit = 100
+	// maxDownloadConcurrency caps download_concurrency, the per-source file download bound.
+	maxDownloadConcurrency = 64
 
 	// Source type constants.
 	sourceTypeGitHub   = "github"
 	sourceTypeGitLab   = "gitlab"
 	sourceTypeCodeberg = "codeberg"
 	sourceTypeGit      = "git"
+	githubHost         = "github.com"
 	sourceTypeURL      = "url"
 )
 
@@ -94,13 +105,17 @@ type Display struct {
 }
 
 type Config struct {
-	Output      string            `koanf:"output"       validate:"omitempty,dirpath"`
-	GitHubToken string            `koanf:"github_token"`
-	MaxParallel int               `koanf:"max_parallel" validate:"omitempty,min=1,max=100"`
-	Excludes    []string          `koanf:"excludes"`
-	Display     Display           `koanf:"display"`
-	Sources     map[string]Source `koanf:"sources"      validate:"required,dive"`
-	ConfigDir   string            `koanf:"-"`
+	AllowExternalOutput bool              `koanf:"-"`
+	Output              string            `koanf:"output"               validate:"omitempty,dirpath"`
+	Timeout             string            `koanf:"timeout"`
+	GitHubToken         string            `koanf:"github_token"`
+	MaxParallel         int               `koanf:"max_parallel"         validate:"omitempty,min=1,max=100"`
+	MaxPerHost          int               `koanf:"max_per_host"         validate:"omitempty,min=1,max=64"`
+	DownloadConcurrency int               `koanf:"download_concurrency"`
+	Excludes            []string          `koanf:"excludes"`
+	Display             Display           `koanf:"display"`
+	Sources             map[string]Source `koanf:"sources"              validate:"required,dive"`
+	ConfigDir           string            `koanf:"-"`
 }
 
 type Source struct {
@@ -155,6 +170,9 @@ func (c *Config) ApplyDefaults() {
 	if c.Output == "" {
 		c.Output = DefaultOutput
 	}
+	if c.Timeout == "" {
+		c.Timeout = DefaultTimeout
+	}
 
 	// Apply display defaults
 	if c.Display.DefaultLimit == 0 {
@@ -167,7 +185,7 @@ func (c *Config) ApplyDefaults() {
 		c.Display.Format = "table"
 	}
 	if len(c.Display.ListFields) == 0 {
-		c.Display.ListFields = []string{"path", "type", "lines", "size", "description"}
+		c.Display.ListFields = []string{fieldPath, fieldType, "lines", "size", "description"}
 	}
 
 	for sourceName, sourceCfg := range c.Sources {
@@ -210,7 +228,7 @@ func isGitSource(sourceType string) bool {
 func applyGitSourceDefaults(src Source, globalExcludes []string) Source {
 	// Default host to github.com if not specified
 	if src.Host == "" {
-		src.Host = "github.com"
+		src.Host = githubHost
 	}
 
 	// Normalize type based on host if type is generic "git"
@@ -244,134 +262,267 @@ func normalizeGitType(host string) string {
 	}
 }
 
-func (c *Config) Validate() error {
-	v := newValidator()
+// TimeoutDuration returns the validated timeout duration or the 30s default.
+func (c *Config) TimeoutDuration() time.Duration {
+	if c == nil || c.Timeout == "" {
+		return httpx.DefaultTimeout
+	}
+	d, err := httpx.ParseTimeout(errs.Config, c.Timeout)
+	if err != nil {
+		return httpx.DefaultTimeout
+	}
+	return d
+}
 
+func (c *Config) Validate() error {
+	if c.Timeout != "" {
+		if _, err := httpx.ParseTimeout(errs.Config, c.Timeout); err != nil {
+			return err
+		}
+	}
+	if err := validateOptionalRange(
+		"max_parallel", c.MaxParallel, maxParallelLimit, "4 × CPU cores, min 10, max 16",
+	); err != nil {
+		return err
+	}
+	if err := validateOptionalRange("max_per_host", c.MaxPerHost, maxPerHostLimit, "16"); err != nil {
+		return err
+	}
+	if err := validateOptionalRange(
+		"download_concurrency", c.DownloadConcurrency, maxDownloadConcurrency, "8",
+	); err != nil {
+		return err
+	}
+	v := newValidator()
+	if err := validateDisplay(v, c.Display); err != nil {
+		return err
+	}
+	for name, sourceCfg := range c.Sources {
+		if err := validateSource(v, name, sourceCfg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateOptionalRange accepts 0 (unset, use the default) or 1..upper.
+func validateOptionalRange(name string, value, upper int, defaultLabel string) error {
+	if value == 0 || (value >= 1 && value <= upper) {
+		return nil
+	}
+	return errs.New(
+		errs.Config,
+		fmt.Sprintf("invalid %s %d", name, value),
+		errs.WithHint(fmt.Sprintf("Use a value from 1 to %d, or omit it for the default of %s", upper, defaultLabel)),
+		errs.WithFields(
+			map[string]any{
+				fieldName:            name,
+				fieldValue:           value,
+				errs.LegacyCodeField: errs.LegacyConfigInvalid,
+			},
+		),
+	)
+}
+
+func validateDisplay(v *validator.Validate, display Display) error {
 	// Validate Display config
-	if err := v.Struct(c.Display); err != nil {
-		var validationErrors validator.ValidationErrors
-		if errors.As(err, &validationErrors) {
+	if err := v.Struct(display); err != nil {
+		if validationErrors, ok := errors.AsType[validator.ValidationErrors](err); ok {
 			for _, fe := range validationErrors {
 				field := strings.ToLower(fe.Field())
 				if fe.Tag() == "oneof" && field == "format" {
-					return oops.
-						Code("CONFIG_INVALID").
-						With("field", "display.format").
-						With("value", c.Display.Format).
-						Hint("Supported formats: table, json, csv").
-						Errorf("invalid display format %q", c.Display.Format)
+					return errs.New(
+						errs.Config,
+						fmt.Sprintf("invalid display format %q", display.Format),
+						errs.WithHint("Supported formats: table, json, csv"),
+						errs.WithFields(
+							map[string]any{
+								fieldName:            "display.format",
+								fieldValue:           display.Format,
+								errs.LegacyCodeField: errs.LegacyConfigInvalid,
+							},
+						),
+					)
 				}
 			}
 		}
-		return oops.
-			Code("CONFIG_INVALID").
-			Wrapf(err, "validating display config")
-	}
-
-	for sourceName, sourceCfg := range c.Sources {
-		// Validate that source has either repo or url (not both, not neither)
-		hasRepo := sourceCfg.Repo != ""
-		hasURL := sourceCfg.URL != ""
-
-		if !hasRepo && !hasURL {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				Hint("Each source must have either 'repo' (for git hosting) or 'url' (for direct downloads)").
-				Errorf("source %q has neither 'repo' nor 'url'", sourceName)
-		}
-
-		if hasRepo && hasURL {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				Hint("Use 'repo' for git hosting OR 'url' for direct downloads, not both").
-				Errorf("source %q has both 'repo' and 'url'", sourceName)
-		}
-
-		// For git hosting sources, require path
-		if hasRepo && sourceCfg.Path == "" {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				With("field", "path").
-				Hint("Set path to a file or directory in the repository").
-				Errorf("missing 'path' for source %q", sourceName)
-		}
-
-		// Struct validation for URL format, repo format, etc.
-		valErr := v.Struct(sourceCfg)
-		if valErr == nil {
-			continue
-		}
-
-		var validationErrors validator.ValidationErrors
-		if !errors.As(valErr, &validationErrors) {
-			return oops.
-				Code("CONFIG_INVALID").
-				With("source", sourceName).
-				Wrapf(valErr, "validating source %q", sourceName)
-		}
-
-		for _, fe := range validationErrors {
-			return mapValidationError(sourceName, sourceCfg, fe)
-		}
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("validating display config: %w", err),
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
 	}
 
 	return nil
+}
+
+func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) error {
+	if err := validateSourcePaths(sourceName, sourceCfg); err != nil {
+		return err
+	}
+	if err := validateSupportedProvider(sourceName, sourceCfg); err != nil {
+		return err
+	}
+	// Validate that source has either repo or url (not both, not neither)
+	hasRepo := sourceCfg.Repo != ""
+	hasURL := sourceCfg.URL != ""
+
+	if !hasRepo && !hasURL {
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("source %q has neither 'repo' nor 'url'", sourceName),
+			errs.WithHint("Each source must have either 'repo' (for git hosting) or 'url' (for direct downloads)"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
+
+	if hasRepo && hasURL {
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("source %q has both 'repo' and 'url'", sourceName),
+			errs.WithHint("Use 'repo' for git hosting OR 'url' for direct downloads, not both"),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
+
+	// For git hosting sources, require path
+	if hasRepo && sourceCfg.Path == "" {
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("missing 'path' for source %q", sourceName),
+			errs.WithHint("Set path to a file or directory in the repository"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            fieldPath,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
+	}
+
+	// Struct validation for URL format, repo format, etc.
+	valErr := v.Struct(sourceCfg)
+	if valErr == nil {
+		return nil
+	}
+
+	var validationErrors validator.ValidationErrors
+	if !errors.As(valErr, &validationErrors) {
+		return errs.Wrap(
+			errs.Config,
+			fmt.Errorf("validating source %q: %w", sourceName, valErr),
+			errs.WithFields(map[string]any{fieldSource: sourceName, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
+
+	for _, fe := range validationErrors {
+		return mapValidationError(sourceName, sourceCfg, fe)
+	}
+	return nil
+}
+
+// validateSupportedProvider rejects git hosting providers that dox cannot
+// sync yet. Before v0.5.0 every repo source is fetched from api.github.com,
+// so accepting another host would query (or sync) the wrong repository.
+func validateSupportedProvider(sourceName string, sourceCfg Source) error {
+	switch sourceCfg.Type {
+	case sourceTypeGitLab, sourceTypeCodeberg, sourceTypeGit:
+		return unsupportedProviderError(
+			sourceName,
+			fmt.Sprintf("source type %q", sourceCfg.Type),
+			map[string]any{fieldType: sourceCfg.Type},
+		)
+	}
+	if sourceCfg.Repo == "" {
+		return nil
+	}
+	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
+	if host != "" && host != githubHost {
+		return unsupportedProviderError(
+			sourceName,
+			fmt.Sprintf("host %q", sourceCfg.Host),
+			map[string]any{fieldName: "host", fieldValue: sourceCfg.Host},
+		)
+	}
+	return nil
+}
+
+func unsupportedProviderError(sourceName, what string, fields map[string]any) error {
+	fields[fieldSource] = sourceName
+	fields[errs.LegacyCodeField] = errs.LegacyConfigInvalid
+	return errs.New(
+		errs.Config,
+		fmt.Sprintf("%s for source %q is not supported yet (planned for v0.5.0)", what, sourceName),
+		errs.WithHint(
+			"dox currently syncs github.com repositories and direct URLs; remove 'host'/'type' or use a 'url' source",
+		),
+		errs.WithFields(fields),
+	)
 }
 
 func mapValidationError(sourceName string, sourceCfg Source, fe validator.FieldError) error {
 	field := strings.ToLower(fe.Field())
 
 	switch {
-	case fe.Tag() == "oneof" && field == "type":
-		return oops.
-			Code("UNKNOWN_SOURCE_TYPE").
-			With("source", sourceName).
-			With("type", sourceCfg.Type).
-			Hint("Supported types: github, gitlab, codeberg, git, url (or omit 'type' to infer)").
-			Errorf("unknown source type %q for source %q", sourceCfg.Type, sourceName)
+	case fe.Tag() == "oneof" && field == fieldType:
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("unknown source type %q for source %q", sourceCfg.Type, sourceName),
+			errs.WithHint("Supported types: github, url (or omit 'type' to infer)"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldType:            sourceCfg.Type,
+					errs.LegacyCodeField: errs.LegacyUnknownSourceType,
+				},
+			),
+		)
 
 	case fe.Tag() == "github_repo":
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", "repo").
-			With("value", sourceCfg.Repo).
-			Hint("Expected repo format: owner/repo").
-			Errorf("invalid repo format %q for source %q", sourceCfg.Repo, sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid repo format %q for source %q", sourceCfg.Repo, sourceName),
+			errs.WithHint("Expected repo format: owner/repo"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            "repo",
+					fieldValue:           sourceCfg.Repo,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 
-	case fe.Tag() == "url" && field == "url":
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", "url").
-			With("value", sourceCfg.URL).
-			Hint("URL must be a valid HTTP/HTTPS URL").
-			Errorf("invalid url %q for source %q", sourceCfg.URL, sourceName)
+	case fe.Tag() == sourceTypeURL && field == sourceTypeURL:
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("invalid url %q for source %q", sourceCfg.URL, sourceName),
+			errs.WithHint("URL must be a valid HTTP/HTTPS URL"),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            sourceTypeURL,
+					fieldValue:           sourceCfg.URL,
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 
 	default:
-		return oops.
-			Code("CONFIG_INVALID").
-			With("source", sourceName).
-			With("field", field).
-			With("tag", fe.Tag()).
-			Errorf("validation failed for field %q in source %q", field, sourceName)
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("validation failed for field %q in source %q", field, sourceName),
+			errs.WithFields(
+				map[string]any{
+					fieldSource:          sourceName,
+					fieldName:            field,
+					"tag":                fe.Tag(),
+					errs.LegacyCodeField: errs.LegacyConfigInvalid,
+				},
+			),
+		)
 	}
-}
-
-func (c *Config) OutputDir(sourceName string, sourceCfg Source) string {
-	baseOutputDir := c.Output
-	if !filepath.IsAbs(baseOutputDir) {
-		baseOutputDir = filepath.Join(c.ConfigDir, c.Output)
-	}
-
-	if sourceCfg.Out != "" {
-		return filepath.Join(baseOutputDir, sourceCfg.Out)
-	}
-
-	return filepath.Join(baseOutputDir, sourceName)
 }
 
 func isValidRepo(repo string) bool {
