@@ -27,11 +27,8 @@ func TestMain(m *testing.M) {
 func TestScripts(t *testing.T) {
 	t.Parallel()
 	testscript.Run(t, testscript.Params{
-		Dir: "testdata/script",
-		Setup: func(env *testscript.Env) error {
-			env.Values[scriptEnvKey{}] = append([]string(nil), env.Vars...)
-			return nil
-		},
+		Dir:                "testdata/script",
+		Setup:              scriptSetup,
 		Cmds:               scriptCommands(),
 		RequireUniqueNames: true,
 	})
