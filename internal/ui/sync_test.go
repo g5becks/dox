@@ -156,3 +156,19 @@ func TestPrintSummaryNilResult(t *testing.T) {
 		t.Errorf("expected no output for nil result, got: %q", buf.String())
 	}
 }
+
+func TestHandleEventWarning(t *testing.T) {
+	var buf bytes.Buffer
+	p := newTestPrinter(&buf, false)
+
+	p.HandleEvent(sync.Event{
+		Kind:    sync.EventWarning,
+		Source:  "my-lib",
+		Warning: "GitHub API rate limit low (3 remaining)",
+	})
+
+	out := buf.String()
+	if !strings.Contains(out, "my-lib") || !strings.Contains(out, "rate limit low (3 remaining)") {
+		t.Errorf("warning event output missing source or message, got: %q", out)
+	}
+}

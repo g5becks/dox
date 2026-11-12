@@ -43,14 +43,16 @@ const (
 	EventSourceStart EventKind = iota
 	EventSourceDone
 	EventManifestError
+	EventWarning
 )
 
 // Event is emitted during sync to report per-source progress.
 type Event struct {
-	Kind   EventKind
-	Source string
-	Result *source.SyncResult // nil for start events
-	Err    error              // non-nil if source failed
+	Kind    EventKind
+	Source  string
+	Warning string
+	Result  *source.SyncResult // nil for start events
+	Err     error              // non-nil if source failed
 }
 
 // RunResult contains aggregate counts from a completed sync run.
@@ -314,7 +316,15 @@ func syncSource(
 		state.err = newErr
 	} else {
 		defer src.Close()
-		state.result, state.err = syncPreparedSource(sourceCtx, src, destinationDir, previousLock, opts)
+		state.result, state.err = syncPreparedSource(
+			sourceCtx,
+			src,
+			sourceName,
+			destinationDir,
+			previousLock,
+			opts,
+			emit,
+		)
 	}
 
 	emit(Event{
@@ -381,9 +391,11 @@ func resolveGitHubToken(cfg *config.Config) string {
 func syncPreparedSource(
 	ctx context.Context,
 	src source.Source,
+	sourceName string,
 	destinationDir string,
 	previousLock *lockfile.LockEntry,
 	opts Options,
+	emit func(Event),
 ) (*source.SyncResult, error) {
 	var sourceRoot *os.Root
 	if !opts.DryRun {
@@ -401,7 +413,14 @@ func syncPreparedSource(
 		ctx,
 		destinationDir,
 		previousLock,
-		source.SyncOptions{Force: opts.Force, DryRun: opts.DryRun, Root: sourceRoot},
+		source.SyncOptions{
+			Force:  opts.Force,
+			DryRun: opts.DryRun,
+			Root:   sourceRoot,
+			OnWarning: func(msg string) {
+				emit(Event{Kind: EventWarning, Source: sourceName, Warning: msg})
+			},
+		},
 	)
 }
 

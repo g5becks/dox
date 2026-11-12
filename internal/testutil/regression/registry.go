@@ -13,13 +13,10 @@ import (
 // remove entries here; new entries must not be added to hide regressions.
 func KnownFailing() map[string]string {
 	knownFailing := map[string]string{
-		"R3_forbidden":            "dox-deb.15: rate-limit classification",
-		"R3_too_many":             "dox-deb.15: rate-limit classification",
-		"R3_success_last_request": "dox-deb.15: successful last quota request",
-		"C3_add_infer":            "dox-deb.18: add type inference",
-		"C3_add_aliases":          "dox-deb.18: add aliases",
-		"C4_non_github_host":      "dox-deb.17: unsupported host rejection",
-		"P9_dry_run_body":         "dox-deb.27: HEAD dry-run",
+		"C3_add_infer":       "dox-deb.18: add type inference",
+		"C3_add_aliases":     "dox-deb.18: add aliases",
+		"C4_non_github_host": "dox-deb.17: unsupported host rejection",
+		"P9_dry_run_body":    "dox-deb.27: HEAD dry-run",
 	}
 	return knownFailing
 }

@@ -26,9 +26,10 @@ type SyncResult struct {
 // SyncOptions controls behavior for source sync operations.
 type SyncOptions struct {
 	// Root is the caller-owned, already confined source directory.
-	Root   *os.Root
-	Force  bool
-	DryRun bool
+	Root      *os.Root
+	Force     bool
+	DryRun    bool
+	OnWarning func(string)
 }
 
 // Source defines a documentation source that can be synced.

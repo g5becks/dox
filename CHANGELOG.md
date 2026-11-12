@@ -53,6 +53,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ### Fixed
 
+- GitHub rate-limit classification now inspects 403/429 responses before status handling, waits when the reset is within 60 seconds, otherwise fails with `*errs.RateLimitError` and the `GITHUB_TOKEN`/`GH_TOKEN` hint, succeeds with a single low-quota warning when a 2xx response has `X-RateLimit-Remaining <= 10` (including `0`), and retries only 5xx/network errors (up to 3 retries) with jittered backoff, honoring `Retry-After` up to the same 60-second bound; 4xx responses are never retried. Warnings appear on stderr as `⚠ <source>: …` and are omitted from `--json` output.
+
 - `dox sync` now enforces configurable HTTP and per-source deadlines (`timeout = "30s"` in `dox.toml`, overridden by `dox sync --timeout <duration>`), isolates stalled sources so sibling sources still complete, honors `SIGINT`/`SIGTERM` cancellation across sync/manifest/search while saving completed sources' lock entries before exiting `130`.
 
 - Default builds and development tools use Go 1.27.4, addressing reachable standard-library advisory GO-2026-6859. The Go 1.26 minimum remains unchanged.
