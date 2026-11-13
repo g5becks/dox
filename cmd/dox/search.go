@@ -14,6 +14,7 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/lookup"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/search"
 )
@@ -99,15 +100,8 @@ func searchAction(ctx context.Context, cmd *cli.Command) error {
 	limit := resolveListLimit(cmd, cfg.Display.DefaultLimit)
 	descLength := resolveDescLength(cmd, cfg)
 	if name := cmd.String(fieldCollection); name != "" {
-		if _, ok := m.Collections[name]; !ok {
-			return errs.New(
-				errs.NotFound,
-				fmt.Sprintf("collection %q not found", name),
-				errs.WithHint(collectionHint(name, m)),
-				errs.WithFields(
-					map[string]any{fieldCollection: name, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
-				),
-			)
+		if _, lookupErr := lookup.Collection(m, name); lookupErr != nil {
+			return lookupErr
 		}
 	}
 

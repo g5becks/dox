@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/lookup"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/parser"
 )
@@ -57,19 +58,12 @@ func outlineAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	collection, ok := m.Collections[collectionName]
-	if !ok {
-		return errs.New(
-			errs.NotFound,
-			fmt.Sprintf("collection %q not found", collectionName),
-			errs.WithHint(collectionHint(collectionName, m)),
-			errs.WithFields(
-				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
-			),
-		)
+	collection, err := lookup.Collection(m, collectionName)
+	if err != nil {
+		return err
 	}
 
-	fileInfo, err := findCollectionFile(collection, collectionName, filePath)
+	fileInfo, err := lookup.File(collection, collectionName, filePath)
 	if err != nil {
 		return err
 	}

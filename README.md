@@ -424,6 +424,46 @@ dox completion zsh
 For example, `source <(dox completion bash)` in `~/.bashrc`, or
 `dox completion fish > ~/.config/fish/completions/dox.fish`.
 
+### mcp
+
+Serve the synced documentation to an AI agent over the [Model Context
+Protocol](https://modelcontextprotocol.io) (stdio). Point your MCP client at the
+command and the agent can browse your docs without shelling out or loading whole
+files into its context.
+
+<!-- doxtest: skip (speaks JSON-RPC on stdin and stdout; the mcp script test drives it) -->
+
+```bash
+dox mcp                       # Run from the project directory
+dox --config path/to/dox.toml mcp
+```
+
+The server exposes five **read-only** tools that mirror the CLI: `collections`,
+`files`, `outline`, `cat` and `search`. It never syncs, writes or touches the
+network; run `dox sync` yourself and the next call sees the new content. Every
+list is capped and paged so one call cannot flood the agent's context: `cat`
+returns 500 lines by default (2000 at most) with a `next_line` to continue,
+`search` 20 results (100), and `files` 200 entries (1000) with `next_offset`.
+Failures come back as tool errors with the same hint the CLI prints, including
+"did you mean" suggestions.
+
+Most clients take the same entry, for example in Claude Desktop's
+`claude_desktop_config.json`, Cursor's `mcp.json` or VS Code's `.vscode/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dox": { "command": "dox", "args": ["mcp"] }
+  }
+}
+```
+
+If the client does not start in your project directory, pass the config:
+`"args": ["--config", "/path/to/dox.toml", "mcp"]`. Nothing but protocol is
+written to stdout; a hint goes to stderr only when you run `dox mcp` in a
+terminal. Requests piped in (`printf '...' | dox mcp`) are all answered before
+the server exits at the end of input.
+
 ### version
 
 `dox version` (or `dox --version`) prints the version, commit and build time.
@@ -459,6 +499,57 @@ envelope to `stderr`:
 | 3 | partial sync failure |
 | 4 | not found |
 | 130 | interrupted |
+
+## Go API
+
+The `github.com/g5becks/dox/dox` package embeds dox in a Go program: load a
+project, sync it, and read or search the result, with the same behavior and the
+same typed errors as the CLI. It needs Go 1.26 or newer.
+
+```go
+project, err := dox.Load("") // "" discovers dox.toml upward from the working directory
+if err != nil {
+	return err
+}
+if _, err := project.Sync(ctx, dox.SyncOptions{}); err != nil {
+	return err
+}
+for result, err := range project.Search(ctx, dox.Query{Text: "retry", Content: true, Limit: 5}) {
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s/%s:%d %s\n", result.Collection, result.Path, result.Line, result.Text)
+}
+```
+
+`Project` offers `Sync`, `Collections`, `Files`, `Outline`, `Cat` and `Search`.
+Every method takes a `context.Context` and returns a `*dox.Error` carrying a
+stable `Code` (`CodeUsage`, `CodeNotFound`, `CodeNetwork`, ...) and a `Hint`;
+use `errors.Is` with `dox.ErrCollectionNotFound`, `dox.ErrFileNotFound`,
+`dox.ErrSourceNotFound` or `dox.ErrNotSynced` to branch on a cause. A `Project`
+keeps no mutable state, so it is safe to share between goroutines, and syncs of
+one output directory are serialized by the same advisory lock the CLI uses. An
+output directory outside the project is refused unless you pass
+`dox.WithExternalOutput()`, matching `--allow-external-output`.
+
+The API is new in v0.5.0 and may change before v1.0.0; incompatible changes are
+listed under Changed in the [CHANGELOG](CHANGELOG.md). See the package
+documentation (`go doc github.com/g5becks/dox/dox`) for every type.
+
+### Dependency decision
+
+`dox mcp` is built on the official
+[`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk)
+v1.8.0 (MIT, moving to Apache-2.0) rather than a hand-written JSON-RPC subset,
+because the protocol (initialization, schema-validated tools, cancellation) is
+easy to get subtly wrong and the SDK tracks the specification. It meets the
+Go 1.26 floor (it declares Go 1.25) and `govulncheck` reports nothing
+reachable. The cost is binary size: the stripped release binary grows from
+11.9 MB to 13.9 MB (+2.0 MB, +17%), from the SDK, its JSON Schema and JSON
+packages, and the standard-library code they link (`log/slog`, `encoding/gob`,
+`os/exec`). The new modules are `jsonschema-go`, `segmentio/asm`,
+`segmentio/encoding`, `yosida95/uritemplate`, `golang.org/x/oauth2` and
+`golang.org/x/time`; only the `dox mcp` server imports them.
 
 ## Config Reference
 

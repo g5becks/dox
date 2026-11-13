@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/lookup"
 	"github.com/g5becks/dox/internal/manifest"
 )
 
@@ -87,19 +88,12 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	collection, ok := m.Collections[collectionName]
-	if !ok {
-		return errs.New(
-			errs.NotFound,
-			fmt.Sprintf("collection %q not found", collectionName),
-			errs.WithHint(collectionHint(collectionName, m)),
-			errs.WithFields(
-				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
-			),
-		)
+	collection, err := lookup.Collection(m, collectionName)
+	if err != nil {
+		return err
 	}
 
-	fileInfo, err := findCollectionFile(collection, collectionName, filePath)
+	fileInfo, err := lookup.File(collection, collectionName, filePath)
 	if err != nil {
 		return err
 	}
@@ -212,33 +206,4 @@ func padLeft(num, width int) string {
 		return s
 	}
 	return strings.Repeat(" ", width-len(s)) + s
-}
-
-// findCollectionFile looks up filePath in a collection; a miss carries "did
-// you mean" suggestions.
-func findCollectionFile(collection *manifest.Collection, collectionName, filePath string) (*manifest.FileInfo, error) {
-	var fileInfo *manifest.FileInfo
-	for i := range collection.Files {
-		if collection.Files[i].Path == filePath {
-			fileInfo = &collection.Files[i]
-			break
-		}
-	}
-
-	if fileInfo == nil {
-		return nil, errs.New(
-			errs.NotFound,
-			fmt.Sprintf("file %q not found in collection %q", filePath, collectionName),
-			errs.WithHint(fileHint(filePath, collection)),
-			errs.WithFields(
-				map[string]any{
-					"file":               filePath,
-					fieldCollection:      collectionName,
-					errs.LegacyCodeField: errs.LegacyFileNotFound,
-				},
-			),
-		)
-	}
-
-	return fileInfo, nil
 }

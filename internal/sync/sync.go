@@ -97,26 +97,37 @@ type runState struct {
 	err    error
 }
 
-func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
-	if cfg == nil {
-		return nil, errs.New(
-			errs.Config,
-			"config is required",
-			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
-		)
+// Validate rejects option combinations whose meaning would be ambiguous.
+func (o Options) Validate() error {
+	conflict := ""
+	switch {
+	case o.Check && o.Locked:
+		conflict = "--check and --locked"
+	case o.Check && o.Clean:
+		conflict = "--check and --clean"
+	case o.Check && o.Force:
+		conflict = "--check and --force"
+	case o.Locked && o.Clean:
+		conflict = "--locked and --clean"
 	}
+	if conflict == "" {
+		return nil
+	}
+	return errs.New(
+		errs.Usage,
+		conflict+" cannot be combined",
+		errs.WithHint("--check only reports staleness; --locked reproduces the lock"),
+		errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+	)
+}
 
-	if opts.Check {
-		opts.DryRun = true
-	}
-	paths, err := cfg.Paths()
+func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
+	paths, err := checkRun(cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-	for name, sourceCfg := range cfg.Sources {
-		if _, pathErr := paths.SourceDir(name, sourceCfg); pathErr != nil {
-			return nil, pathErr
-		}
+	if opts.Check {
+		opts.DryRun = true
 	}
 	outputDir := paths.Output()
 	if !opts.DryRun {
@@ -164,6 +175,31 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	return finishRun(ctx, cfg, opts, lock, sourceNames, results, emit)
+}
+
+// checkRun rejects an unusable config or option combination and resolves the
+// output paths, before anything is read or written.
+func checkRun(cfg *config.Config, opts Options) (*config.Paths, error) {
+	if cfg == nil {
+		return nil, errs.New(
+			errs.Config,
+			"config is required",
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
+	if validateErr := opts.Validate(); validateErr != nil {
+		return nil, validateErr
+	}
+	paths, err := cfg.Paths()
+	if err != nil {
+		return nil, err
+	}
+	for name, sourceCfg := range cfg.Sources {
+		if _, dirErr := paths.SourceDir(name, sourceCfg); dirErr != nil {
+			return nil, dirErr
+		}
+	}
+	return paths, nil
 }
 
 // finishRun records results in the lock, persists them (except for dry runs)

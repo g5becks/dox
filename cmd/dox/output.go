@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
-	"github.com/g5becks/dox/internal/manifest"
 )
 
 const (
@@ -121,90 +119,4 @@ func csvWriteError(err error) error {
 		fmt.Errorf("writing CSV: %w", err),
 		errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyCsvError}),
 	)
-}
-
-// suggest returns the closest candidates to name ("did you mean"), by edit
-// distance or prefix, best first.
-func suggest(name string, candidates []string) []string {
-	const maxSuggestions = 3
-	const minDistance, lengthDivisor = 2, 3
-	type scored struct {
-		value    string
-		distance int
-	}
-	lowered := strings.ToLower(name)
-	threshold := max(minDistance, len(name)/lengthDivisor)
-	var matches []scored
-	for _, candidate := range candidates {
-		lowerCandidate := strings.ToLower(candidate)
-		distance := editDistance(lowered, lowerCandidate)
-		if distance <= threshold || strings.HasPrefix(lowerCandidate, lowered) ||
-			strings.Contains(lowerCandidate, lowered) && len(lowered) >= 3 {
-			matches = append(matches, scored{candidate, distance})
-		}
-	}
-	slices.SortFunc(matches, func(a, b scored) int {
-		if a.distance != b.distance {
-			return a.distance - b.distance
-		}
-		return strings.Compare(a.value, b.value)
-	})
-	result := make([]string, 0, maxSuggestions)
-	for _, match := range matches[:min(len(matches), maxSuggestions)] {
-		result = append(result, match.value)
-	}
-	return result
-}
-
-// suggestionHint renders "Did you mean ...?" or the fallback hint.
-func suggestionHint(name string, candidates []string, fallback string) string {
-	options := suggest(name, candidates)
-	if len(options) == 0 {
-		return fallback
-	}
-	quoted := make([]string, len(options))
-	for index, option := range options {
-		quoted[index] = fmt.Sprintf("%q", option)
-	}
-	return "Did you mean " + strings.Join(quoted, " or ") + "? " + fallback
-}
-
-// editDistance is the Levenshtein distance between a and b.
-func editDistance(a, b string) int {
-	left, right := []rune(a), []rune(b)
-	previous := make([]int, len(right)+1)
-	current := make([]int, len(right)+1)
-	for column := range previous {
-		previous[column] = column
-	}
-	for row := 1; row <= len(left); row++ {
-		current[0] = row
-		for column := 1; column <= len(right); column++ {
-			cost := 1
-			if left[row-1] == right[column-1] {
-				cost = 0
-			}
-			current[column] = min(previous[column]+1, current[column-1]+1, previous[column-1]+cost)
-		}
-		previous, current = current, previous
-	}
-	return previous[len(right)]
-}
-
-// collectionHint suggests close collection names for a lookup miss.
-func collectionHint(name string, m *manifest.Manifest) string {
-	return suggestionHint(
-		name,
-		slices.Collect(maps.Keys(m.Collections)),
-		"Run 'dox collections' to see available collections",
-	)
-}
-
-// fileHint suggests close file paths within a collection for a lookup miss.
-func fileHint(filePath string, collection *manifest.Collection) string {
-	paths := make([]string, 0, len(collection.Files))
-	for index := range collection.Files {
-		paths = append(paths, collection.Files[index].Path)
-	}
-	return suggestionHint(filePath, paths, "Run 'dox files' to see available files")
 }

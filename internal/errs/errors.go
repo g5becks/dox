@@ -72,6 +72,16 @@ func WithCause(cause error) Option {
 // ErrSourceNotFound allows callers to distinguish unknown configured sources.
 var ErrSourceNotFound = errors.New("source not found")
 
+// ErrCollectionNotFound allows callers to distinguish unknown synced collections.
+var ErrCollectionNotFound = errors.New("collection not found")
+
+// ErrFileNotFound allows callers to distinguish unknown files within a collection.
+var ErrFileNotFound = errors.New("file not found")
+
+// ErrNotSynced reports that no documentation has been synced into the output
+// directory yet.
+var ErrNotSynced = errors.New("documentation not synced")
+
 // RateLimitError records when the provider quota resets, if known.
 type RateLimitError struct{ Reset time.Time }
 

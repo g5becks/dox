@@ -244,6 +244,7 @@ func newRootCommand() *cli.Command {
 			newOutlineCommand(),
 			newSearchCommand(),
 			newDoctorCommand(),
+			newMCPCommand(),
 			newVersionCommand(),
 		},
 	}
@@ -385,30 +386,29 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		timeout = parsedTimeout
 	}
 
-	check, locked := cmd.Bool("check"), cmd.Bool("locked")
-	if conflictErr := syncFlagConflicts(cmd, check, locked); conflictErr != nil {
-		return conflictErr
-	}
-
-	var onEvent func(doxsync.Event)
-	var printer *ui.SyncPrinter
-	if !jsonEnabled(cmd) {
-		printer = ui.NewSyncPrinter(cmd.Bool("dry-run") || check)
-		onEvent = printer.HandleEvent
-	}
-
-	result, runErr := doxsync.Run(ctx, cfg, doxsync.Options{
+	check := cmd.Bool("check")
+	syncOptions := doxsync.Options{
 		SourceNames: commandArgs(cmd),
 		Force:       cmd.Bool("force"),
 		DryRun:      cmd.Bool("dry-run"),
 		MaxParallel: cmd.Int("parallel"),
 		Timeout:     timeout,
 		Clean:       cmd.Bool("clean"),
-		Locked:      locked,
+		Locked:      cmd.Bool("locked"),
 		Check:       check,
 		LockTimeout: cmd.Duration("lock-timeout"),
-		OnEvent:     onEvent,
-	})
+	}
+	if conflictErr := syncOptions.Validate(); conflictErr != nil {
+		return conflictErr
+	}
+
+	var printer *ui.SyncPrinter
+	if !jsonEnabled(cmd) {
+		printer = ui.NewSyncPrinter(cmd.Bool("dry-run") || check)
+		syncOptions.OnEvent = printer.HandleEvent
+	}
+
+	result, runErr := doxsync.Run(ctx, cfg, syncOptions)
 
 	if printer != nil {
 		printer.PrintSummary(result)
@@ -420,30 +420,6 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	return runErr
-}
-
-// syncFlagConflicts rejects combinations whose meaning would be ambiguous.
-func syncFlagConflicts(cmd *cli.Command, check, locked bool) error {
-	conflict := ""
-	switch {
-	case check && locked:
-		conflict = "--check and --locked"
-	case check && cmd.Bool("clean"):
-		conflict = "--check and --clean"
-	case check && cmd.Bool("force"):
-		conflict = "--check and --force"
-	case locked && cmd.Bool("clean"):
-		conflict = "--locked and --clean"
-	}
-	if conflict == "" {
-		return nil
-	}
-	return errs.New(
-		errs.Usage,
-		conflict+" cannot be combined",
-		errs.WithHint("--check only reports staleness; --locked reproduces the lock"),
-		errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
-	)
 }
 
 // writeCheckJSON prints {"stale": [...], "current": [...]} for sync --check.

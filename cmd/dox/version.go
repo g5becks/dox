@@ -17,12 +17,16 @@ type buildMetadata struct {
 	built   string
 }
 
-func versionString() string {
+func currentBuildMetadata() buildMetadata {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		info = nil
 	}
-	meta := resolveBuildMetadata(buildMetadata{version: version, commit: commit, built: buildTime}, info)
+	return resolveBuildMetadata(buildMetadata{version: version, commit: commit, built: buildTime}, info)
+}
+
+func versionString() string {
+	meta := currentBuildMetadata()
 	return fmt.Sprintf("%s (commit %s, built %s)", meta.version, meta.commit, meta.built)
 }
 

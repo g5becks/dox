@@ -37,6 +37,10 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 - `dox sync --check` reports staleness without writing anything: exit 0 when every source is current, 3 when any would change; `--json` prints `{"stale": [...], "current": [...]}`. `dox sync --locked` reproduces the lock: GitHub sources fetch the locked commits, URL sources must match their recorded content digest, and config drift fails with exit code 2. Lock entries now record a `config_digest`, and URL entries record the content's `sha256` under `files`. Locks written before v0.5.0 need one plain `dox sync` before `--locked`.
 
+- A public Go API, `github.com/g5becks/dox/dox`: `dox.Load` a project, then `Sync`, `Collections`, `Files`, `Outline`, `Cat` and `Search` (an `iter.Seq2` of results) with the CLI's behavior. Every method returns a `*dox.Error` with a stable `Code` and a `Hint`, and wraps sentinels (`ErrCollectionNotFound`, `ErrFileNotFound`, `ErrSourceNotFound`, `ErrNotSynced`) for `errors.Is`. A `Project` is safe for concurrent use. The package may change before v1.0.0.
+
+- `dox mcp` serves the synced documentation to AI agents over the Model Context Protocol (stdio) through five read-only tools: `collections`, `files`, `outline`, `cat` and `search`. Output is capped and paged (`cat` 500 lines by default, `search` 20 results, `files` 200 entries) and failures carry the CLI's hints. It is built on the official `github.com/modelcontextprotocol/go-sdk` v1.8.0, which adds six small modules (`jsonschema-go`, `segmentio/asm`, `segmentio/encoding`, `yosida95/uritemplate`, `x/oauth2`, `x/time`) and grows the stripped binary from 11.9 MB to 13.9 MB. Requests piped to the server are all answered before it exits at the end of input.
+
 ## [0.4.0] - 2026-11-12
 
 ### Changed

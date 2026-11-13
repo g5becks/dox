@@ -1,0 +1,68 @@
+httpserve guide.md
+envsubst config.in dox.toml
+dox sync
+
+# A host speaks newline-delimited JSON-RPC on stdin; the server exits at EOF.
+stdin requests.jsonl
+dox mcp
+stdout '"serverInfo":\{"name":"dox"'
+stdout '"instructions":"dox serves documentation'
+stdout '"name":"collections"'
+stdout '"name":"files"'
+stdout '"name":"outline"'
+stdout '"name":"cat"'
+stdout '"name":"search"'
+stdout '"readOnlyHint":true'
+# collections
+stdout '"collections":\[\{"files":1,"last_sync":"[^"]+","name":"docs","size":24,"source":"[^"]+","type":"url"\}\]'
+# search with content
+stdout '"results":\[\{"collection":"docs","line":3,"path":"guide.md","text":"needle"\}\],"truncated":false'
+# cat returns plain lines
+stdout '"content":"needle\\noutro","first_line":3,"line_count":2'
+# outline
+stdout '"headings":\[\{"level":1,"line":1,"text":"Heading"\}\]'
+# failures are tool errors with the suggestion, not protocol errors
+stdout '"isError":true'
+stdout 'Did you mean \\"docs\\"'
+# stdout carries only protocol: every line is a JSON object
+! stdout '^[^{]'
+! stderr .
+
+# Misconfiguration is an ordinary CLI failure, before any protocol output.
+! dox --config missing.toml mcp
+! stdout .
+stderr 'missing.toml'
+
+# Discovery walks up from a subdirectory, and the root --config works from anywhere.
+mkdir sub
+cd sub
+stdin ../requests.jsonl
+dox mcp
+stdout '"name":"collections"'
+cd ..
+mkdir elsewhere
+cd elsewhere
+stdin ../requests.jsonl
+dox --config ../dox.toml mcp
+stdout '"name":"collections"'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.md"
+filename = "guide.md"
+-- guide.md --
+# Heading
+
+needle
+outro
+-- requests.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"script","version":"0"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"collections","arguments":{}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"search","arguments":{"query":"needle","content":true}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"cat","arguments":{"collection":"docs","path":"guide.md","line":3}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"outline","arguments":{"collection":"docs","path":"guide.md"}}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"files","arguments":{"collection":"doc"}}}
