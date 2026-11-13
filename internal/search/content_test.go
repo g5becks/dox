@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/search"
 )
@@ -86,6 +87,13 @@ func TestContent_InvalidRegex(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error for invalid regex")
+	}
+	detail, ok := errors.AsType[*errs.Error](err)
+	if !ok || detail.Code != errs.Usage {
+		t.Fatalf("error = %v, want a *errs.Error with code Usage", err)
+	}
+	if detail.Hint == "" {
+		t.Error("invalid regex error has no hint")
 	}
 }
 

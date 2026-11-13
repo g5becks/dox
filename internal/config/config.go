@@ -1,14 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/knadh/koanf/parsers/toml/v2"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
+	"github.com/pelletier/go-toml/v2"
 
 	"github.com/g5becks/dox/internal/errs"
 )
@@ -34,25 +34,9 @@ func LoadWithOptions(configPath string, opts LoadOptions) (*Config, error) {
 		return nil, fmt.Errorf("resolving absolute config path: %w", err)
 	}
 
-	cfg := &Config{}
-	k := koanf.New(".")
-
-	if loadErr := k.Load(file.Provider(absConfigPath), toml.Parser()); loadErr != nil {
-		return nil, errs.Wrap(
-			errs.Config,
-			fmt.Errorf("loading config from %q: %w", absConfigPath, loadErr),
-			errs.WithHint("Fix TOML syntax and required fields in your config"),
-			errs.WithFields(map[string]any{fieldPath: absConfigPath, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
-		)
-	}
-
-	if unmarshalErr := k.Unmarshal("", cfg); unmarshalErr != nil {
-		return nil, errs.Wrap(
-			errs.Config,
-			fmt.Errorf("decoding config from %q: %w", absConfigPath, unmarshalErr),
-			errs.WithHint("Fix config structure to match dox schema"),
-			errs.WithFields(map[string]any{fieldPath: absConfigPath, errs.LegacyCodeField: errs.LegacyConfigInvalid}),
-		)
+	cfg, err := decodeConfig(absConfigPath)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg.ConfigDir = filepath.Dir(absConfigPath)
@@ -138,4 +122,82 @@ func findConfigInDirectory(dir string) (string, bool, error) {
 	}
 
 	return "", false, nil
+}
+
+// decodeConfig strictly decodes TOML: types must match exactly and unknown
+// keys are errors, each reported with its key path and line.
+func decodeConfig(absConfigPath string) (*Config, error) {
+	fields := map[string]any{fieldPath: absConfigPath, errs.LegacyCodeField: errs.LegacyConfigInvalid}
+	data, err := os.ReadFile(absConfigPath)
+	if err != nil {
+		return nil, errs.Wrap(
+			errs.Config,
+			fmt.Errorf("reading config %q: %w", absConfigPath, err),
+			errs.WithFields(fields),
+		)
+	}
+	cfg := &Config{}
+	decoder := toml.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if decodeErr := decoder.Decode(cfg); decodeErr != nil {
+		return nil, configDecodeError(absConfigPath, decodeErr, fields)
+	}
+	return cfg, nil
+}
+
+func configDecodeError(absConfigPath string, err error, fields map[string]any) error {
+	if strict, ok := errors.AsType[*toml.StrictMissingError](err); ok {
+		unknown := make([]string, 0, len(strict.Errors))
+		for index := range strict.Errors {
+			row, _ := strict.Errors[index].Position()
+			unknown = append(unknown, fmt.Sprintf("%q (line %d)", strings.Join(strict.Errors[index].Key(), "."), row))
+		}
+		fields["unknown_keys"] = unknown
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf("unknown config key(s) in %s: %s", filepath.Base(absConfigPath), strings.Join(unknown, ", ")),
+			errs.WithHint("Check the spelling against the Config Reference in the README"),
+			errs.WithFields(fields),
+		)
+	}
+	if decodeErr, ok := errors.AsType[*toml.DecodeError](err); ok {
+		row, _ := decodeErr.Position()
+		key := strings.Join(decodeErr.Key(), ".")
+		where := fmt.Sprintf("line %d", row)
+		if key != "" {
+			where = fmt.Sprintf("%q (line %d)", key, row)
+			fields[fieldName] = key
+		}
+		fields["line"] = row
+		return errs.New(
+			errs.Config,
+			fmt.Sprintf(
+				"invalid config at %s in %s: %s",
+				where,
+				filepath.Base(absConfigPath),
+				describeDecodeError(decodeErr),
+			),
+			errs.WithHint("Fix the value's type or TOML syntax; strings need quotes, lists use [\"a\", \"b\"]"),
+			errs.WithFields(fields),
+		)
+	}
+	return errs.Wrap(errs.Config, fmt.Errorf("decoding config %q: %w", absConfigPath, err), errs.WithFields(fields))
+}
+
+// describeDecodeError turns go-toml's Go-typed message into config terms.
+func describeDecodeError(err *toml.DecodeError) string {
+	message := strings.TrimPrefix(err.Error(), "toml: ")
+	const into = "into "
+	for _, replacement := range [][2]string{
+		{"into struct field config.Source.", into},
+		{"into struct field config.Config.", into},
+		{"into struct field config.Display.", into},
+		{" of type []string", " (a list of strings)"},
+		{" of type string", " (a string)"},
+		{" of type int", " (an integer)"},
+		{" of type bool", " (true or false)"},
+	} {
+		message = strings.ReplaceAll(message, replacement[0], replacement[1])
+	}
+	return message
 }

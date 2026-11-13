@@ -33,6 +33,7 @@ dist/
 .dox/
 .docs/
 /dox
-
+# The public Go API package lives in ./dox; only a built binary there is ignored.
+!/dox/
 # bv (beads viewer) local config and caches
 .bv/

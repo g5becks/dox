@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/lookup"
 	"github.com/g5becks/dox/internal/manifest"
 )
 
@@ -20,27 +20,15 @@ func newCatCommand() *cli.Command {
 		Name:      "cat",
 		Usage:     "Read file contents from a collection",
 		ArgsUsage: "<collection> <file[:line]>",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    flagConfig,
-				Aliases: []string{"c"},
-				Usage:   helpConfig,
-			},
-			&cli.BoolFlag{
-				Name:  formatJSON,
-				Usage: "Output as JSON with metadata",
-			},
+		Flags: append(formatFlags(),
 			&cli.BoolFlag{
 				Name:  "no-line-numbers",
 				Usage: "Don't show line numbers",
 			},
 			&cli.IntFlag{Name: flagLine, Usage: "Start at line N (1-based)", Value: 1},
 			&cli.IntFlag{Name: "offset", Usage: "Deprecated: 0-based start (removed in v0.6.0); use --line"},
-			&cli.IntFlag{
-				Name:  flagLimit,
-				Usage: "Show N lines (0 = all)",
-			},
-		},
+			&cli.IntFlag{Name: flagLimit, Usage: "Show N lines (0 = all)"},
+		),
 		Action: catAction,
 	}
 }
@@ -55,6 +43,12 @@ type catOutput struct {
 	Offset     int    `json:"offset"`
 	Line       int    `json:"line"`
 	Limit      int    `json:"limit"`
+}
+
+// catLine is one numbered line for the jsonl and csv formats.
+type catLine struct {
+	Line int    `json:"line"`
+	Text string `json:"text"`
 }
 
 func catAction(_ context.Context, cmd *cli.Command) error {
@@ -84,25 +78,22 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return err
 	}
+	format, err := resolveOutputFormat(cmd, cfg)
+	if err != nil {
+		return err
+	}
 
 	m, err := manifest.Load(cfg.Output)
 	if err != nil {
 		return err
 	}
 
-	collection, ok := m.Collections[collectionName]
-	if !ok {
-		return errs.New(
-			errs.NotFound,
-			fmt.Sprintf("collection %q not found", collectionName),
-			errs.WithHint("Run 'dox collections' to see available collections"),
-			errs.WithFields(
-				map[string]any{fieldCollection: collectionName, errs.LegacyCodeField: errs.LegacyCollectionNotFound},
-			),
-		)
+	collection, err := lookup.Collection(m, collectionName)
+	if err != nil {
+		return err
 	}
 
-	fileInfo, err := findCatFile(collection, collectionName, filePath)
+	fileInfo, err := lookup.File(collection, collectionName, filePath)
 	if err != nil {
 		return err
 	}
@@ -125,7 +116,7 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	offset := position.offset
-	limit := cmd.Int(flagLimit)
+	limit := resolveListLimit(cmd, 0)
 
 	if offset >= len(lines) {
 		lines = []string{}
@@ -136,8 +127,13 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	if jsonEnabled(cmd) {
+	switch format {
+	case formatJSON:
 		return outputCatJSON(collectionName, fileInfo, strings.Join(lines, "\n"), offset, limit)
+	case formatJSONL:
+		return writeJSONLines(numberedLines(lines, offset))
+	case formatCSV:
+		return outputCatCSV(numberedLines(lines, offset))
 	}
 
 	showLineNumbers := cfg.Display.LineNumbers
@@ -148,13 +144,29 @@ func catAction(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+func numberedLines(lines []string, offset int) []catLine {
+	numbered := make([]catLine, len(lines))
+	for index, text := range lines {
+		numbered[index] = catLine{Line: offset + index + 1, Text: text}
+	}
+	return numbered
+}
+
+func outputCatCSV(lines []catLine) error {
+	rows := make([][]string, len(lines))
+	for index, line := range lines {
+		rows[index] = []string{strconv.Itoa(line.Line), line.Text}
+	}
+	return writeCSVRows([]string{fieldLine, fieldText}, rows)
+}
+
 func outputCatJSON(
 	collection string,
 	fileInfo *manifest.FileInfo,
 	content string,
 	offset, limit int,
 ) error {
-	output := catOutput{
+	return writeJSONValue(catOutput{
 		Collection: collection,
 		Path:       fileInfo.Path,
 		Type:       fileInfo.Type,
@@ -164,20 +176,7 @@ func outputCatJSON(
 		Offset:     offset,
 		Line:       offset + 1,
 		Limit:      limit,
-	}
-
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-
-	if err := encoder.Encode(output); err != nil {
-		return errs.Wrap(
-			errs.Internal,
-			fmt.Errorf("encoding output: %w", err),
-			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyJSONError}),
-		)
-	}
-
-	return nil
+	})
 }
 
 func outputCatText(lines []string, offset int, showLineNumbers bool) {
@@ -207,31 +206,4 @@ func padLeft(num, width int) string {
 		return s
 	}
 	return strings.Repeat(" ", width-len(s)) + s
-}
-
-func findCatFile(collection *manifest.Collection, collectionName, filePath string) (*manifest.FileInfo, error) {
-	var fileInfo *manifest.FileInfo
-	for i := range collection.Files {
-		if collection.Files[i].Path == filePath {
-			fileInfo = &collection.Files[i]
-			break
-		}
-	}
-
-	if fileInfo == nil {
-		return nil, errs.New(
-			errs.NotFound,
-			fmt.Sprintf("file %q not found in collection %q", filePath, collectionName),
-			errs.WithHint("Run 'dox files' to see available files"),
-			errs.WithFields(
-				map[string]any{
-					"file":               filePath,
-					fieldCollection:      collectionName,
-					errs.LegacyCodeField: errs.LegacyFileNotFound,
-				},
-			),
-		)
-	}
-
-	return fileInfo, nil
 }

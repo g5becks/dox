@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"runtime"
 	"slices"
+	"strings"
 	stdsync "sync"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
 	"github.com/g5becks/dox/internal/manifest"
+	"github.com/g5becks/dox/internal/runlock"
 	"github.com/g5becks/dox/internal/source"
 )
 
@@ -62,6 +65,8 @@ type RunResult struct {
 	Deleted    int
 	Skipped    int
 	Errors     int
+	// Stale lists, for Check runs, the sources that would change.
+	Stale []string
 }
 
 type Options struct {
@@ -76,7 +81,15 @@ type Options struct {
 	MaxParallel         int
 	Timeout             time.Duration
 	Clean               bool
-	OnEvent             func(Event) // optional; nil = silent
+	// Locked reproduces the lock: GitHub sources fetch the locked commits, URL
+	// sources must match their recorded digests, and config drift fails.
+	Locked bool
+	// Check reports staleness without writing anything (implies DryRun).
+	Check bool
+	// LockTimeout bounds the wait for another sync or clean on the same output
+	// directory (runlock.DefaultTimeout when <= 0).
+	LockTimeout time.Duration
+	OnEvent     func(Event) // optional; nil = silent
 }
 
 type runState struct {
@@ -84,31 +97,55 @@ type runState struct {
 	err    error
 }
 
-func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
-	if cfg == nil {
-		return nil, errs.New(
-			errs.Config,
-			"config is required",
-			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
-		)
+// Validate rejects option combinations whose meaning would be ambiguous.
+func (o Options) Validate() error {
+	conflict := ""
+	switch {
+	case o.Check && o.Locked:
+		conflict = "--check and --locked"
+	case o.Check && o.Clean:
+		conflict = "--check and --clean"
+	case o.Check && o.Force:
+		conflict = "--check and --force"
+	case o.Locked && o.Clean:
+		conflict = "--locked and --clean"
 	}
+	if conflict == "" {
+		return nil
+	}
+	return errs.New(
+		errs.Usage,
+		conflict+" cannot be combined",
+		errs.WithHint("--check only reports staleness; --locked reproduces the lock"),
+		errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyInvalidArgs}),
+	)
+}
 
-	paths, err := cfg.Paths()
+func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, error) {
+	paths, err := checkRun(cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-	for name, sourceCfg := range cfg.Sources {
-		if _, pathErr := paths.SourceDir(name, sourceCfg); pathErr != nil {
-			return nil, pathErr
-		}
+	if opts.Check {
+		opts.DryRun = true
 	}
 	outputDir := paths.Output()
 	if !opts.DryRun {
-		root, rootErr := prepareOutput(paths, opts)
+		root, rootErr := paths.OpenOutput(!opts.Clean)
 		if rootErr != nil {
 			return nil, rootErr
 		}
 		defer root.Close()
+		// Serialize writers of this output directory (sync and clean) before
+		// anything is cleaned or written.
+		lock, lockErr := runlock.Acquire(ctx, root, opts.LockTimeout)
+		if lockErr != nil {
+			return nil, lockErr
+		}
+		defer func() { _ = lock.Release() }()
+		if prepareErr := prepareOutput(root, opts); prepareErr != nil {
+			return nil, prepareErr
+		}
 		opts.outputRoot = root
 	}
 
@@ -122,6 +159,12 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
+	if opts.Locked {
+		if driftErr := checkLockDrift(cfg, lock, sourceNames, len(opts.SourceNames) == 0); driftErr != nil {
+			return nil, driftErr
+		}
+	}
+
 	emit := opts.OnEvent
 	if emit == nil {
 		emit = func(Event) {}
@@ -131,12 +174,56 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 		return nil, err
 	}
 
+	return finishRun(ctx, cfg, opts, lock, sourceNames, results, emit)
+}
+
+// checkRun rejects an unusable config or option combination and resolves the
+// output paths, before anything is read or written.
+func checkRun(cfg *config.Config, opts Options) (*config.Paths, error) {
+	if cfg == nil {
+		return nil, errs.New(
+			errs.Config,
+			"config is required",
+			errs.WithFields(map[string]any{errs.LegacyCodeField: errs.LegacyConfigInvalid}),
+		)
+	}
+	if validateErr := opts.Validate(); validateErr != nil {
+		return nil, validateErr
+	}
+	paths, err := cfg.Paths()
+	if err != nil {
+		return nil, err
+	}
+	for name, sourceCfg := range cfg.Sources {
+		if _, dirErr := paths.SourceDir(name, sourceCfg); dirErr != nil {
+			return nil, dirErr
+		}
+	}
+	return paths, nil
+}
+
+// finishRun records results in the lock, persists them (except for dry runs)
+// and turns failures, interruption and staleness into errors.
+func finishRun(
+	ctx context.Context,
+	cfg *config.Config,
+	opts Options,
+	lock *lockfile.LockFile,
+	sourceNames []string,
+	results map[string]runState,
+	emit func(Event),
+) (*RunResult, error) {
 	errorCount, downloadedCount, deletedCount, skippedCount, firstErr := processResults(
 		lock,
 		sourceNames,
 		results,
 		opts.DryRun,
 	)
+	for _, sourceName := range sourceNames {
+		if entry := lock.GetEntry(sourceName); entry != nil && !opts.DryRun && results[sourceName].err == nil {
+			entry.ConfigDigest = cfg.Sources[sourceName].Digest()
+		}
+	}
 
 	if !opts.DryRun {
 		if commitErr := commitSync(ctx, cfg, lock, opts.outputRoot, emit); commitErr != nil {
@@ -155,6 +242,17 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	if errorCount > 0 {
 		return runResult, buildSyncFailure(ctx, errorCount, len(sourceNames), firstErr)
 	}
+	if opts.Check {
+		runResult.Stale = staleSources(sourceNames, results)
+		if len(runResult.Stale) > 0 {
+			return runResult, errs.New(
+				errs.Stale,
+				fmt.Sprintf("%d source(s) are stale: %s", len(runResult.Stale), strings.Join(runResult.Stale, ", ")),
+				errs.WithHint("Run 'dox sync' to update them"),
+				errs.WithFields(map[string]any{"stale": runResult.Stale}),
+			)
+		}
+	}
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return runResult, errs.Wrap(
 			errs.Interrupted,
@@ -166,6 +264,52 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) (*RunResult, err
 	}
 
 	return runResult, nil
+}
+
+// staleSources lists sources whose dry run would download or delete files.
+func staleSources(sourceNames []string, results map[string]runState) []string {
+	stale := []string{}
+	for _, sourceName := range sourceNames {
+		result := results[sourceName].result
+		if result != nil && (result.Downloaded > 0 || result.Deleted > 0) {
+			stale = append(stale, sourceName)
+		}
+	}
+	return stale
+}
+
+// checkLockDrift fails when the lock cannot reproduce the selected sources:
+// a source is missing from the lock or its configuration changed since the
+// lock was written, or (for a full sync) the lock names unconfigured sources.
+func checkLockDrift(cfg *config.Config, lock *lockfile.LockFile, sourceNames []string, all bool) error {
+	var drift []string
+	for _, sourceName := range sourceNames {
+		entry := lock.GetEntry(sourceName)
+		switch {
+		case entry == nil:
+			drift = append(drift, sourceName+" (not in lock)")
+		case entry.ConfigDigest == "":
+			drift = append(drift, sourceName+" (lock predates config digests)")
+		case entry.ConfigDigest != cfg.Sources[sourceName].Digest():
+			drift = append(drift, sourceName+" (config changed)")
+		}
+	}
+	if all {
+		for _, lockedName := range slices.Sorted(maps.Keys(lock.Sources)) {
+			if _, configured := cfg.Sources[lockedName]; !configured {
+				drift = append(drift, lockedName+" (in lock, not in config)")
+			}
+		}
+	}
+	if len(drift) == 0 {
+		return nil
+	}
+	return errs.New(
+		errs.Config,
+		"config does not match the lock: "+strings.Join(drift, ", "),
+		errs.WithHint("Run 'dox sync' without --locked to update the lock, then commit it"),
+		errs.WithFields(map[string]any{"drift": drift, errs.LegacyCodeField: errs.LegacyLockError}),
+	)
 }
 
 func buildSyncFailure(ctx context.Context, errorCount, totalSources int, firstErr error) error {
@@ -236,7 +380,6 @@ func executeSources(
 ) (map[string]runState, error) {
 	results := make(map[string]runState, len(sourceNames))
 	var resultsMu stdsync.Mutex
-	token := resolveGitHubToken(cfg)
 	timeout := resolveTimeout(cfg, opts)
 	perHost := 0
 	if cfg != nil {
@@ -271,6 +414,7 @@ func executeSources(
 		previousLock := lock.GetEntry(sourceName)
 
 		group.Go(func() error {
+			token := ResolveToken(cfg, sourceCfg)
 			state := syncSource(groupCtx, sourceName, sourceCfg, destinationDir, previousLock, token, sourceOpts, emit)
 			resultsMu.Lock()
 			results[sourceName] = state
@@ -385,6 +529,41 @@ func resolveSourceNames(
 	return sourceNames, nil
 }
 
+// ResolveToken returns the credential for a repo source's host: a
+// `tokens.<host>` entry first, then GITLAB_TOKEN for GitLab, github_token,
+// GITHUB_TOKEN and GH_TOKEN for github.com, and GH_ENTERPRISE_TOKEN for GitHub
+// Enterprise hosts.
+func ResolveToken(cfg *config.Config, sourceCfg config.Source) string {
+	if sourceCfg.Repo == "" {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSpace(sourceCfg.Host))
+	if host == "" {
+		host = "github.com"
+		switch sourceCfg.Type {
+		case "gitlab":
+			host = "gitlab.com"
+		case "gitea":
+			host = "codeberg.org"
+		}
+	}
+	if token := cfg.Tokens[host]; token != "" {
+		return token
+	}
+	switch {
+	case sourceCfg.Type == "gitlab":
+		return os.Getenv("GITLAB_TOKEN")
+	case sourceCfg.Type == "gitea":
+		return os.Getenv("GITEA_TOKEN")
+	case host != "github.com":
+		if sourceCfg.Type == "github" {
+			return os.Getenv("GH_ENTERPRISE_TOKEN")
+		}
+		return ""
+	}
+	return resolveGitHubToken(cfg)
+}
+
 func resolveGitHubToken(cfg *config.Config) string {
 	if cfg.GitHubToken != "" {
 		return cfg.GitHubToken
@@ -425,6 +604,8 @@ func syncPreparedSource(
 		source.SyncOptions{
 			Force:               opts.Force,
 			DryRun:              opts.DryRun,
+			Locked:              opts.Locked,
+			Check:               opts.Check,
 			Root:                sourceRoot,
 			DownloadConcurrency: opts.downloadConcurrency,
 			OnWarning: func(msg string) {
@@ -474,20 +655,13 @@ func processResults(
 	return errorCount, downloadedCount, deletedCount, skippedCount, firstErr
 }
 
-func prepareOutput(paths *config.Paths, opts Options) (*os.Root, error) {
-	root, err := paths.OpenOutput(!opts.Clean)
-	if err != nil {
-		return nil, err
-	}
+// prepareOutput clears owned output for --clean and marks the directory as
+// dox-owned; the caller holds the run lock.
+func prepareOutput(root *os.Root, opts Options) error {
 	if opts.Clean {
 		if cleanErr := config.CleanOutput(root); cleanErr != nil {
-			_ = root.Close()
-			return nil, cleanErr
+			return cleanErr
 		}
 	}
-	if markErr := config.MarkOutput(root); markErr != nil {
-		_ = root.Close()
-		return nil, markErr
-	}
-	return root, nil
+	return config.MarkOutput(root)
 }

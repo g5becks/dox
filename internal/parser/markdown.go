@@ -14,6 +14,6 @@ func scanOutline(content []byte, mdx bool) *ParseResult {
 	return &ParseResult{
 		Description: result.Description,
 		Outline:     &Outline{Type: OutlineTypeHeadings, Headings: result.Headings},
-		Lines:       result.Lines,
+		Lines:       CountLines(content),
 	}
 }

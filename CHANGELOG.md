@@ -5,6 +5,56 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
+### Changed
+
+- The `--config` (`-c`) flag is now declared once, on the root command, instead of on each command. It is still accepted before or after the subcommand, so `dox files docs -c dox.toml` keeps working, and `DOX_CONFIG` sets it from the environment (the flag wins). `init` now honors it and creates the file at that path. **Migration:** none for scripts; remove per-command `--config` workarounds if you like.
+
+- `files --all` is deprecated: it prints a warning and behaves as `--limit 0`, and it is removed in v0.6.0. Every list-style command (`collections`, `files`, `cat`, `search`) now follows one `--limit N` convention: `0` means no limit and an omitted flag uses `display.default_limit`. The "more files" hint now says `use --limit 0 to show all`. **Migration:** replace `--all` with `--limit 0`.
+
+- `display.format` in the config now applies to `collections`, `files`, `cat`, `outline` and `search` as the `dox init` template documents; before, it was parsed and ignored, so a config with `format = "json"` or `"csv"` changes their default output. A `--format` flag or `--json` wins over the config. `display.format` also accepts `jsonl`. **Migration:** set `format = "table"` (the default) to keep the previous output.
+
+- Config files are decoded strictly. Value types must match (`repo = 5` now reports `invalid config at "sources.docs.repo" (line 4) … (a string)` instead of a misleading validation error). **Unknown keys are now errors** listing each key and line (for example a misspelled `max_paralel`), where before they were silently ignored. Syntax errors name their line. All of these exit with code 2. Koanf and its dependencies (copystructure, reflectwalk, mapstructure, fsnotify) are removed in favor of go-toml directly. **Migration:** run `dox list` once; fix or remove any key it reports as unknown, and quote string values.
+
+- `dox search --content --regex` with a pattern that does not compile now exits **2** (usage, with the hint `Check regex syntax`) instead of 1, matching every other bad argument and the exit code the Go API and `dox mcp` already report. **Migration:** scripts that branched on exit 1 for an invalid pattern should branch on 2; exit 1 now means only a runtime failure.
+
+- The `lines` value in `manifest.json`, `dox files`, `dox cat --json` and `dox.File.Lines` now counts lines the way `cat` addresses them: a file that ends with a newline is no longer counted one line too many (a file of 11 lines was reported as 12), and an empty file has 0 lines instead of 1. Files without a trailing newline are unchanged, and the Go API's `Content.TotalLines` and the `dox mcp` `cat` tool already reported this count, so all surfaces now agree. The manifest parser revision moves from 2 to 3, so the next `dox sync` regenerates existing manifests locally, without re-downloading anything; until then `files` and `cat --json` keep showing the old values. **Migration:** anything that compared `lines` to a stored value or used it as an upper bound plus one should expect values lower by one for files ending in a newline; `dox sync` once refreshes the manifest.
+
+### Added
+
+- `--format table|json|jsonl|csv` on `list`, `collections`, `files`, `cat`, `outline` and `search`; `--json` stays an alias for `--format json`. JSON Lines writes one object per item and CSV a header plus one row per item (`cat` emits `line,text`, `outline` emits `kind,line,level,type,text`). `dox doctor` takes the same flags.
+
+- `dox doctor` checks the config, per-host token presence (never the value), the github.com API rate limit (skipped by `--offline`), output-directory safety, and consistency between the config, the lock and the files on disk. A `fail` check exits 1.
+
+- Unknown collections and files in `files`, `cat`, `outline` and `search --collection` suggest close matches (`Did you mean "goreleaser"?`) in the `hint:` line, still exiting with code 4.
+
+- Shell completion is available as `dox completion bash|zsh|fish|pwsh`.
+
+- `dox version` and `--version` fall back to `debug.ReadBuildInfo()`, so a binary built with `go install github.com/g5becks/dox/cmd/dox@vX.Y.Z` reports its version, commit and build time instead of `dev`.
+
+- `dox sync` and `dox clean` take an advisory lock on the output directory (`flock` on Unix, `LockFileEx` on Windows, file `.dox-run.lock`), so concurrent runs no longer race on `.dox.lock` and `manifest.json`. A second run waits up to `--lock-timeout` (default `30s`) and then exits 1 with a clear message. `sync --clean` now cleans only after taking the lock. Dry runs and `--check` stay lock-free.
+
+- Gitea, Forgejo and Codeberg sources (`type = "gitea"`, alias `"codeberg"`; inferred for hosts containing codeberg, gitea or forgejo; default host `codeberg.org`). They are commit-pinned, find the folder's tree with non-recursive `git/trees` listings (2 calls for a top-level folder), and list changes with paginated recursive trees, then download raw files or one repository archive. Tokens come from `tokens.<host>` or `GITEA_TOKEN`. Only `type = "git"` and unknown hosts without a type remain unsupported.
+
+- GitLab sources (gitlab.com and self-managed, API v4), with subgroup project paths (`repo = "group/subgroup/project"`). They are commit-pinned and use 2 API calls to detect an unchanged folder (commit plus parent listing). Changed folders get paginated listings, then raw files or a single folder archive. GitLab `RateLimit-*` headers and 429 responses are classified like GitHub's. Tokens come from `tokens.<host>` or `GITLAB_TOKEN` (sent as `PRIVATE-TOKEN`). `type = "gitlab"` now defaults its host to `gitlab.com`, and `dox add --host gitlab.com` writes a complete GitLab source.
+
+- GitHub Enterprise Server sources: set `host` to the instance (with `type = "github"` when the host name lacks "github"). dox uses `https://<host>/api/v3` and fetches content and archives through the API. Per-host tokens come from `tokens = { "<host>" = "..." }` or `GH_ENTERPRISE_TOKEN`. A source with a host and no `type` now infers its type from the host, so a `gitlab.com` or unknown host is reported as not supported rather than treated as GitHub. Internally, GitHub sources run through a provider interface that GitLab and Gitea will implement.
+
+- `dox sync --check` reports staleness without writing anything: exit 0 when every source is current, 3 when any would change; `--json` prints `{"stale": [...], "current": [...]}`. `dox sync --locked` reproduces the lock: GitHub sources fetch the locked commits, URL sources must match their recorded content digest, and config drift fails with exit code 2. Lock entries now record a `config_digest`, and URL entries record the content's `sha256` under `files`. Locks written before v0.5.0 need one plain `dox sync` before `--locked`.
+
+- A public Go API, `github.com/g5becks/dox/dox`: `dox.Load` a project, then `Sync`, `Collections`, `Files`, `Outline`, `Cat` and `Search` (an `iter.Seq2` of results) with the CLI's behavior. Every method returns a `*dox.Error` with a stable `Code` and a `Hint`, and wraps sentinels (`ErrCollectionNotFound`, `ErrFileNotFound`, `ErrSourceNotFound`, `ErrNotSynced`) for `errors.Is`. A `Project` is safe for concurrent use. The package may change before v1.0.0.
+
+- `dox mcp` serves the synced documentation to AI agents over the Model Context Protocol (stdio) through five read-only tools: `collections`, `files`, `outline`, `cat` and `search`. Output is capped and paged (`cat` 500 lines by default, `search` 20 results, `files` 200 entries) and failures carry the CLI's hints. It is built on the official `github.com/modelcontextprotocol/go-sdk` v1.8.0, which adds six small modules (`jsonschema-go`, `segmentio/asm`, `segmentio/encoding`, `yosida95/uritemplate`, `x/oauth2`, `x/time`) and grows the stripped binary from 11.9 MB to 13.9 MB. Requests piped to the server are all answered before it exits at the end of input.
+
+- CI enforces per-package coverage floors (`scripts/coverage-floors.txt`; `cmd/dox` 70, `internal/sync` 80, `internal/source` 85, every other package at its v0.5.0 level) and fuzzes every target for 10 seconds on Linux and macOS. `task fuzz` runs the long local fuzz, and new fuzz targets cover include/exclude globs and `normalizeRepoPath`. A race test syncs 24 sources through 8 workers and checks the lock against the files on disk. Development tooling only; no CLI change.
+
+### Fixed
+
+- `dox add --force` now refuses a source whose sub-table header is written with whitespace or quotes (`[ sources.x.extra]`, `[sources . x . extra]`, `[sources."x".extra]`, `[[ sources.x.items ]]`), as it already refused the plain `[sources.x.extra]` form. Before, those sub-tables silently survived after the rewritten section and merged into it. The refusal asks you to edit the file by hand, so no settings are lost. Found by the fuzz step added to CI in this release.
+
+- The error for an unsupported provider (`type = "git"`, or an unknown host without a `type`) no longer says "planned for v0.5.0", and `dox add --help` no longer says `--host` accepts only github.com; `--type` lists `gitlab` and `gitea`.
+
 ## [0.4.0] - 2026-11-12
 
 ### Changed

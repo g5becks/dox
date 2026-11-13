@@ -85,7 +85,8 @@ git -C "$fixture/repo" add CHANGELOG.md; git -C "$fixture/repo" commit -qm 'test
 run_case 'CHANGELOG.md is missing' 0.4.0 --dry-run
 setup; git -C "$fixture/repo" tag v0.4.0; run_case 'already exists locally' 0.4.0 --dry-run
 # Create a tag directly in the owned bare fixture; never push a tag anywhere.
-setup; git -C "$fixture/origin.git" tag v0.4.0; run_case 'already exists on origin' 0.4.0 --dry-run
+# --git-dir addresses the bare fixture explicitly, as safe.bareRepository=explicit requires.
+setup; git --git-dir="$fixture/origin.git" tag v0.4.0; run_case 'already exists on origin' 0.4.0 --dry-run
 setup
 mkdir -p "$fixture/artifacts/v0.4.0"
 run_case 'artifact directory already exists' 0.4.0 --dry-run

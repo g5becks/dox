@@ -17,7 +17,6 @@ func (p *TextParser) CanParse(path string) bool {
 
 func (p *TextParser) Parse(_ string, content []byte) (*ParseResult, error) {
 	content = StripBOM(content)
-	lines := bytes.Count(content, []byte("\n")) + 1
 
 	description := extractFirstLine(content)
 
@@ -26,7 +25,7 @@ func (p *TextParser) Parse(_ string, content []byte) (*ParseResult, error) {
 		Outline: &Outline{
 			Type: OutlineTypeNone,
 		},
-		Lines: lines,
+		Lines: CountLines(content),
 	}, nil
 }
 

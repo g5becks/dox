@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -322,7 +321,7 @@ func parseFile(
 		return file, nil
 	}
 	file.Type = unknownFileType
-	file.Lines = countLines(content)
+	file.Lines = parser.CountLines(content)
 	return file, nil
 }
 
@@ -335,7 +334,6 @@ func resolveSourceLocation(source config.Source) string {
 	}
 	return unknownFileType
 }
-func countLines(content []byte) int { return bytes.Count(content, []byte{'\n'}) + 1 }
 func resolveLastSync(lock *lockfile.LockFile, name string) time.Time {
 	if entry := lock.GetEntry(name); entry != nil {
 		return entry.SyncedAt.UTC()

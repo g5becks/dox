@@ -20,7 +20,6 @@ type Options struct{ MDX bool }
 type Result struct {
 	Headings    []Heading
 	Description string
-	Lines       int
 }
 
 type scanner struct {
@@ -41,7 +40,6 @@ type scanner struct {
 
 // Scan visits each body line once; inline and metadata decoding have fixed budgets.
 func Scan(content []byte, options Options) Result {
-	lines := bytes.Count(content, []byte{'\n'}) + 1
 	content = bytes.TrimPrefix(content, []byte{0xef, 0xbb, 0xbf})
 	body, title, description, offset := Frontmatter(content)
 	s := scanner{
@@ -56,7 +54,6 @@ func Scan(content []byte, options Options) Result {
 	}
 	s.flushParagraph()
 	s.result.Description = s.composeDescription()
-	s.result.Lines = lines
 	return s.result
 }
 

@@ -151,23 +151,23 @@ func TestApplyDefaultsTypeInference(t *testing.T) {
 			wantHost: "",
 		},
 		{
-			name: "explicit type kept",
+			name: "explicit type kept with its default host",
 			source: Source{
 				Type: "gitlab",
 				Repo: "owner/repo",
 				Path: "docs",
 			},
 			wantType: "gitlab",
-			wantHost: "github.com",
+			wantHost: "gitlab.com",
 		},
 		{
-			name: "explicit host kept",
+			name: "explicit host kept and decides the type",
 			source: Source{
 				Repo: "owner/repo",
 				Path: "docs",
 				Host: "gitlab.com",
 			},
-			wantType: "github",
+			wantType: "gitlab",
 			wantHost: "gitlab.com",
 		},
 		{
@@ -200,7 +200,7 @@ func TestApplyDefaultsTypeInference(t *testing.T) {
 				Path: "docs",
 				Host: "codeberg.org",
 			},
-			wantType: "codeberg",
+			wantType: "gitea",
 			wantHost: "codeberg.org",
 		},
 		{
@@ -377,6 +377,11 @@ func TestValidateDisplayFormat(t *testing.T) {
 		{
 			name:    "valid format json",
 			format:  "json",
+			wantErr: false,
+		},
+		{
+			name:    "valid format jsonl",
+			format:  "jsonl",
 			wantErr: false,
 		},
 		{

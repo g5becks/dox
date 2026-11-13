@@ -70,6 +70,7 @@ func Load(outputDir string) (*Manifest, error) {
 				errs.NotFound,
 				fmt.Sprintf("manifest not found at %q", manifestPath),
 				errs.WithHint("Run 'dox sync' to generate the manifest"),
+				errs.WithCause(errs.ErrNotSynced),
 				errs.WithFields(
 					map[string]any{fieldPath: manifestPath, errs.LegacyCodeField: errs.LegacyManifestNotFound},
 				),

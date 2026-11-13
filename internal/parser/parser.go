@@ -3,7 +3,8 @@ package parser
 import "github.com/g5becks/dox/internal/parser/outline"
 
 // CurrentVersion invalidates cached parse results when extraction semantics change.
-const CurrentVersion = 2
+// Revision 3 counts lines the way cat addresses them (no phantom last line).
+const CurrentVersion = 3
 
 // Parser extracts description and outline from file content.
 type Parser interface {

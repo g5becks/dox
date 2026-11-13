@@ -33,6 +33,13 @@ type SyncOptions struct {
 	// DownloadConcurrency bounds concurrent file downloads within one source
 	// (DefaultDownloadConcurrency when <= 0).
 	DownloadConcurrency int
+	// Locked reproduces the previous lock entry: GitHub sources fetch its
+	// commit, and URL sources must match its recorded content digest.
+	Locked bool
+	// Check (with DryRun) reports whether the source is current. URL sources
+	// without validators compare a content digest with the lock instead of
+	// assuming a change.
+	Check bool
 }
 
 // Source defines a documentation source that can be synced.
@@ -59,13 +66,17 @@ func NewWithHTTPClient(name string, cfg config.Source, token string, httpClient 
 	switch cfg.Type {
 	case "github":
 		return newGitHubSourceWithHTTP(name, cfg, token, httpClient)
+	case sourceTypeGitLab:
+		return newGitLabSource(name, cfg, token, httpClient)
+	case sourceTypeGitea:
+		return newGiteaSource(name, cfg, token, httpClient)
 	case sourceTypeURL:
 		return newURLSourceWithHTTP(name, cfg, httpClient)
 	default:
 		return nil, errs.New(
 			errs.Config,
 			fmt.Sprintf("unknown source type %q for source %q", cfg.Type, name),
-			errs.WithHint("Supported types: github, url"),
+			errs.WithHint("Supported types: github, gitlab, gitea, url"),
 			errs.WithFields(map[string]any{"type": cfg.Type, errs.LegacyCodeField: errs.LegacyUnknownSourceType}),
 		)
 	}

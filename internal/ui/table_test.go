@@ -37,7 +37,7 @@ func TestRenderSourceListJSON(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w //nolint:reassign // Test helper to capture stdout
 
-	err := ui.RenderSourceList(sources, ui.ListOptions{JSON: true})
+	err := ui.RenderSourceList(sources, ui.ListOptions{Format: ui.FormatJSON})
 	w.Close()
 
 	var buf bytes.Buffer
@@ -45,7 +45,7 @@ func TestRenderSourceListJSON(t *testing.T) {
 	os.Stdout = oldStdout //nolint:reassign // Restore stdout after test
 
 	if err != nil {
-		t.Fatalf("RenderSourceList(JSON=true) error = %v", err)
+		t.Fatalf("RenderSourceList(json) error = %v", err)
 	}
 
 	var decoded []ui.SourceStatus

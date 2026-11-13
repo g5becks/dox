@@ -138,12 +138,9 @@ func TestREADMEExamples(t *testing.T) {
 		t.Fatal("no runnable README examples found")
 	}
 	testscript.Run(t, testscript.Params{
-		Dir: dir,
-		Setup: func(env *testscript.Env) error {
-			env.Values[scriptEnvKey{}] = append([]string(nil), env.Vars...)
-			return nil
-		},
-		Cmds: scriptCommands(),
+		Dir:   dir,
+		Setup: scriptSetup,
+		Cmds:  scriptCommands(),
 	})
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/g5becks/dox/internal/config"
 	"github.com/g5becks/dox/internal/errs"
+	"github.com/g5becks/dox/internal/lookup"
 	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/search"
 )
@@ -24,11 +25,6 @@ func newSearchCommand() *cli.Command {
 		Usage:     "Search documentation metadata or file content",
 		ArgsUsage: "<query>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    flagConfig,
-				Aliases: []string{"c"},
-				Usage:   helpConfig,
-			},
 			&cli.StringFlag{
 				Name:  fieldCollection,
 				Usage: "Search only within one collection",
@@ -41,18 +37,9 @@ func newSearchCommand() *cli.Command {
 				Name:  "regex",
 				Usage: "Treat query as regex (requires --content)",
 			},
-			&cli.BoolFlag{
-				Name:  formatJSON,
-				Usage: helpJSON,
-			},
-			&cli.StringFlag{
-				Name:  "format",
-				Usage: "Output format: table, json, csv",
-			},
-			&cli.IntFlag{
-				Name:  flagLimit,
-				Usage: "Max results (0 = unlimited)",
-			},
+			&cli.StringFlag{Name: flagFormat, Usage: helpFormat},
+			&cli.BoolFlag{Name: formatJSON, Usage: helpJSON},
+			&cli.IntFlag{Name: flagLimit, Usage: helpLimit},
 			&cli.IntFlag{
 				Name:  "desc-length",
 				Usage: "Max table text length (0 = use config default)",
@@ -106,9 +93,17 @@ func searchAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	format := resolveFormat(cmd, cfg)
-	limit := resolveLimit(cmd, cfg)
+	format, err := resolveOutputFormat(cmd, cfg)
+	if err != nil {
+		return err
+	}
+	limit := resolveListLimit(cmd, cfg.Display.DefaultLimit)
 	descLength := resolveDescLength(cmd, cfg)
+	if name := cmd.String(fieldCollection); name != "" {
+		if _, lookupErr := lookup.Collection(m, name); lookupErr != nil {
+			return lookupErr
+		}
+	}
 
 	if cmd.Bool("content") {
 		return runContentSearch(ctx, m, cfg, cmd, query, format, limit, descLength)
@@ -136,6 +131,8 @@ func runMetadataSearch(
 	switch format {
 	case formatJSON:
 		return outputMetadataJSON(results)
+	case formatJSONL:
+		return writeJSONLines(results)
 	case formatCSV:
 		return outputMetadataCSV(results)
 	default:
@@ -165,6 +162,8 @@ func runContentSearch(
 	switch format {
 	case formatJSON:
 		return outputContentJSON(results)
+	case formatJSONL:
+		return writeJSONLines(results)
 	case formatCSV:
 		return outputContentCSV(results)
 	default:
@@ -258,7 +257,7 @@ func outputContentCSV(results []search.ContentResult) error {
 	w := csv.NewWriter(os.Stdout)
 	defer w.Flush()
 
-	if err := w.Write([]string{fieldCollection, fieldPath, "line", "text"}); err != nil {
+	if err := w.Write([]string{fieldCollection, fieldPath, fieldLine, fieldText}); err != nil {
 		return errs.Wrap(
 			errs.Internal,
 			fmt.Errorf("writing CSV header: %w", err),

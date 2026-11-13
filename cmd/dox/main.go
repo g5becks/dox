@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
+	"github.com/g5becks/dox/internal/runlock"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
 )
@@ -40,6 +43,9 @@ const initTemplate = `# dox.toml - Documentation source configuration
 # from raw/archive URLs), so most setups work without one.
 # Can also be set via GITHUB_TOKEN or GH_TOKEN environment variable
 # github_token = ""
+
+# Per-host tokens, e.g. for GitHub Enterprise Server (or GH_ENTERPRISE_TOKEN)
+# tokens = { "github.mycorp.com" = "" }
 
 # Max parallel source syncs, 1-100 (default: 4x CPU cores, min 10, max 16)
 # Override per-command with: dox sync --parallel N
@@ -128,7 +134,7 @@ excludes = [
 # Show line numbers in 'dox cat' by default
 # line_numbers = true
 #
-# Default output format: table, json, csv
+# Default output format: table, json, jsonl, csv
 # format = "table"
 #
 # Default fields for 'dox files' table
@@ -147,9 +153,24 @@ excludes = [
 # exclude = ["custom-pattern/**"]                    # optional (adds to global excludes, no duplicates)
 # out = "custom-dir-name"                             # optional (default: source key name)
 
-# --- Planned (v0.5.0): GitLab, Codeberg/Gitea and self-hosted hosts ---
-# Only github.com repositories are supported today; any other 'host' fails
-# validation with "not supported yet".
+# --- GitHub Enterprise Server - set host (type "github" if the name lacks "github") ---
+# [sources.internal-docs]
+# type = "github"
+# host = "git.mycorp.com"
+# repo = "platform/handbook"
+# path = "docs"
+
+# --- GitLab (gitlab.com or self-managed; token: tokens.<host> or GITLAB_TOKEN) ---
+# [sources.gitlab-project]
+# repo = "group/subgroup/project"
+# host = "gitlab.com"                                # hosts containing "gitlab" infer type gitlab
+# path = "docs"
+
+# --- Gitea, Forgejo, Codeberg (token: tokens.<host> or GITEA_TOKEN) ---
+# [sources.codeberg-docs]
+# repo = "owner/repo"
+# host = "codeberg.org"                              # codeberg/gitea/forgejo hosts infer type gitea
+# path = "docs"
 
 # --- Direct URL download - type inferred from 'url' ---
 # [sources.my-framework]
@@ -184,7 +205,20 @@ func newRootCommand() *cli.Command {
 		Usage:       "Sync framework and library docs to local files",
 		Description: rootDescription,
 		Version:     versionString(),
+		// Root flags are inherited by every subcommand.
+		EnableShellCompletion:      true,
+		ShellCompletionCommandName: "completion",
+		ConfigureShellCompletionCommand: func(completion *cli.Command) {
+			completion.Hidden = false
+			completion.Usage = "Print a shell completion script (bash, zsh, fish or pwsh)"
+		},
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    flagConfig,
+				Aliases: []string{"c"},
+				Usage:   helpConfig + " (default: dox.toml or .dox.toml found from the working directory up)",
+				Sources: cli.EnvVars("DOX_CONFIG"),
+			},
 			&cli.BoolFlag{
 				Name:  flagAllowExternalOutput,
 				Usage: "Allow output outside the config directory (never the config directory or filesystem root)",
@@ -209,6 +243,8 @@ func newRootCommand() *cli.Command {
 			newCatCommand(),
 			newOutlineCommand(),
 			newSearchCommand(),
+			newDoctorCommand(),
+			newMCPCommand(),
 			newVersionCommand(),
 		},
 	}
@@ -233,7 +269,6 @@ func newSyncCommand() *cli.Command {
 		Usage:     "Sync configured documentation sources",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{
 				Name:    "force",
 				Aliases: []string{"f"},
@@ -241,6 +276,19 @@ func newSyncCommand() *cli.Command {
 			},
 			&cli.BoolFlag{Name: "clean", Usage: "Clear owned output contents before syncing"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "Show planned changes without writing files"},
+			&cli.BoolFlag{
+				Name:  "locked",
+				Usage: "Reproduce the lock: fetch locked commits and verify URL digests; fail on config drift",
+			},
+			&cli.BoolFlag{
+				Name:  "check",
+				Usage: "Exit 3 if any source is stale versus upstream; writes nothing",
+			},
+			&cli.DurationFlag{
+				Name:  "lock-timeout",
+				Value: runlock.DefaultTimeout,
+				Usage: "How long to wait for another sync or clean on the same output directory",
+			},
 			&cli.IntFlag{
 				Name: "parallel", Aliases: []string{"p"},
 				Usage: "Maximum parallel source syncs (0 uses config or computed default)",
@@ -258,19 +306,17 @@ func newListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
 		Usage: "List configured sources and status",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: formatJSON, Usage: "Emit JSON output"},
+		Flags: append(formatFlags(),
 			&cli.BoolFlag{
 				Name:    "verbose",
 				Aliases: []string{"v"},
 				Usage:   "Show expanded source fields",
 			},
 			&cli.BoolFlag{
-				Name:  "files",
+				Name:  nameFiles,
 				Usage: "Include file counts from local output directories",
 			},
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
-		},
+		),
 		Action: listAction,
 	}
 }
@@ -284,10 +330,13 @@ func newAddCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    fieldType,
 				Aliases: []string{"t"},
-				Usage:   "Source type: github or url (default: inferred from --repo or --url)",
+				Usage:   "Source type: github, gitlab, gitea (alias codeberg) or url (default: inferred from --repo, --host or --url)",
 			},
 			&cli.StringFlag{Name: "repo", Aliases: []string{"r"}, Usage: "Repository in owner/repo format"},
-			&cli.StringFlag{Name: "host", Usage: "Git host (only github.com is supported until v0.5.0)"},
+			&cli.StringFlag{
+				Name:  "host",
+				Usage: "Git host, for example gitlab.com, codeberg.org or a GitHub Enterprise host (default: github.com)",
+			},
 			&cli.StringFlag{Name: fieldPath, Aliases: []string{"p"}, Usage: "Path within repository"},
 			&cli.StringFlag{Name: "ref", Aliases: []string{"R"}, Usage: "Branch, tag, or commit SHA"},
 			&cli.StringSliceFlag{Name: "patterns", Usage: "Include glob pattern (repeatable)"},
@@ -295,7 +344,6 @@ func newAddCommand() *cli.Command {
 			&cli.StringFlag{Name: fieldURL, Aliases: []string{"u"}, Usage: "Source URL"},
 			&cli.StringFlag{Name: "filename", Usage: "Output filename for URL source"},
 			&cli.StringFlag{Name: "out", Usage: "Custom output subdirectory"},
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
 			&cli.BoolFlag{Name: "force", Usage: "Overwrite an existing source with the same name"},
 		},
 		Action: addAction,
@@ -308,7 +356,11 @@ func newCleanCommand() *cli.Command {
 		Usage:     "Remove downloaded documentation output",
 		ArgsUsage: "[source-name...]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: flagConfig, Aliases: []string{"c"}, Usage: helpConfig},
+			&cli.DurationFlag{
+				Name:  "lock-timeout",
+				Value: runlock.DefaultTimeout,
+				Usage: "How long to wait for another sync or clean on the same output directory",
+			},
 		},
 		Action: cleanAction,
 	}
@@ -317,7 +369,7 @@ func newCleanCommand() *cli.Command {
 func newInitCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "init",
-		Usage:  "Create a starter dox.toml in the current directory",
+		Usage:  "Create a starter dox.toml (in the working directory, or at --config/DOX_CONFIG)",
 		Action: initAction,
 	}
 }
@@ -337,28 +389,61 @@ func syncAction(ctx context.Context, cmd *cli.Command) error {
 		timeout = parsedTimeout
 	}
 
-	var onEvent func(doxsync.Event)
-	var printer *ui.SyncPrinter
-	if !jsonEnabled(cmd) {
-		printer = ui.NewSyncPrinter(cmd.Bool("dry-run"))
-		onEvent = printer.HandleEvent
-	}
-
-	result, runErr := doxsync.Run(ctx, cfg, doxsync.Options{
+	check := cmd.Bool("check")
+	syncOptions := doxsync.Options{
 		SourceNames: commandArgs(cmd),
 		Force:       cmd.Bool("force"),
 		DryRun:      cmd.Bool("dry-run"),
 		MaxParallel: cmd.Int("parallel"),
 		Timeout:     timeout,
 		Clean:       cmd.Bool("clean"),
-		OnEvent:     onEvent,
-	})
+		Locked:      cmd.Bool("locked"),
+		Check:       check,
+		LockTimeout: cmd.Duration("lock-timeout"),
+	}
+	if conflictErr := syncOptions.Validate(); conflictErr != nil {
+		return conflictErr
+	}
+
+	var printer *ui.SyncPrinter
+	if !jsonEnabled(cmd) {
+		printer = ui.NewSyncPrinter(cmd.Bool("dry-run") || check)
+		syncOptions.OnEvent = printer.HandleEvent
+	}
+
+	result, runErr := doxsync.Run(ctx, cfg, syncOptions)
 
 	if printer != nil {
 		printer.PrintSummary(result)
 	}
+	if check && jsonEnabled(cmd) && result != nil {
+		if writeErr := writeCheckJSON(cfg, commandArgs(cmd), result); writeErr != nil {
+			return writeErr
+		}
+	}
 
 	return runErr
+}
+
+// writeCheckJSON prints {"stale": [...], "current": [...]} for sync --check.
+func writeCheckJSON(cfg *config.Config, selected []string, result *doxsync.RunResult) error {
+	names := selected
+	if len(names) == 0 {
+		names = slices.Sorted(maps.Keys(cfg.Sources))
+	}
+	current := []string{}
+	for _, name := range names {
+		if !slices.Contains(result.Stale, name) {
+			current = append(current, name)
+		}
+	}
+	stale := result.Stale
+	if stale == nil {
+		stale = []string{}
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(map[string][]string{"stale": stale, "current": current})
 }
 
 func commandArgs(cmd *cli.Command) []string {
@@ -372,6 +457,10 @@ func commandArgs(cmd *cli.Command) []string {
 
 func listAction(_ context.Context, cmd *cli.Command) error {
 	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
+	if err != nil {
+		return err
+	}
+	format, err := resolveOutputFormat(cmd, nil)
 	if err != nil {
 		return err
 	}
@@ -391,7 +480,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 	slices.Sort(sourceNames)
 
-	includeFiles := cmd.Bool("files")
+	includeFiles := cmd.Bool(nameFiles)
 	statuses := make([]ui.SourceStatus, 0, len(sourceNames))
 	for _, sourceName := range sourceNames {
 		sourceCfg := cfg.Sources[sourceName]
@@ -433,7 +522,7 @@ func listAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return ui.RenderSourceList(statuses, ui.ListOptions{
-		JSON:    jsonEnabled(cmd),
+		Format:  format,
 		Verbose: verboseEnabled(cmd),
 		Files:   includeFiles,
 	})
@@ -469,8 +558,23 @@ func countFiles(root string) (int, error) {
 	return count, nil
 }
 
-func initAction(_ context.Context, _ *cli.Command) error {
-	for _, configName := range []string{"dox.toml", ".dox.toml"} {
+func initAction(_ context.Context, cmd *cli.Command) error {
+	// An explicit --config/DOX_CONFIG names the file to create; otherwise the
+	// starter goes in the working directory unless a config already exists.
+	candidates, target := []string{"dox.toml", ".dox.toml"}, "dox.toml"
+	if configPath := cmd.String(flagConfig); configPath != "" {
+		candidates, target = []string{configPath}, configPath
+		if mkdirErr := os.MkdirAll(filepath.Dir(configPath), 0o750); mkdirErr != nil {
+			return errs.Wrap(
+				errs.Config,
+				fmt.Errorf("creating config directory: %w", mkdirErr),
+				errs.WithFields(
+					map[string]any{fieldPath: configPath, errs.LegacyCodeField: errs.LegacyConfigWriteError},
+				),
+			)
+		}
+	}
+	for _, configName := range candidates {
 		if _, err := os.Stat(configName); err == nil {
 			return errs.New(
 				errs.Config,
@@ -491,11 +595,11 @@ func initAction(_ context.Context, _ *cli.Command) error {
 		}
 	}
 
-	if err := os.WriteFile("dox.toml", []byte(initTemplate), 0o600); err != nil {
+	if err := os.WriteFile(target, []byte(initTemplate), 0o600); err != nil {
 		return errs.Wrap(
 			errs.Config,
 			fmt.Errorf("writing starter config: %w", err),
-			errs.WithFields(map[string]any{fieldPath: "dox.toml", errs.LegacyCodeField: errs.LegacyConfigWriteError}),
+			errs.WithFields(map[string]any{fieldPath: target, errs.LegacyCodeField: errs.LegacyConfigWriteError}),
 		)
 	}
 
@@ -617,7 +721,7 @@ func resolveConfigPath(configPath string) (string, error) {
 	return config.FindConfigFile()
 }
 
-func cleanAction(_ context.Context, cmd *cli.Command) error {
+func cleanAction(ctx context.Context, cmd *cli.Command) error {
 	cfg, err := loadCommandConfig(cmd, cmd.String(flagConfig))
 	if err != nil {
 		return err
@@ -634,6 +738,11 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 	if requireOwnedErr := config.RequireOwned(root); requireOwnedErr != nil {
 		return requireOwnedErr
 	}
+	runLock, lockErr := runlock.Acquire(ctx, root, cmd.Duration("lock-timeout"))
+	if lockErr != nil {
+		return lockErr
+	}
+	defer func() { _ = runLock.Release() }()
 	selected := commandArgs(cmd)
 	if len(selected) == 0 {
 		return config.CleanOutput(root)
@@ -674,10 +783,6 @@ func cleanAction(_ context.Context, cmd *cli.Command) error {
 		lock.RemoveEntry(selected[index])
 	}
 	return lock.SaveRoot(root)
-}
-
-func versionString() string {
-	return fmt.Sprintf("%s (commit %s, built %s)", version, commit, buildTime)
 }
 
 func loadCommandConfig(cmd *cli.Command, path string) (*config.Config, error) {

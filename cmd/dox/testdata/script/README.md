@@ -3,7 +3,12 @@
 Run with `go test ./cmd/dox -run TestScripts`. `testscript.Main` registers the
 real `main` as `dox`; no separate CLI build is needed. The initial scripts cover
 `--version` (the existing interface), `init` including duplicate-file failure,
-list JSON, and URL sync/readback against a local HTTP server.
+list JSON, and URL sync/readback against a local HTTP server. `cli-format`,
+`cli-config-root`, `cli-did-you-mean`, `doctor` and `completion` cover the shared
+output formats and limits, the root `--config`/`DOX_CONFIG`, collection and file
+suggestions, `dox doctor` and shell completion. `mcp` drives `dox mcp` with
+newline-delimited JSON-RPC from `stdin` (the server answers every request before
+exiting at end of input) and checks that stdout carries only protocol.
 
 Every script gets its own temporary working directory. Keep destructive command
 cases inside that directory. Tests use loopback HTTP and no external service.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/pelletier/go-toml/v2"
 
@@ -44,7 +45,7 @@ func renderSourceSection(sourceName string, sourceCfg config.Source) string {
 		fmt.Sprintf("type = %q", sourceCfg.Type),
 	}
 
-	if sourceCfg.Type == "github" {
+	if sourceCfg.Repo != "" {
 		lines = append(lines, fmt.Sprintf("repo = %q", sourceCfg.Repo))
 		if sourceCfg.Host != "" {
 			lines = append(lines, fmt.Sprintf("host = %q", sourceCfg.Host))
@@ -110,9 +111,7 @@ func replaceSourceSection(fileContent string, sourceName string, section string)
 		switch {
 		case trimmed == header && start == -1:
 			start = idx
-		case trimmed == header,
-			strings.HasPrefix(trimmed, "[sources."+sourceName+"."),
-			strings.HasPrefix(trimmed, "[[sources"):
+		case trimmed == header, splitsSourceSection(trimmed, sourceName):
 			return "", unrecognizedSectionError(sourceName, "it is split across several tables")
 		}
 	}
@@ -131,6 +130,28 @@ func replaceSourceSection(fileContent string, sourceName string, section string)
 	newLines = append(newLines, lines[lastKey+1:]...)
 
 	return strings.TrimRight(strings.Join(newLines, "\n"), "\n") + "\n", nil
+}
+
+// splitsSourceSection reports whether a trimmed line opens a table that would
+// extend sources.<name> or make sources an array of tables. TOML allows
+// whitespace and quotes around header keys, so `[ sources.x.0]`,
+// `[sources . x . a]` and `[sources."x".a]` all open a sub-table of x. Quotes
+// and whitespace are dropped before comparing; that can only make unlike keys
+// compare equal, which makes the caller refuse more, never less.
+func splitsSourceSection(trimmed, sourceName string) bool {
+	if !strings.HasPrefix(trimmed, "[") {
+		return false
+	}
+	key := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || r == '"' || r == '\'' {
+			return -1
+		}
+		return r
+	}, trimmed)
+	if rest, isArray := strings.CutPrefix(key, "[["); isArray {
+		return strings.HasPrefix(rest, "sources")
+	}
+	return strings.HasPrefix(key, "[sources."+sourceName+".")
 }
 
 // scanSimpleSection validates the body after the header at start and returns

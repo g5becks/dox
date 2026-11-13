@@ -38,6 +38,9 @@ func TestAuditCLI(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: "testdata/regression",
 		Setup: func(env *testscript.Env) error {
+			if err := isolateCoverDir(env); err != nil {
+				return err
+			}
 			env.Values[auditStateKey{}] = &auditState{ctx: t.Context(), env: append([]string(nil), env.Vars...)}
 			return nil
 		},

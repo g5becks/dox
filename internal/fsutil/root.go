@@ -71,6 +71,19 @@ type writerOnly struct{ io.Writer }
 // into place, so readers never observe a partial file and a failed or canceled
 // copy leaves the previous file untouched.
 func AtomicWriteReader(ctx context.Context, root *os.Root, path string, r io.Reader) error {
+	return AtomicWriteReaderVerified(ctx, root, path, r, nil)
+}
+
+// AtomicWriteReaderVerified is AtomicWriteReader with a check that runs after
+// the content is fully written and before it replaces path; a failing verify
+// leaves the previous file untouched.
+func AtomicWriteReaderVerified(
+	ctx context.Context,
+	root *os.Root,
+	path string,
+	r io.Reader,
+	verify func() error,
+) error {
 	if cancelErr := ctx.Err(); cancelErr != nil {
 		return cancelErr
 	}
@@ -103,6 +116,11 @@ func AtomicWriteReader(ctx context.Context, root *os.Root, path string, r io.Rea
 	}
 	if cancelErr := ctx.Err(); cancelErr != nil {
 		return cancelErr
+	}
+	if verify != nil {
+		if verifyErr := verify(); verifyErr != nil {
+			return verifyErr
+		}
 	}
 	return root.Rename(temporary, path)
 }

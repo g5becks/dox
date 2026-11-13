@@ -69,12 +69,24 @@ func (s *githubSource) resolveCommit(ctx context.Context) (string, string, error
 		return ref, s.resolvedCommit, nil
 	}
 
+	commit, err := s.provider.resolveCommit(ctx, ref)
+	if err != nil {
+		return "", "", err
+	}
+	s.resolvedRef, s.resolvedCommit = ref, commit
+	return ref, commit, nil
+}
+
+// resolveCommit resolves ref to a commit SHA with one API call (the sha media
+// type returns just the SHA).
+func (p *githubProvider) resolveCommit(ctx context.Context, ref string) (string, error) {
+	s := p.s
 	var body []byte
 	if err := s.doGitHubGet(ctx, githubRequestSpec{
 		endpoint:   fmt.Sprintf("/repos/%s/%s/commits/%s", s.owner, s.repo, neturl.PathEscape(ref)),
 		accept:     githubSHAMediaType,
 		raw:        &body,
-		errContext: "resolving ref",
+		errContext: errResolvingRef,
 		statusDesc: "commit " + ref,
 		statusHint: "Check that the repository exists and 'ref' names a branch, tag, or commit SHA",
 		legacyCode: errs.LegacyGithubAPIError,
@@ -84,12 +96,12 @@ func (s *githubSource) resolveCommit(ctx context.Context) (string, string, error
 			errs.LegacyCodeField: errs.LegacyGithubAPIError,
 		},
 	}); err != nil {
-		return "", "", err
+		return "", err
 	}
 
 	commit, ok := parseCommitSHA(body)
 	if !ok {
-		return "", "", errs.New(
+		return "", errs.New(
 			errs.Network,
 			fmt.Sprintf("github API returned no commit SHA for ref %q", ref),
 			errs.WithFields(map[string]any{
@@ -99,8 +111,7 @@ func (s *githubSource) resolveCommit(ctx context.Context) (string, string, error
 			}),
 		)
 	}
-	s.resolvedRef, s.resolvedCommit = ref, commit
-	return ref, commit, nil
+	return commit, nil
 }
 
 // parseCommitSHA accepts the plain-text vnd.github.sha body or a JSON commit.
@@ -225,14 +236,14 @@ func (s *githubSource) fetchRawFile(
 	commit, relativePath string,
 	file remoteFile,
 ) error {
-	target := fmt.Sprintf("%s/%s/%s/%s/%s",
-		strings.TrimRight(s.rawBase, "/"), s.owner, s.repo, commit, escapeRepoPath(file.repoPath))
 	fields := map[string]any{
 		fieldRepo:            s.source.Repo,
 		fieldPath:            file.repoPath,
 		errs.LegacyCodeField: errs.LegacyDownloadFailed,
 	}
-	response, err := s.getWithRetry(ctx, target)
+	response, err := s.getWithRetry(ctx, func(ctx context.Context) (*http.Request, error) {
+		return s.provider.rawRequest(ctx, commit, file.repoPath)
+	})
 	if err != nil {
 		return errs.Wrap(errs.Network, fmt.Errorf("downloading %s: %w", file.repoPath, err), errs.WithFields(fields))
 	}
@@ -259,17 +270,18 @@ func (s *githubSource) fetchRawFile(
 
 // getWithRetry sends a GET for non-API content (raw files, archives), retrying
 // network errors and 5xx before any body is consumed, like the API client.
-func (s *githubSource) getWithRetry(ctx context.Context, target string) (*http.Response, error) {
+func (s *githubSource) getWithRetry(
+	ctx context.Context,
+	build func(context.Context) (*http.Request, error),
+) (*http.Response, error) {
 	maxRetries := s.effectiveMaxRetries()
 	for attempt := 0; ; attempt++ {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		request, err := build(ctx)
 		if err != nil {
 			return nil, err
 		}
 		request.Header.Set("User-Agent", userAgent)
-		if s.token != "" {
-			request.Header.Set("Authorization", "Bearer "+s.token)
-		}
+		s.provider.authorize(request)
 		response, err := s.http.Do(request)
 		retryable := err != nil && !isContextTermination(ctx, err) ||
 			err == nil && response.StatusCode >= http.StatusInternalServerError
@@ -286,15 +298,6 @@ func (s *githubSource) getWithRetry(ctx context.Context, target string) (*http.R
 	}
 }
 
-func (s *githubSource) tarballURL(commit string) string {
-	if s.token != "" {
-		// Private repositories need the API endpoint, which redirects to a
-		// signed codeload URL (one REST call; the token is not forwarded).
-		return fmt.Sprintf("%s/repos/%s/%s/tarball/%s", strings.TrimRight(s.apiBase, "/"), s.owner, s.repo, commit)
-	}
-	return fmt.Sprintf("%s/%s/%s/tar.gz/%s", strings.TrimRight(s.codeloadBase, "/"), s.owner, s.repo, commit)
-}
-
 // extractTarball streams the commit archive and writes only the wanted files.
 // It returns the files the archive did not provide (nil when it failed before
 // reading any entry).
@@ -308,7 +311,9 @@ func (s *githubSource) extractTarball(
 	for relativePath, file := range toDownload {
 		wanted[file.repoPath] = relativePath
 	}
-	response, err := s.getWithRetry(ctx, s.tarballURL(commit))
+	response, err := s.getWithRetry(ctx, func(ctx context.Context) (*http.Request, error) {
+		return s.provider.archiveRequest(ctx, commit)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -378,13 +383,14 @@ func (b *budgetReader) Read(p []byte) (int, error) {
 // repository-relative paths. It requests the "<commit>:<path>" tree-ish, so
 // GitHub returns only that folder and its own tree SHA in one call, and walks
 // directory by directory when GitHub truncates the recursive listing.
-func (s *githubSource) fetchFolderTree(ctx context.Context, commit string) (*githubTreeResponse, error) {
+func (p *githubProvider) folderTree(ctx context.Context, commit string) (*githubTreeResponse, error) {
+	s := p.s
 	base := normalizeRepoPath(s.source.Path)
 	treeish := commit
 	if base != "" {
 		treeish = commit + ":" + base
 	}
-	tree, err := s.fetchTree(ctx, treeish, true)
+	tree, err := p.fetchTree(ctx, treeish, true)
 	if err != nil {
 		if status, ok := errors.AsType[*errs.HTTPStatusError](
 			err,
@@ -405,7 +411,7 @@ func (s *githubSource) fetchFolderTree(ctx context.Context, commit string) (*git
 		return nil, err
 	}
 	if tree.Truncated {
-		entries, walkErr := s.walkTree(ctx, tree.SHA, "")
+		entries, walkErr := p.walkTree(ctx, tree.SHA, "")
 		if walkErr != nil {
 			return nil, walkErr
 		}
@@ -420,8 +426,9 @@ func (s *githubSource) fetchFolderTree(ctx context.Context, commit string) (*git
 	return tree, nil
 }
 
-func (s *githubSource) walkTree(ctx context.Context, treeID, directory string) ([]githubTreeEntry, error) {
-	tree, err := s.fetchTree(ctx, treeID, false)
+func (p *githubProvider) walkTree(ctx context.Context, treeID, directory string) ([]githubTreeEntry, error) {
+	s := p.s
+	tree, err := p.fetchTree(ctx, treeID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -439,8 +446,8 @@ func (s *githubSource) walkTree(ctx context.Context, treeID, directory string) (
 		switch entry.Type {
 		case gitObjectBlob:
 			entries = append(entries, entry)
-		case "tree":
-			children, walkErr := s.walkTree(ctx, entry.SHA, entry.Path)
+		case gitObjectTree:
+			children, walkErr := p.walkTree(ctx, entry.SHA, entry.Path)
 			if walkErr != nil {
 				return nil, walkErr
 			}

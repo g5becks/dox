@@ -204,20 +204,28 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "gitlab source not supported yet",
+			name: "gitlab source accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
 						Type: "gitlab",
-						Repo: "owner/repo",
+						Repo: "group/subgroup/project",
 						Path: "docs",
 					},
 				},
 			},
-			wantErrContains: "not supported yet (planned for v0.5.0)",
 		},
 		{
-			name: "codeberg source not supported yet",
+			name: "subgroup path rejected for github",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "github", Repo: "group/subgroup/project", Path: "docs"},
+				},
+			},
+			wantErrContains: `invalid repo format "group/subgroup/project"`,
+		},
+		{
+			name: "codeberg alias accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {
@@ -227,7 +235,15 @@ func TestConfigValidate(t *testing.T) {
 					},
 				},
 			},
-			wantErrContains: "not supported yet (planned for v0.5.0)",
+		},
+		{
+			name: "gitea subgroup path rejected",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "gitea", Repo: "org/sub/repo", Path: "docs"},
+				},
+			},
+			wantErrContains: `invalid repo format "org/sub/repo"`,
 		},
 		{
 			name: "valid url source",
@@ -372,16 +388,23 @@ func TestConfigValidate(t *testing.T) {
 					"project": {Type: "git", Repo: "owner/repo", Path: "docs", Host: "git.company.com"},
 				},
 			},
-			wantErrContains: `source type "git" for source "project" is not supported yet`,
+			wantErrContains: `source type "git" (host "git.company.com") for source "project" is not supported yet`,
 		},
 		{
-			name: "non-github host not supported yet",
+			name: "github enterprise host accepted",
 			cfg: &config.Config{
 				Sources: map[string]config.Source{
 					"project": {Type: "github", Repo: "owner/repo", Path: "docs", Host: "github.mycorp.com"},
 				},
 			},
-			wantErrContains: `host "github.mycorp.com" for source "project" is not supported yet`,
+		},
+		{
+			name: "self-managed gitlab host accepted",
+			cfg: &config.Config{
+				Sources: map[string]config.Source{
+					"project": {Type: "gitlab", Repo: "owner/repo", Path: "docs", Host: "gitlab.example.com"},
+				},
+			},
 		},
 		{
 			name: "explicit github.com host accepted",

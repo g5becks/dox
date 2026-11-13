@@ -23,6 +23,8 @@ const (
 	Subtree         = "cccccccccccccccccccccccccccccccccccccccc"
 	DefaultLatency  = 50 * time.Millisecond
 	fieldSHA        = "sha"
+	fieldPath       = "path"
+	fieldType       = "type"
 	archiveFileMode = 0o644
 	apiPrefix       = "/api/repos/acme/docs"
 )
@@ -56,7 +58,7 @@ func New(tb testing.TB, count int) *Server {
 		sha := fmt.Sprintf("%040x", index+1)
 		f.files[name] = fmt.Appendf(nil, "# Page %d\n\nDocumentation fixture.\n", index)
 		f.blobs[sha] = name
-		f.entries = append(f.entries, map[string]string{"path": "docs/" + name, "type": "blob", fieldSHA: sha})
+		f.entries = append(f.entries, map[string]string{fieldPath: "docs/" + name, fieldType: "blob", fieldSHA: sha})
 	}
 	server := httptest.NewServer(f)
 	f.URL = server.URL
@@ -66,6 +68,11 @@ func New(tb testing.TB, count int) *Server {
 
 // ServeHTTP exposes the same fixture routes to configurable test wrappers.
 func (f *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// GitHub Enterprise Server serves the same REST API below /api/v3.
+	if rest, ok := strings.CutPrefix(r.URL.Path, "/api/v3/"); ok {
+		r = r.Clone(r.Context())
+		r.URL.Path = "/api/" + rest
+	}
 	active := f.active.Add(1)
 	defer f.active.Add(-1)
 	f.observeMax(active)
@@ -123,6 +130,8 @@ func (f *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]string{fieldSHA: Commit})
+	case strings.HasPrefix(resource, "/contents/docs/"):
+		f.serveContents(w, r, strings.TrimPrefix(resource, "/contents/docs/"))
 	case resource == "/tarball/"+Commit:
 		// The authenticated API redirects to a codeload archive URL.
 		http.Redirect(w, r, "/codeload/acme/docs/tar.gz/"+Commit, http.StatusFound)
@@ -148,6 +157,27 @@ func (f *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// serveContents answers the contents API for one file: raw bytes for the raw
+// media type, otherwise its JSON metadata.
+func (f *Server) serveContents(w http.ResponseWriter, r *http.Request, name string) {
+	data, ok := f.files[name]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Header.Get("Accept") == "application/vnd.github.raw" {
+		_, _ = w.Write(data) // A client may cancel while a response is being sent.
+		return
+	}
+	for sha, blobName := range f.blobs {
+		if blobName == name {
+			writeJSON(w, map[string]string{fieldType: "file", fieldSHA: sha, fieldPath: "docs/" + name})
+			return
+		}
+	}
+	http.NotFound(w, r)
+}
+
 func (f *Server) serveTree(w http.ResponseWriter, ref string) {
 	// "<commit>:docs" names the docs folder's tree, as on GitHub.
 	if ref == Commit+":docs" {
@@ -163,14 +193,14 @@ func (f *Server) serveTree(w http.ResponseWriter, ref string) {
 	for _, entry := range f.entries {
 		copyEntry := maps.Clone(entry)
 		if ref == Subtree {
-			copyEntry["path"] = strings.TrimPrefix(copyEntry["path"], "docs/")
+			copyEntry[fieldPath] = strings.TrimPrefix(copyEntry[fieldPath], "docs/")
 		}
 		entries = append(entries, copyEntry)
 	}
 	sha := Subtree
 	if ref != Subtree {
 		sha = Tree
-		entries = append(entries, map[string]string{"path": "docs", "type": "tree", fieldSHA: Subtree})
+		entries = append(entries, map[string]string{fieldPath: "docs", fieldType: "tree", fieldSHA: Subtree})
 	}
 	writeJSON(w, map[string]any{fieldSHA: sha, "truncated": false, "tree": entries})
 }

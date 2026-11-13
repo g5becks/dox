@@ -49,7 +49,7 @@ func TestTextParser_Parse(t *testing.T) {
 			name:      "empty file",
 			content:   "",
 			wantDesc:  "",
-			wantLines: 1,
+			wantLines: 0,
 		},
 		{
 			name:      "leading blank lines",
@@ -61,7 +61,7 @@ func TestTextParser_Parse(t *testing.T) {
 			name:      "only whitespace",
 			content:   "   \n\t\n  \n",
 			wantDesc:  "",
-			wantLines: 4,
+			wantLines: 3,
 		},
 		{
 			name:      "very long first line",

@@ -212,7 +212,7 @@ func buildMatcher(query string, useRegex bool) (matcher, error) {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
 			return nil, errs.Wrap(
-				errs.Internal,
+				errs.Usage,
 				fmt.Errorf("invalid regex pattern: %w", err),
 				errs.WithHint("Check regex syntax"),
 				errs.WithFields(map[string]any{"pattern": query, errs.LegacyCodeField: errs.LegacySearchError}),

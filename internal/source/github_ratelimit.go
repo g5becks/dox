@@ -29,9 +29,10 @@ const (
 type githubRequestSpec struct {
 	endpoint   string
 	query      map[string]string
-	accept     string  // defaults to githubJSONMediaType
-	result     any     // JSON destination for a 2xx response
-	raw        *[]byte // raw destination for a 2xx response (githubRawMediaType)
+	accept     string       // defaults to githubJSONMediaType
+	result     any          // JSON destination for a 2xx response
+	raw        *[]byte      // raw destination for a 2xx response (githubRawMediaType)
+	header     *http.Header // receives the 2xx response headers (pagination)
 	errContext string
 	statusDesc string
 	statusHint string
@@ -71,6 +72,9 @@ func (s *githubSource) doGitHubGet(ctx context.Context, spec githubRequestSpec) 
 		if respErr != nil {
 			return respErr
 		}
+		if spec.header != nil {
+			*spec.header = response.header
+		}
 		return s.decodeGitHubBody(spec, response)
 	}
 }
@@ -100,16 +104,8 @@ func (s *githubSource) sendGitHubRequest(ctx context.Context, spec githubRequest
 	if err != nil {
 		return nil, err
 	}
-	accept := spec.accept
-	if accept == "" {
-		accept = githubJSONMediaType
-	}
-	request.Header.Set("Accept", accept)
 	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("X-Github-Api-Version", githubAPIVersion)
-	if s.token != "" {
-		request.Header.Set("Authorization", "Bearer "+s.token)
-	}
+	s.provider.decorateAPI(request, spec.accept)
 	response, err := s.http.Do(request)
 	if err != nil {
 		return nil, err
@@ -227,15 +223,15 @@ func (s *githubSource) retryDelayForResponse(attempt int, header http.Header, no
 }
 
 func (s *githubSource) newRateLimitError(header http.Header, resetTime time.Time) error {
-	resetLabel := strings.TrimSpace(header.Get("X-Ratelimit-Reset"))
+	resetLabel := rateLimitHeader(header, "Reset")
 	if resetLabel == "" && !resetTime.IsZero() {
 		resetLabel = strconv.FormatInt(resetTime.Unix(), 10)
 	}
 	return errs.New(
 		errs.RateLimited,
-		"github API rate limit exhausted",
+		s.provider.apiName()+" API rate limit exhausted",
 		errs.WithCause(&errs.RateLimitError{Reset: resetTime}),
-		errs.WithHint("Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits"),
+		errs.WithHint(s.provider.tokenHint()),
 		errs.WithFields(
 			map[string]any{
 				fieldRepo:            s.source.Repo,
@@ -261,13 +257,13 @@ func (s *githubSource) newStatusError(status int, spec githubRequestSpec) error 
 	}
 	return errs.New(
 		errs.Network,
-		fmt.Sprintf("github API returned status %d for %s", status, spec.statusDesc),
+		fmt.Sprintf("%s API returned status %d for %s", s.provider.apiName(), status, spec.statusDesc),
 		opts...,
 	)
 }
 
 func (s *githubSource) observeQuotaHeader(header http.Header) {
-	remainingRaw := strings.TrimSpace(header.Get("X-Ratelimit-Remaining"))
+	remainingRaw := rateLimitHeader(header, "Remaining")
 	if remainingRaw == "" {
 		return
 	}
@@ -279,8 +275,10 @@ func (s *githubSource) observeQuotaHeader(header http.Header) {
 		if s.onWarning != nil {
 			s.onWarning(
 				fmt.Sprintf(
-					"GitHub API rate limit low (%d remaining); Set github_token, GITHUB_TOKEN, or GH_TOKEN to increase limits",
+					"%s API rate limit low (%d remaining); %s",
+					s.provider.apiName(),
 					remaining,
+					s.provider.tokenHint(),
 				),
 			)
 		}
@@ -293,13 +291,22 @@ func isRateLimitedResponse(response *githubResponse) bool {
 		return false
 	}
 	header := response.header
-	if strings.TrimSpace(header.Get("X-Ratelimit-Remaining")) == "0" {
+	if rateLimitHeader(header, "Remaining") == "0" {
 		return true
 	}
 	if strings.TrimSpace(header.Get("Retry-After")) != "" {
 		return true
 	}
-	return status == http.StatusTooManyRequests && strings.TrimSpace(header.Get("X-Ratelimit-Reset")) != ""
+	return status == http.StatusTooManyRequests && rateLimitHeader(header, "Reset") != ""
+}
+
+// rateLimitHeader reads a quota header in GitHub (X-RateLimit-*) or GitLab /
+// IETF draft (RateLimit-*) spelling.
+func rateLimitHeader(header http.Header, field string) string {
+	if value := strings.TrimSpace(header.Get("X-Ratelimit-" + field)); value != "" {
+		return value
+	}
+	return strings.TrimSpace(header.Get("Ratelimit-" + field))
 }
 
 func parseRateLimitReset(header http.Header, now time.Time) (time.Time, time.Duration, bool) {
@@ -313,7 +320,7 @@ func parseRateLimitReset(header http.Header, now time.Time) (time.Time, time.Dur
 		hasWait = true
 	}
 
-	if resetRaw := strings.TrimSpace(header.Get("X-Ratelimit-Reset")); resetRaw != "" {
+	if resetRaw := rateLimitHeader(header, "Reset"); resetRaw != "" {
 		if unixSec, err := strconv.ParseInt(resetRaw, 10, 64); err == nil {
 			headerReset := time.Unix(unixSec, 0).UTC()
 			if resetTime.IsZero() {

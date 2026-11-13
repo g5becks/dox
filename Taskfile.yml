@@ -49,6 +49,11 @@ tasks:
       - go test -v -race -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
 
+  fuzz:
+    desc: Run every fuzz target (long run; set FUZZTIME, default 5m per target)
+    cmds:
+      - bash scripts/fuzz.sh {{.FUZZTIME | default "5m"}}
+
   lint:
     desc: Run linters
     cmds:

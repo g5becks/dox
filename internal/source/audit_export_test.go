@@ -10,8 +10,12 @@ import (
 
 // IsGitHubSource identifies the backend without making any request.
 func IsGitHubSource(src Source) bool {
-	_, ok := src.(*githubSource)
-	return ok
+	repoSource, ok := src.(*githubSource)
+	if !ok {
+		return false
+	}
+	_, gitHub := repoSource.provider.(*githubProvider)
+	return gitHub
 }
 
 // SetAuditGitHubEndpoint confines audit repros to their local server.
@@ -72,4 +76,14 @@ func SetGitHubToken(src Source, token string) {
 // SetGitHubTarballByteBudget overrides the archive byte budget (0 restores the default).
 func SetGitHubTarballByteBudget(src Source, budget int64) {
 	src.(*githubSource).tarballByteBudget = budget
+}
+
+// SetGitHubEnterprise points src at a GitHub Enterprise-style server: the API
+// lives below <server>/api/v3, and raw/codeload hosts must not be used.
+func SetGitHubEnterprise(src Source, serverURL string) {
+	github := src.(*githubSource)
+	github.apiBase = serverURL + "/api/v3"
+	github.rawBase = "http://raw.invalid"
+	github.codeloadBase = "http://codeload.invalid"
+	github.provider = &githubProvider{s: github, enterprise: true}
 }
