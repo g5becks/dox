@@ -15,6 +15,16 @@ import (
 //nolint:gochecknoglobals // Test-only exports
 var IsSingleFilePath = isSingleFilePath
 
+// NormalizeRepoPath exports normalizeRepoPath for testing.
+//
+//nolint:gochecknoglobals // Test-only exports
+var NormalizeRepoPath = normalizeRepoPath
+
+// ShouldIncludeFile exports shouldIncludeFile for testing.
+//
+//nolint:gochecknoglobals // Test-only exports
+var ShouldIncludeFile = shouldIncludeFile
+
 // FilenameFromURL exports filenameFromURL for testing.
 //
 //nolint:gochecknoglobals // Test-only exports

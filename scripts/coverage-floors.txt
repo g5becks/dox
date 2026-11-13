@@ -1,0 +1,39 @@
+# Per-package statement coverage floors, enforced by scripts/coverage-floors.sh
+# in scripts/ci-check.sh (and therefore ci.yml and ci-local).
+#
+# Format: <package relative to the module root> <minimum percent>
+#
+# The three packages named by dox-4e1.9 use the thresholds from that issue
+# (cmd/dox 70, internal/sync 80, internal/source 85). Every other package is
+# held at the integer floor of its coverage when the floors were introduced
+# (v0.5.0), measured identically on macOS/Go 1.27 and Linux/Go 1.26, so
+# coverage can only go up. The integer rounding leaves under one point of
+# headroom for timing-dependent branches. Raise a floor whenever a package's
+# coverage improves for good; lower one only with a reason in the commit.
+#
+# Packages without tests (shared fixtures and generators) are listed at 0 so a
+# new package must make an explicit choice.
+cmd/dox 70
+dox 90
+internal/benchdata 0
+internal/config 80
+internal/errs 100
+internal/fsutil 47
+internal/httpx 94
+internal/lockfile 76
+internal/lookup 98
+internal/manifest 80
+internal/mcpserver 95
+internal/parser 95
+internal/parser/outline 0
+internal/runlock 83
+internal/search 89
+internal/source 85
+internal/sync 80
+internal/testutil/fakegitea 0
+internal/testutil/fakegithub 82
+internal/testutil/fakegitlab 0
+internal/testutil/githubfixture 0
+internal/testutil/jsongolden 100
+internal/testutil/regression 18
+internal/ui 52

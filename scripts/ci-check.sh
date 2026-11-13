@@ -36,6 +36,14 @@ project_go build ./...
 project_go vet ./...
 CGO_ENABLED=0 tool golangci-lint run
 project_go test -race -coverprofile=coverage.out ./...
+# Coverage floors and the short fuzz run are verified on Linux and macOS only:
+# Windows has platform-specific files and skipped tests, and cannot be measured
+# locally. Native Windows runs keep the full race test suite above.
+if [[ "$(project_go env GOOS)" != windows ]]; then
+  bash scripts/test-coverage-floors.sh
+  bash scripts/coverage-floors.sh coverage.out
+  bash scripts/fuzz.sh 10s
+fi
 tool govulncheck -show verbose ./...
 if ! fix_diff=$(project_go fix -diff ./... 2>&1); then
   printf '%s\n' "$fix_diff"

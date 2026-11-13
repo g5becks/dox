@@ -67,7 +67,7 @@ produce no diff. Run tidy from each module's own directory: a root-level
 `-modfile` invocation scans root packages, not the tools module's packages.
 
 Task targets include `build`, `dev`, `test` (race tests with coverage),
-`test:coverage`, `lint`, `lint:fix`, `fmt`, `deps`, `deps:tidy`, and `all`.
+`test:coverage`, `fuzz`, `lint`, `lint:fix`, `fmt`, `deps`, `deps:tidy`, and `all`.
 List them with `go tool -modfile=tools/go.mod task --list`. To apply supported
 lint fixes, run `go tool -modfile=tools/go.mod task lint:fix`, then review the diff.
 Fix remaining findings by refactoring; do not lower lint thresholds or disable
@@ -112,6 +112,42 @@ status, rate-limit, Retry-After, latency, cancellation, and truncation behavior.
 From the regression-harness issue onward, register and first demonstrate each
 regression failing before fixing it. Keep all cases; never weaken assertions or
 add known failures just to pass the suite.
+
+### Coverage floors
+
+`scripts/ci-check.sh` (GitHub and ci-local) runs `scripts/coverage-floors.sh`
+on the race-test cover profile and fails when a package drops below its floor in
+`scripts/coverage-floors.txt`. The check is strict in both directions: a new
+package must register a floor (0 is allowed for untested helpers), and a floor
+for a removed or renamed package must be deleted. `cmd/dox`, `internal/sync`
+and `internal/source` use the thresholds set by dox-4e1.9 (70, 80, 85); every
+other package sits at the integer floor of its coverage at v0.5.0. Raise a floor
+when coverage improves for good; lower one only with a reason in the commit.
+Floors are checked on Linux and macOS only, because Windows has platform-specific
+files and skipped tests and cannot be measured locally. Inspect a profile with:
+
+```sh
+go test -race -coverprofile=coverage.out ./... && bash scripts/coverage-floors.sh coverage.out
+```
+
+### Fuzzing
+
+Fuzz targets cover the outline scanner, config loading and path validation,
+include/exclude globs, `normalizeRepoPath`, and TOML source-section replacement.
+Their seed corpora run as ordinary tests in `go test ./...`. CI also fuzzes each
+target for 10 seconds (`scripts/fuzz.sh 10s`, Linux and macOS). For a long local
+run use `go tool -modfile=tools/go.mod task fuzz` (5 minutes per target) or
+`task fuzz FUZZTIME=30m`. `scripts/fuzz.sh` registers targets explicitly and
+fails if a `Fuzz*` function is not listed, so add new targets there. A failing
+input is saved under `testdata/fuzz/`; commit it as a regression seed with the
+fix.
+
+### Concurrency
+
+`internal/sync` runs more sources than workers under `-race` and asserts that
+the lock, the files on disk and the result counters agree
+(`TestParallelSyncKeepsEveryLockEntry`). Keep new shared state in `sync.Run`
+covered by that test.
 
 Parser, manifest, and search benchmarks are alongside their packages. The
 pinned corpus, `DOX_BENCH_CORPUS`, and v0.3.0 baseline are documented in
