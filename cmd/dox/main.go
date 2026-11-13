@@ -330,10 +330,13 @@ func newAddCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    fieldType,
 				Aliases: []string{"t"},
-				Usage:   "Source type: github or url (default: inferred from --repo or --url)",
+				Usage:   "Source type: github, gitlab, gitea (alias codeberg) or url (default: inferred from --repo, --host or --url)",
 			},
 			&cli.StringFlag{Name: "repo", Aliases: []string{"r"}, Usage: "Repository in owner/repo format"},
-			&cli.StringFlag{Name: "host", Usage: "Git host (only github.com is supported until v0.5.0)"},
+			&cli.StringFlag{
+				Name:  "host",
+				Usage: "Git host, for example gitlab.com, codeberg.org or a GitHub Enterprise host (default: github.com)",
+			},
 			&cli.StringFlag{Name: fieldPath, Aliases: []string{"p"}, Usage: "Path within repository"},
 			&cli.StringFlag{Name: "ref", Aliases: []string{"R"}, Usage: "Branch, tag, or commit SHA"},
 			&cli.StringSliceFlag{Name: "patterns", Usage: "Include glob pattern (repeatable)"},

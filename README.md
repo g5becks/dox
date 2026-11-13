@@ -228,8 +228,9 @@ dox add my-lib -r owner/repo -p docs -R v1.2.3
 dox add goreleaser --repo goreleaser/goreleaser --path www/docs --force
 ```
 
-`--type` is optional (inferred from `--repo` or `--url`). `--host` accepts only
-`github.com` until other providers land in v0.5.0. Source names may contain
+`--type` is optional (inferred from `--repo`, `--host` or `--url`). `--host`
+selects another provider, for example `--host gitlab.com`, `--host codeberg.org`
+or a GitHub Enterprise host (see [Git Sources](#git-sources)). Source names may contain
 letters, digits, `-` and `_`. `dox add` writes the config atomically and keeps its
 file permissions. `--force` only rewrites a section in the simple form `dox add`
 itself produces (single-line `key = value` pairs, no comments inside). Otherwise it
@@ -751,6 +752,36 @@ excludes = [
   `GITEA_TOKEN`.
   A token is needed for private repositories and for many GitHub sources per hour.
 - Parallelism uses an explicit `--parallel` value first, then config `max_parallel`, then `min(max(4 × CPU cores, 10), 16)`. An omitted flag (or `--parallel 0`) uses the fallback; explicit positive flag/config values can exceed 16. Pass `--parallel 3` to keep the previous accidental limit.
+
+## Upgrading to v0.5.0
+
+v0.5.0 adds GitHub Enterprise, GitLab and Gitea/Forgejo/Codeberg sources,
+`dox sync --check`/`--locked`, `dox doctor`, `dox completion`, a Go API and
+`dox mcp`. These changes may need action:
+
+- **`--config`**: `-c`/`--config` is a root flag, accepted before or after the
+  command, and `DOX_CONFIG` sets it from the environment (the flag wins).
+  `dox init -c path` creates the file there. Nothing to change; drop any
+  per-command workarounds.
+- **`files --all`**: deprecated; it warns, behaves as `--limit 0`, and is
+  removed in v0.6.0. Replace `--all` with `--limit 0`. Every list-style command
+  uses `--limit N`, where `0` means no limit.
+- **`display.format`**: now applies to `collections`, `files`, `cat`, `outline`
+  and `search`. If your config sets `format = "json"` or `"csv"`, those
+  commands now print that by default; set `format = "table"` to keep table
+  output, or pass `--format`.
+- **Strict config**: unknown keys and wrongly typed values are errors (exit 2)
+  naming the key and line. Run `dox list` once, fix or remove each reported
+  key (for example a misspelled `max_paralel`), and quote string values.
+- **Invalid `--regex`**: `dox search --content --regex` with a pattern that does
+  not compile exits 2 instead of 1. Scripts that checked for 1 should check
+  for 2; exit 1 now means a runtime failure only.
+- **`lines` counts**: files ending in a newline report one line fewer in
+  `manifest.json`, `dox files`, `dox cat --json` and `dox.File.Lines`, and empty
+  files report 0. Run `dox sync` once to regenerate manifests (nothing is
+  re-downloaded), and update anything that compared `lines` to stored values.
+- **Locks**: locks written before v0.5.0 need one plain `dox sync` before
+  `dox sync --locked` can use them.
 
 ## Upgrading to v0.4.0
 

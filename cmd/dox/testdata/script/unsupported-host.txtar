@@ -12,7 +12,7 @@ dox list --config gitlab-type.toml
 stdout 'docs'
 
 doxexit 2 sync --config unknown-host.toml
-stderr 'source type "git" \(host "git.mycorp.com"\) for source "docs" is not supported yet \(planned for v0.5.0\)'
+stderr 'source type "git" \(host "git.mycorp.com"\) for source "docs" is not supported yet$'
 stderr '^hint: Set type to github \(github.com or Enterprise\), gitlab or gitea'
 
 doxexit 2 list --config unknown-host.toml

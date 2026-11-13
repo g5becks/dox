@@ -51,6 +51,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 - `dox add --force` now refuses a source whose sub-table header is written with whitespace or quotes (`[ sources.x.extra]`, `[sources . x . extra]`, `[sources."x".extra]`, `[[ sources.x.items ]]`), as it already refused the plain `[sources.x.extra]` form. Before, those sub-tables silently survived after the rewritten section and merged into it. The refusal asks you to edit the file by hand, so no settings are lost. Found by the fuzz step added to CI in this release.
 
+- The error for an unsupported provider (`type = "git"`, or an unknown host without a `type`) no longer says "planned for v0.5.0", and `dox add --help` no longer says `--host` accepts only github.com; `--type` lists `gitlab` and `gitea`.
+
 ## [0.4.0] - 2026-11-12
 
 ### Changed

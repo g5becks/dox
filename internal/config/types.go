@@ -484,8 +484,8 @@ func validateSource(v *validator.Validate, sourceName string, sourceCfg Source) 
 }
 
 // validateSupportedProvider rejects git hosting providers that dox cannot
-// sync yet. Before v0.5.0 every repo source is fetched from api.github.com,
-// so accepting another host would query (or sync) the wrong repository.
+// sync: an unknown host without an explicit type would otherwise be guessed,
+// and querying the wrong provider could sync an unrelated repository.
 func validateSupportedProvider(sourceName string, sourceCfg Source) error {
 	// Only the generic "git" type (an unknown host) has no provider: github,
 	// gitlab and gitea sources, including self-hosted ones, are supported.
@@ -504,7 +504,7 @@ func unsupportedProviderError(sourceName, what string, fields map[string]any) er
 	fields[errs.LegacyCodeField] = errs.LegacyConfigInvalid
 	return errs.New(
 		errs.Config,
-		fmt.Sprintf("%s for source %q is not supported yet (planned for v0.5.0)", what, sourceName),
+		fmt.Sprintf("%s for source %q is not supported yet", what, sourceName),
 		errs.WithHint(
 			"Set type to github (github.com or Enterprise), gitlab or gitea (Gitea, Forgejo, Codeberg) "+
 				"for this host, or use a 'url' source",
