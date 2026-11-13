@@ -47,6 +47,10 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 - CI enforces per-package coverage floors (`scripts/coverage-floors.txt`; `cmd/dox` 70, `internal/sync` 80, `internal/source` 85, every other package at its v0.5.0 level) and fuzzes every target for 10 seconds on Linux and macOS. `task fuzz` runs the long local fuzz, and new fuzz targets cover include/exclude globs and `normalizeRepoPath`. A race test syncs 24 sources through 8 workers and checks the lock against the files on disk. Development tooling only; no CLI change.
 
+### Fixed
+
+- `dox add --force` now refuses a source whose sub-table header is written with whitespace or quotes (`[ sources.x.extra]`, `[sources . x . extra]`, `[sources."x".extra]`, `[[ sources.x.items ]]`), as it already refused the plain `[sources.x.extra]` form. Before, those sub-tables silently survived after the rewritten section and merged into it. The refusal asks you to edit the file by hand, so no settings are lost. Found by the fuzz step added to CI in this release.
+
 ## [0.4.0] - 2026-11-12
 
 ### Changed

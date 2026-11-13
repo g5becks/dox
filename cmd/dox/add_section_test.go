@@ -54,6 +54,20 @@ url = "https://example.com/llms.txt"
 	}
 }
 
+func TestReplaceSourceSectionKeepsSimilarlyNamedSources(t *testing.T) {
+	t.Parallel()
+	input := "[sources.x]\nrepo = \"old/repo\"\n\n[ sources.xy ]\nrepo = \"a/b\"\n\n[sources.xy.extra]\nk = \"v\"\n"
+	want := "[sources.x]\ntype = \"github\"\nrepo = \"new/repo\"\npath = \"docs\"\n\n" +
+		"[ sources.xy ]\nrepo = \"a/b\"\n\n[sources.xy.extra]\nk = \"v\"\n"
+	got, err := replaceSourceSection(input, "x", replacementSection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("replaceSourceSection() =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestReplaceSourceSectionRefusesUnrecognizedShapes(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
@@ -64,6 +78,11 @@ func TestReplaceSourceSectionRefusesUnrecognizedShapes(t *testing.T) {
 		"dotted key":         "[sources.x]\nrepo = \"a/b\"\nmeta.note = \"n\"\n",
 		"unknown key":        "[sources.x]\nrepo = \"a/b\"\nmirror = \"m\"\n",
 		"sub-table":          "[sources.x]\nrepo = \"a/b\"\n[sources.x.extra]\nk = \"v\"\n",
+		"padded sub-table":   "[sources.x]\n[ sources.x.0]\n",
+		"spaced sub-table":   "[sources.x]\nrepo = \"a/b\"\n[sources . x . extra]\nk = \"v\"\n",
+		"quoted sub-table":   "[sources.x]\nrepo = \"a/b\"\n[sources.\"x\".extra]\nk = \"v\"\n",
+		"literal sub-table":  "[sources.x]\nrepo = \"a/b\"\n[sources.'x'.extra]\nk = \"v\"\n",
+		"padded array":       "[sources.x]\nrepo = \"a/b\"\n[[ sources.x.items ]]\nk = \"v\"\n",
 		"non-string value":   "[sources.x]\nrepo = \"a/b\"\nout = 5\n",
 		"quoted header":      "[sources.\"x\"]\nrepo = \"a/b\"\n",
 		"multi-line string":  "[sources.x]\nrepo = \"\"\"\na/b\"\"\"\n",
