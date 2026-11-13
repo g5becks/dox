@@ -5,6 +5,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
 ### Changed
 
 - The `--config` (`-c`) flag is now declared once, on the root command, instead of on each command. It is still accepted before or after the subcommand, so `dox files docs -c dox.toml` keeps working, and `DOX_CONFIG` sets it from the environment (the flag wins). `init` now honors it and creates the file at that path. **Migration:** none for scripts; remove per-command `--config` workarounds if you like.
