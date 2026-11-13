@@ -15,6 +15,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 - Config files are decoded strictly. Value types must match (`repo = 5` now reports `invalid config at "sources.docs.repo" (line 4) … (a string)` instead of a misleading validation error). **Unknown keys are now errors** listing each key and line (for example a misspelled `max_paralel`), where before they were silently ignored. Syntax errors name their line. All of these exit with code 2. Koanf and its dependencies (copystructure, reflectwalk, mapstructure, fsnotify) are removed in favor of go-toml directly. **Migration:** run `dox list` once; fix or remove any key it reports as unknown, and quote string values.
 
+- `dox search --content --regex` with a pattern that does not compile now exits **2** (usage, with the hint `Check regex syntax`) instead of 1, matching every other bad argument and the exit code the Go API and `dox mcp` already report. **Migration:** scripts that branched on exit 1 for an invalid pattern should branch on 2; exit 1 now means only a runtime failure.
+
 ### Added
 
 - `--format table|json|jsonl|csv` on `list`, `collections`, `files`, `cat`, `outline` and `search`; `--json` stays an alias for `--format json`. JSON Lines writes one object per item and CSV a header plus one row per item (`cat` emits `line,text`, `outline` emits `kind,line,level,type,text`). `dox doctor` takes the same flags.

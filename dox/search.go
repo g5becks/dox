@@ -3,7 +3,6 @@ package dox
 import (
 	"context"
 	"iter"
-	"regexp"
 	"strings"
 
 	"github.com/g5becks/dox/internal/lookup"
@@ -132,11 +131,6 @@ func validateQuery(query Query) error {
 		return usageError("search limit must not be negative", "Use Limit 0 for all results")
 	case query.Regex && !query.Content:
 		return usageError("regex search requires content search", "Set Query.Content when Query.Regex is set")
-	case query.Regex:
-		// The search package compiles the same case-insensitive pattern.
-		if _, err := regexp.Compile("(?i)" + query.Text); err != nil {
-			return usageError("invalid regex pattern: "+err.Error(), "Check regex syntax")
-		}
 	}
 	return nil
 }

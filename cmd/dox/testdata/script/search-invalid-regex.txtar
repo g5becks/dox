@@ -1,0 +1,28 @@
+# An invalid --regex pattern is a usage error (exit 2) with a hint, like every
+# other bad argument, not a runtime failure (dox-4e1.13).
+httpservedir site
+envsubst config.in dox.toml
+dox sync
+
+doxexit 2 search '(' --content --regex
+stderr 'invalid regex pattern'
+stderr '^hint: Check regex syntax$'
+! stdout .
+
+doxexit 2 --json search '[invalid' --content --regex
+stderr '"code": *"usage"'
+
+# A valid pattern still searches.
+dox search 'nee+dle' --content --regex
+stdout 'guide'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.md"
+filename = "guide.md"
+-- site/guide.md --
+# Heading
+
+needle

@@ -376,7 +376,7 @@ dox search "func.*Logger" --content --regex  # Regex
 dox search "import" --content --limit 20
 ```
 
-Content search skips binary files and files over 50MB. Regex requires `--content`.
+Content search skips binary files and files over 50MB. Regex requires `--content`, and an invalid pattern exits with code 2.
 
 **Typical agent workflow:**
 
