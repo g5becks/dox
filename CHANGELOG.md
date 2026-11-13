@@ -17,6 +17,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 - `dox search --content --regex` with a pattern that does not compile now exits **2** (usage, with the hint `Check regex syntax`) instead of 1, matching every other bad argument and the exit code the Go API and `dox mcp` already report. **Migration:** scripts that branched on exit 1 for an invalid pattern should branch on 2; exit 1 now means only a runtime failure.
 
+- The `lines` value in `manifest.json`, `dox files`, `dox cat --json` and `dox.File.Lines` now counts lines the way `cat` addresses them: a file that ends with a newline is no longer counted one line too many (a file of 11 lines was reported as 12), and an empty file has 0 lines instead of 1. Files without a trailing newline are unchanged, and the Go API's `Content.TotalLines` and the `dox mcp` `cat` tool already reported this count, so all surfaces now agree. The manifest parser revision moves from 2 to 3, so the next `dox sync` regenerates existing manifests locally, without re-downloading anything; until then `files` and `cat --json` keep showing the old values. **Migration:** anything that compared `lines` to a stored value or used it as an upper bound plus one should expect values lower by one for files ending in a newline; `dox sync` once refreshes the manifest.
+
 ### Added
 
 - `--format table|json|jsonl|csv` on `list`, `collections`, `files`, `cat`, `outline` and `search`; `--json` stays an alias for `--format json`. JSON Lines writes one object per item and CSV a header plus one row per item (`cat` emits `line,text`, `outline` emits `kind,line,level,type,text`). `dox doctor` takes the same flags.

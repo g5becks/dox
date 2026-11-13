@@ -33,8 +33,8 @@ type File struct {
 	Type        string // file type, such as "markdown" or "typescript"
 	Description string
 	Size        int64 // bytes
-	// Lines is the count recorded at sync time. It counts the empty line after
-	// a final newline; Content.TotalLines excludes it.
+	// Lines is the count recorded at sync time. It matches Content.TotalLines:
+	// a final newline ends the last line, so an empty file has none.
 	Lines    int
 	Modified time.Time
 	Warning  string // set when the file was synced with a problem

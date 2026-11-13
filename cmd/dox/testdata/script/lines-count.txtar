@@ -1,0 +1,57 @@
+# The manifest `lines`, `files`, `cat --json` and what cat can address agree:
+# a final newline ends the last line instead of adding a phantom one (dox-4e1.12).
+httpservedir site
+envsubst config.in dox.toml
+dox sync
+
+# guide.md ends with a newline and has four lines.
+dox files docs --json
+stdout '"lines": 4'
+! stdout '"lines": 5'
+dox cat docs guide.md --json
+stdout '"lines": 4'
+dox cat docs guide.md --line 4 --limit 1 --no-line-numbers
+stdout '^outro$'
+dox cat docs guide.md --line 5 --no-line-numbers
+! stdout .
+
+# The same holds for every output format and the other file types.
+dox files docs --format csv --fields path,lines
+stdout '^guide.md,4$'
+dox files notes --format csv --fields path,lines
+stdout '^list.txt,2$'
+dox cat notes list.txt --json
+stdout '"lines": 2'
+
+# A manifest written by v0.4.0 (parser revision 2) counted the phantom line.
+# Reading it leaves it alone; the next sync regenerates it without re-downloading.
+cp stale-manifest.json .dox/manifest.json
+dox files docs --json
+stdout '"lines": 5'
+dox sync
+dox files docs --json
+stdout '"lines": 4'
+! stdout 'stale'
+dox files notes --json
+stdout '"lines": 2'
+
+-- stale-manifest.json --
+{"parser_version":2,"version":"1.0.0","generated":"2026-01-01T00:00:00Z","collections":{"docs":{"name":"docs","dir":"docs","type":"url","source":"x","last_sync":"2026-01-01T00:00:00Z","file_count":1,"total_size":24,"files":[{"path":"guide.md","type":"md","size":24,"lines":5,"modified":"2026-01-01T00:00:00Z","description":"stale"}]}}}
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.md"
+filename = "guide.md"
+[sources.notes]
+type = "url"
+url = "$SERVER/list.txt"
+filename = "list.txt"
+-- site/guide.md --
+# Heading
+
+needle
+outro
+-- site/list.txt --
+first
+second

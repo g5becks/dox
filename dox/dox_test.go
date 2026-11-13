@@ -141,10 +141,18 @@ func TestCollectionsAndFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Files() error = %v", err)
 	}
-	// The manifest counts the empty line after the final newline.
+	// The manifest counts lines the way Cat addresses them, so File.Lines and
+	// Content.TotalLines agree.
 	if len(files) != 1 || files[0].Path != "guide.md" || files[0].Type != "md" ||
-		files[0].Lines != 12 || files[0].Size != int64(len(guideMarkdown)) {
-		t.Errorf("Files() = %+v, want guide.md, type md, 12 manifest lines, %d bytes", files, len(guideMarkdown))
+		files[0].Lines != 11 || files[0].Size != int64(len(guideMarkdown)) {
+		t.Fatalf("Files() = %+v, want guide.md, type md, 11 lines, %d bytes", files, len(guideMarkdown))
+	}
+	content, err := project.Cat(t.Context(), "guide", "guide.md", dox.Range{})
+	if err != nil {
+		t.Fatalf("Cat() error = %v", err)
+	}
+	if content.TotalLines != files[0].Lines {
+		t.Errorf("Cat() TotalLines = %d, File.Lines = %d; want them equal", content.TotalLines, files[0].Lines)
 	}
 }
 

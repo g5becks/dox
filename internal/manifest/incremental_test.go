@@ -275,6 +275,74 @@ func TestManifestDeadlinePreservesPrevious(t *testing.T) {
 	}
 }
 
+func TestManifestLinesMatchCat(t *testing.T) {
+	t.Parallel()
+	cfg, output := setupIncremental(t)
+	dir := filepath.Join(output, "sample")
+	// Each file ends the way cat addresses it: a final newline ends the last
+	// line and does not start another.
+	files := map[string]string{
+		"guide.md":   "# Original\n\nBody.\n",
+		"tail.txt":   "one\ntwo",
+		"notes.txt":  "one\ntwo\n",
+		"empty.txt":  "",
+		"data.csv":   "a,b\n1,2\n",
+		"bare.csv":   "a,b\n1,2",
+		"module.ts":  "export const a = 1\n",
+		"page.mdx":   "# Page\n\nText\n",
+		"blank.html": "\n",
+	}
+	want := map[string]int{
+		"guide.md": 3, "tail.txt": 2, "notes.txt": 2, "empty.txt": 0, "data.csv": 2,
+		"bare.csv": 2, "module.ts": 1, "page.mdx": 3, "blank.html": 1,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := manifest.Generate(t.Context(), cfg, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertManifestLines(t, output, want)
+
+	// v0.4.0 wrote parser revision 2 and counted the phantom line; such a
+	// manifest must be regenerated rather than reused.
+	stale, err := manifest.Load(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const v040ParserVersion = 2
+	stale.ParserVersion = v040ParserVersion
+	for index := range stale.Collections["sample"].Files {
+		stale.Collections["sample"].Files[index].Lines++
+	}
+	if saveErr := stale.Save(output); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	if generateErr := manifest.Generate(t.Context(), cfg, nil); generateErr != nil {
+		t.Fatal(generateErr)
+	}
+	assertManifestLines(t, output, want)
+}
+
+func assertManifestLines(t *testing.T, output string, want map[string]int) {
+	t.Helper()
+	current, err := manifest.Load(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, file := range current.Collections["sample"].Files {
+		got[file.Path] = file.Lines
+	}
+	for path, lines := range want {
+		if got[path] != lines {
+			t.Errorf("%s: manifest lines = %d, want %d", path, got[path], lines)
+		}
+	}
+}
+
 func addDeterminismSources(t *testing.T, cfg *config.Config, output string) {
 	t.Helper()
 	for _, name := range []string{"zeta", "alpha", "middle"} {

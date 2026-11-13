@@ -26,7 +26,6 @@ func (p *TypeScriptParser) CanParse(path string) bool {
 
 func (p *TypeScriptParser) Parse(_ string, content []byte) (*ParseResult, error) {
 	content = StripBOM(content)
-	lines := bytes.Count(content, []byte("\n")) + 1
 
 	headings := extractJSXHeadings(content)
 	exports := extractExports(content)
@@ -58,7 +57,7 @@ func (p *TypeScriptParser) Parse(_ string, content []byte) (*ParseResult, error)
 		Description:   description,
 		ComponentType: componentType,
 		Outline:       outline,
-		Lines:         lines,
+		Lines:         CountLines(content),
 	}, nil
 }
 

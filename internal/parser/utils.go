@@ -29,6 +29,17 @@ func StripBOM(content []byte) []byte {
 	return content
 }
 
+// CountLines returns how many lines content has the way `dox cat` addresses
+// them: a final newline ends the last line instead of starting another, so
+// "a\nb\n" has two lines and an empty file has none.
+func CountLines(content []byte) int {
+	lines := bytes.Count(content, []byte{'\n'})
+	if len(content) > 0 && content[len(content)-1] != '\n' {
+		lines++
+	}
+	return lines
+}
+
 // DetectFileType maps file extension to type string.
 // Returns: "md", "mdx", "txt", "tsx", "ts", or "unknown".
 func DetectFileType(path string) string {

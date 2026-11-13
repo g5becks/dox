@@ -306,6 +306,8 @@ dox files goreleaser --desc-length 100     # Shorter descriptions
 ```
 
 Available fields: `path`, `type`, `lines`, `size`, `description`, `modified`.
+`lines` is the number of lines `cat` can address, so a final newline ends the
+last line instead of adding one (`a\nb\n` has 2 lines, an empty file has 0).
 `--all` is deprecated (it warns and means `--limit 0`); it is removed in v0.6.0.
 
 ### cat

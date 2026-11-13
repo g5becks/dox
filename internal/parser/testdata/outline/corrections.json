@@ -39,9 +39,9 @@
           }
         ]
       },
-      "Lines": 14
+      "Lines": 13
     },
-    "Reason": "Closing fences must match opening marker and length; actual After fence heading is line13, not line6."
+    "Reason": "Closing fences must match opening marker and length; actual After fence heading is line13, not line6. The final newline no longer counts as an extra line (dox-4e1.12)."
   },
   {
     "Path": "testdata/outline/positions.mdx",
@@ -83,9 +83,9 @@
           }
         ]
       },
-      "Lines": 13
+      "Lines": 12
     },
-    "Reason": "MDX filtering preserves YAML and import source lines; headings are lines8/12, not2/6."
+    "Reason": "MDX filtering preserves YAML and import source lines; headings are lines8/12, not2/6. The final newline no longer counts as an extra line (dox-4e1.12)."
   },
   {
     "Path": "testdata/outline/toml.md",
@@ -117,9 +117,9 @@
           }
         ]
       },
-      "Lines": 9
+      "Lines": 8
     },
-    "Reason": "TOML frontmatter title/description is now decoded, rather than treated as body text."
+    "Reason": "TOML frontmatter title/description is now decoded, rather than treated as body text. The final newline no longer counts as an extra line (dox-4e1.12)."
   },
   {
     "Path": "../../testdata/sample.mdx",
@@ -171,8 +171,160 @@
           }
         ]
       },
-      "Lines": 20
+      "Lines": 19
     },
-    "Reason": "MDX frontmatter and imports no longer shift the original source positions."
+    "Reason": "MDX frontmatter and imports no longer shift the original source positions. The final newline no longer counts as an extra line (dox-4e1.12)."
+  },
+  {
+    "Path": "testdata/outline/basic.md",
+    "Before": {
+      "Description": "Fixture Title - Fixture description",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Main title",
+            "line": 5
+          },
+          {
+            "level": 2,
+            "text": "Section",
+            "line": 9
+          },
+          {
+            "level": 2,
+            "text": "Final heading",
+            "line": 16
+          }
+        ]
+      },
+      "Lines": 17
+    },
+    "After": {
+      "Description": "Fixture Title - Fixture description",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Main title",
+            "line": 5
+          },
+          {
+            "level": 2,
+            "text": "Section",
+            "line": 9
+          },
+          {
+            "level": 2,
+            "text": "Final heading",
+            "line": 16
+          }
+        ]
+      },
+      "Lines": 16
+    },
+    "Reason": "The final newline no longer counts as an extra line (dox-4e1.12)."
+  },
+  {
+    "Path": "testdata/outline/inline.md",
+    "Before": {
+      "Description": "Strong and and link - Paragraph with emphasis and and a label.",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Strong and and link",
+            "line": 1
+          }
+        ]
+      },
+      "Lines": 4
+    },
+    "After": {
+      "Description": "Strong and and link - Paragraph with emphasis and and a label.",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Strong and and link",
+            "line": 1
+          }
+        ]
+      },
+      "Lines": 3
+    },
+    "Reason": "The final newline no longer counts as an extra line (dox-4e1.12)."
+  },
+  {
+    "Path": "../../testdata/sample.md",
+    "Before": {
+      "Description": "Sample Documentation - This is a sample markdown file for testing.",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Sample Documentation",
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Installation",
+            "line": 5
+          },
+          {
+            "level": 2,
+            "text": "Usage",
+            "line": 13
+          },
+          {
+            "level": 3,
+            "text": "Advanced Usage",
+            "line": 22
+          }
+        ]
+      },
+      "Lines": 25
+    },
+    "After": {
+      "Description": "Sample Documentation - This is a sample markdown file for testing.",
+      "ComponentType": "",
+      "Outline": {
+        "type": "headings",
+        "headings": [
+          {
+            "level": 1,
+            "text": "Sample Documentation",
+            "line": 1
+          },
+          {
+            "level": 2,
+            "text": "Installation",
+            "line": 5
+          },
+          {
+            "level": 2,
+            "text": "Usage",
+            "line": 13
+          },
+          {
+            "level": 3,
+            "text": "Advanced Usage",
+            "line": 22
+          }
+        ]
+      },
+      "Lines": 24
+    },
+    "Reason": "The final newline no longer counts as an extra line (dox-4e1.12)."
   }
 ]
