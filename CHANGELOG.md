@@ -5,6 +5,15 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-15
+
+### Fixed
+
+- **Config digests are stable.** With two or more `excludes` (global plus per-source), the merged exclude list was built from a map, so its order, and the source's config digest in the lock, changed from run to run. `dox doctor` then reported "config changed since the last sync" and `dox sync --locked` failed with "config does not match the lock" on an unchanged config. Excludes now merge in declaration order (global first, duplicates dropped), and the digest no longer depends on the order of `patterns` or `exclude`. **Migration:** digests recorded by v0.5.0 may not match; run one plain `dox sync` before `dox sync --locked` (it re-lists each source once and downloads nothing that is unchanged). (dox-9l5.1)
+- **Changing a source's filters resyncs it.** Adding or removing an `exclude`, or changing `patterns` (or a URL source's `filename`), was ignored while upstream was unchanged: `dox sync` reported the source up-to-date, `sync --check` exited 0, newly excluded files stayed in `.dox/`, and the lock silently recorded the new configuration. A source whose definition differs from the lock is now re-listed and re-filtered: newly excluded files are deleted, newly included ones downloaded, unchanged files kept; `sync --check` reports it stale (exit 3) until then. (dox-9l5.2)
+- **`dox sync --check` no longer reports raw.githubusercontent.com URL sources stale right after a sync.** The download negotiates gzip and records that variant's `ETag`, but the check's `HEAD` (and ranged-`GET` fallback) did not ask for gzip, so servers that vary the `ETag` by encoding never answered `304`. Check requests now ask for the same encoding. (dox-9l5.3)
+- **`dox clean <name>` updates the manifest.** The cleaned collection kept appearing in `dox collections`, `files` and `search` until the next sync. (dox-9l5.4)
+
 ## [0.5.0] - 2026-11-13
 
 ### Changed

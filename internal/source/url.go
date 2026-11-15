@@ -75,7 +75,12 @@ func (s *urlSource) Sync(
 	sourceCtx, cancel := httpx.SourceContext(ctx, s.timeout)
 	defer cancel()
 
-	if opts.Check && !hasValidators(prevLock) && prevLock != nil && prevLock.Files[s.filename] != "" {
+	if opts.ConfigChanged {
+		// The validators and digest in the lock describe a different
+		// configuration (URL or filename); fetch as if forced.
+		opts.Force = true
+	}
+	if opts.Check && !opts.Force && !hasValidators(prevLock) && prevLock != nil && prevLock.Files[s.filename] != "" {
 		return s.checkDigest(sourceCtx, prevLock, opts)
 	}
 	method := http.MethodGet
@@ -241,6 +246,15 @@ func (s *urlSource) send(
 	}
 	for index := 0; index+1 < len(extra); index += 2 {
 		request.Header.Set(extra[index], extra[index+1])
+	}
+	if method == http.MethodHead || request.Header.Get("Range") != "" {
+		// Go's transport asks for gzip on plain GETs (and decompresses them
+		// transparently) but not on HEAD or ranged requests. Servers that vary
+		// the ETag by encoding (raw.githubusercontent.com) would then compare
+		// the gzip ETag recorded by the sync against the identity variant and
+		// never answer 304. Ask for the same representation; these requests
+		// never read a body, so nothing needs decompressing.
+		request.Header.Set("Accept-Encoding", "gzip")
 	}
 	return s.http.Do(request)
 }

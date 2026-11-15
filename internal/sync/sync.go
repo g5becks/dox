@@ -75,12 +75,16 @@ type Options struct {
 	// downloadConcurrency comes from config download_concurrency (0 = source default).
 	downloadConcurrency int
 	sourceDir           string
-	SourceNames         []string
-	Force               bool
-	DryRun              bool
-	MaxParallel         int
-	Timeout             time.Duration
-	Clean               bool
+	// configChanged is set per source when its lock entry records a different
+	// (or no) config digest than the current configuration.
+	configChanged bool
+
+	SourceNames []string
+	Force       bool
+	DryRun      bool
+	MaxParallel int
+	Timeout     time.Duration
+	Clean       bool
 	// Locked reproduces the lock: GitHub sources fetch the locked commits, URL
 	// sources must match their recorded digests, and config drift fails.
 	Locked bool
@@ -412,6 +416,7 @@ func executeSources(
 		sourceOpts := opts
 		sourceOpts.sourceDir = sourceDir
 		previousLock := lock.GetEntry(sourceName)
+		sourceOpts.configChanged = previousLock != nil && previousLock.ConfigDigest != sourceCfg.Digest()
 
 		group.Go(func() error {
 			token := ResolveToken(cfg, sourceCfg)
@@ -606,6 +611,7 @@ func syncPreparedSource(
 			DryRun:              opts.DryRun,
 			Locked:              opts.Locked,
 			Check:               opts.Check,
+			ConfigChanged:       opts.configChanged,
 			Root:                sourceRoot,
 			DownloadConcurrency: opts.downloadConcurrency,
 			OnWarning: func(msg string) {

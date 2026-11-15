@@ -20,6 +20,7 @@ import (
 	"github.com/g5becks/dox/internal/errs"
 	"github.com/g5becks/dox/internal/httpx"
 	"github.com/g5becks/dox/internal/lockfile"
+	"github.com/g5becks/dox/internal/manifest"
 	"github.com/g5becks/dox/internal/runlock"
 	doxsync "github.com/g5becks/dox/internal/sync"
 	"github.com/g5becks/dox/internal/ui"
@@ -782,7 +783,12 @@ func cleanAction(ctx context.Context, cmd *cli.Command) error {
 		}
 		lock.RemoveEntry(selected[index])
 	}
-	return lock.SaveRoot(root)
+	if saveErr := lock.SaveRoot(root); saveErr != nil {
+		return saveErr
+	}
+	// Drop the cleaned collections from the manifest now, so collections, files
+	// and search stop listing them before the next sync.
+	return manifest.GenerateRoot(ctx, cfg, lock, root)
 }
 
 func loadCommandConfig(cmd *cli.Command, path string) (*config.Config, error) {

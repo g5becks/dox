@@ -189,7 +189,11 @@ serialized with an advisory lock (`.dox-run.lock`): a second run waits up to
 exits 0 when everything is current and 3 when a source would change
 (`dox --json sync --check` prints `{"stale": [...], "current": [...]}`).
 GitHub sources compare folder tree SHAs; URL sources use `ETag`/`Last-Modified`
-or, without them, the content digest recorded in the lock.
+or, without them, the content digest recorded in the lock. A source whose
+definition changed since it was synced (for example a new `exclude` or
+`patterns` entry, or another `filename`) is stale even when upstream did not
+change; the next `dox sync` re-lists it and applies the new filters, deleting
+files that are now excluded and downloading only new or changed ones.
 
 `--locked` reproduces `.dox/.dox.lock`: GitHub sources fetch the locked commits
 instead of resolving `ref`, and URL sources must match their recorded content
@@ -267,6 +271,9 @@ ownership marker in place. Selected-source cleanup removes only those sources.
 dox clean                   # Remove all synced docs
 dox clean goreleaser        # Remove specific source
 ```
+
+Cleaning a source also removes it from the lock and the manifest, so
+`collections`, `files` and `search` stop listing it immediately.
 
 ### init
 
@@ -710,7 +717,9 @@ API calls. With the unauthenticated limit of 60 calls per hour, about 30
 GitHub folder sources sync per hour without a token.
 
 URL sources use `ETag`/`Last-Modified` validators; `--dry-run` sends a `HEAD`
-request instead of downloading.
+request instead of downloading. It asks for the same (gzip) representation as
+the download, so servers that vary the `ETag` by encoding, such as
+raw.githubusercontent.com, still answer `304 Not Modified`.
 
 ## Output Layout
 
