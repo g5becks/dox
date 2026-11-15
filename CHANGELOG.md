@@ -5,6 +5,8 @@ Semantic Versioning. Historical entries are reconstructed from the tagged commit
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-15
+
 ### Fixed
 
 - **Config digests are stable.** With two or more `excludes` (global plus per-source), the merged exclude list was built from a map, so its order, and the source's config digest in the lock, changed from run to run. `dox doctor` then reported "config changed since the last sync" and `dox sync --locked` failed with "config does not match the lock" on an unchanged config. Excludes now merge in declaration order (global first, duplicates dropped), and the digest no longer depends on the order of `patterns` or `exclude`. **Migration:** digests recorded by v0.5.0 may not match; run one plain `dox sync` before `dox sync --locked` (it re-lists each source once and downloads nothing that is unchanged). (dox-9l5.1)
