@@ -62,6 +62,18 @@ func TestMergeExcludes(t *testing.T) {
 	}
 }
 
+func TestMergeExcludesKeepsDeclarationOrder(t *testing.T) {
+	global := []string{"**/*.png", "**/*.jpg", "**/*.gif", "node_modules/**"}
+	source := []string{"blog/**", "**/*.jpg", "changes/**"}
+	want := []string{"**/*.png", "**/*.jpg", "**/*.gif", "node_modules/**", "blog/**", "changes/**"}
+
+	for range 100 {
+		if got := mergeExcludes(global, source); !reflect.DeepEqual(got, want) {
+			t.Fatalf("mergeExcludes() = %v, want %v", got, want)
+		}
+	}
+}
+
 func TestApplyDefaultsMergesGlobalExcludes(t *testing.T) {
 	cfg := &Config{
 		Output:   ".dox",

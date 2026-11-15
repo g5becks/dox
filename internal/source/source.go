@@ -40,6 +40,12 @@ type SyncOptions struct {
 	// without validators compare a content digest with the lock instead of
 	// assuming a change.
 	Check bool
+	// ConfigChanged reports that the source's configuration (filters, path,
+	// filename, ...) differs from the one recorded in the lock. Unchanged
+	// upstream content is then no reason to skip: git sources re-list and
+	// re-filter (downloading only new or changed files), URL sources fetch
+	// unconditionally.
+	ConfigChanged bool
 }
 
 // Source defines a documentation source that can be synced.

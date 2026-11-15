@@ -177,7 +177,7 @@ func (s *githubSource) syncSingleFile(
 		oldSHA = prevLock.Files[relativePath]
 	}
 
-	if !opts.Force && oldSHA != "" && oldSHA == sha {
+	if !opts.Force && !opts.ConfigChanged && oldSHA != "" && oldSHA == sha {
 		return s.skippedResult(prevLock, ref, commit), nil
 	}
 
@@ -237,7 +237,7 @@ func (s *githubSource) syncDirectory(
 	}
 	folderSHA := tree.SHA
 
-	if !opts.Force && prevLock != nil && prevLock.TreeSHA == folderSHA {
+	if !opts.Force && !opts.ConfigChanged && prevLock != nil && prevLock.TreeSHA == folderSHA {
 		return s.skippedResult(prevLock, ref, commit), nil
 	}
 
@@ -311,7 +311,7 @@ func (s *githubSource) unchangedBeforeListing(
 	opts SyncOptions,
 ) (bool, error) {
 	shaProvider, ok := s.provider.(folderSHAProvider)
-	if !ok || opts.Force || prevLock == nil {
+	if !ok || opts.Force || opts.ConfigChanged || prevLock == nil {
 		return false, nil
 	}
 	folderSHA, known, err := shaProvider.folderSHA(ctx, commit)

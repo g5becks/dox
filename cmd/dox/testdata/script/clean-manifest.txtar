@@ -1,0 +1,32 @@
+# dox clean <name> drops the collection from the manifest at once (dox-9l5.4).
+
+httpserve guide.txt
+envsubst config.in dox.toml
+dox sync
+dox collections --format csv
+stdout '^docs,'
+stdout '^notes,'
+
+dox clean notes
+! exists .dox/notes
+dox collections --format csv
+stdout '^docs,'
+! stdout '^notes,'
+doxexit 4 files notes
+dox files docs
+stdout 'guide.txt'
+
+-- config.in --
+output = ".dox"
+[sources.docs]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "guide.txt"
+[sources.notes]
+type = "url"
+url = "$SERVER/guide.txt"
+filename = "notes.txt"
+-- guide.txt --
+# Guide
+
+Documentation fixture.

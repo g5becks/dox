@@ -150,25 +150,22 @@ func newValidator() *validator.Validate {
 	return v
 }
 
-// mergeExcludes returns the union of global and source-specific excludes.
-// Duplicates are removed using map deduplication.
+// mergeExcludes returns the union of global and source-specific excludes:
+// global patterns first, then the source's own, each in declaration order,
+// keeping the first occurrence of a duplicate. The order is deterministic so
+// sync results and config digests don't depend on map iteration.
 func mergeExcludes(global, source []string) []string {
 	if len(global) == 0 && len(source) == 0 {
 		return nil
 	}
 
 	seen := make(map[string]struct{}, len(global)+len(source))
-
-	for _, pattern := range global {
+	result := make([]string, 0, len(global)+len(source))
+	for _, pattern := range slices.Concat(global, source) {
+		if _, dup := seen[pattern]; dup {
+			continue
+		}
 		seen[pattern] = struct{}{}
-	}
-
-	for _, pattern := range source {
-		seen[pattern] = struct{}{}
-	}
-
-	result := make([]string, 0, len(seen))
-	for pattern := range seen {
 		result = append(result, pattern)
 	}
 
@@ -220,13 +217,28 @@ type sourceDigestInput struct {
 
 // Digest fingerprints every field that determines what a source syncs (after
 // defaults and global excludes are applied), as "sha256:<hex>".
+//
+// Patterns and excludes are sets: their order never changes what syncs, so
+// the digest sorts copies of them.
 func (s Source) Digest() string {
-	canonical, err := json.Marshal(sourceDigestInput(s))
+	input := sourceDigestInput(s)
+	input.Patterns = sortedCopy(input.Patterns)
+	input.Exclude = sortedCopy(input.Exclude)
+	canonical, err := json.Marshal(input)
 	if err != nil {
 		return ""
 	}
 	sum := sha256.Sum256(canonical)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func sortedCopy(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	sorted := slices.Clone(values)
+	slices.Sort(sorted)
+	return sorted
 }
 
 func applySourceDefaults(src Source, globalExcludes []string) Source {
